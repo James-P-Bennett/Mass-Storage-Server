@@ -1,0 +1,29 @@
+name: MassStorageServer
+version: '${project.version}'
+main: org.jamesphbennett.massstorageserver.MassStorageServer
+api-version: '1.21'
+prefix: MSS
+authors: [ jamesphbennett ]
+description: A deep storage system for Minecraft servers
+website: https://github.com/jamesphbennett/massstorageserver
+
+commands:
+  mss:
+    description: Mass Storage Server main command
+    usage: /<command> [args]
+    permission: massstorageserver.admin
+    aliases: [massstorage]
+
+permissions:
+  massstorageserver.admin:
+    description: Admin permissions for Mass Storage Server
+    default: op
+  massstorageserver.use:
+    description: Basic permissions to use Mass Storage Server
+    default: true
+  massstorageserver.craft:
+    description: Permission to craft MSS items
+    default: true
+  massstorageserver.recovery:
+    description: Permission to use recovery commands
+    default: op

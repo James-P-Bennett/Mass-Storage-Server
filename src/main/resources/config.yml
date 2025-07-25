@@ -1,0 +1,62 @@
+# Mass Storage Server Configuration
+# Created by James Bennett (Hazmad)
+# Network settings
+network:
+  # Maximum number of blocks allowed in a single network
+  max_blocks: 128
+  
+  # Cooldown between operations in milliseconds (prevents spam)
+  operation_cooldown: 100
+
+# Storage Drive 1 settings
+storage:
+  # Maximum items per storage cell
+  max_items_per_cell: 1024
+  
+  # Default number of cells per storage disk
+  default_cells_per_disk: 27
+  
+  # Number of drive bay slots per drive bay
+  drive_bay_slots: 8
+
+  # Item blacklist - Items that cannot be stored in the network
+  # Storage disks themselves are hardcoded. Empty shulker boxes and bundles are allowed, ones with contents are blocked.
+  # Add additional items here using their Material names ex. "DIAMOND_SWORD" or "massstorageserver:storage_disk"
+blacklisted_items:
+  - "massstorageserver:storage_cell_1k"
+
+
+# Database settings
+database:
+  # Connection pool settings
+  connection_pool:
+    maximum_pool_size: 10
+    minimum_idle: 2
+    connection_timeout: 30000
+    idle_timeout: 600000
+    max_lifetime: 1800000
+
+  # SQLite specific settings
+  sqlite:
+    journal_mode: "WAL"
+    synchronous: "NORMAL"
+    busy_timeout: 30000
+    cache_size: 10000
+
+# Permission settings
+permissions:
+  require_use_permission: true
+  require_craft_permission: true
+  require_admin_permission: true
+
+# Logging settings
+# Useful but can clutter up console
+logging:
+  log_network_operations: false
+  log_storage_operations: false
+  log_database_operations: false
+
+# Debug settings
+debug:
+  enabled: false
+  verbose: false

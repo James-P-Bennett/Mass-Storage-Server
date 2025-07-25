@@ -148,7 +148,7 @@ public class NetworkManager {
     }
 
     /**
-     * Remove a network from the database
+     * Remove a network from the database (ENHANCED with GUI handling)
      */
     public void unregisterNetwork(String networkId) throws SQLException {
         plugin.getDatabaseManager().executeTransaction(conn -> {
@@ -181,8 +181,13 @@ public class NetworkManager {
             }
         });
 
+        // CRITICAL: Notify GUI manager about network invalidation
+        plugin.getGUIManager().handleNetworkInvalidated(networkId);
+
         // Remove network lock
         networkLocks.remove(networkId);
+
+        plugin.getLogger().info("Unregistered network " + networkId + " and closed associated GUIs");
     }
 
     /**

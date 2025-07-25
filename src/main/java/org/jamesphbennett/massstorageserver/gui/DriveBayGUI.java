@@ -11,6 +11,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.inventory.ClickType;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -151,7 +152,86 @@ public class DriveBayGUI implements Listener {
         int slot = event.getRawSlot();
         int[] driveSlots = getDriveSlots(plugin.getConfigManager().getMaxDriveBaySlots());
 
-        // Check if clicking on a drive slot
+        // Handle shift-clicks from player inventory
+        if (event.getClick() == ClickType.SHIFT_LEFT || event.getClick() == ClickType.SHIFT_RIGHT) {
+            if (slot >= inventory.getSize()) {
+                // Shift-clicking FROM player inventory TO drive bay
+                ItemStack clickedItem = event.getCurrentItem();
+                if (clickedItem != null && !clickedItem.getType().isAir()) {
+                    event.setCancelled(true);
+
+                    if (!plugin.getItemManager().isStorageDisk(clickedItem)) {
+                        player.sendMessage(ChatColor.RED + "Only storage disks can be placed in drive bays!");
+                        return;
+                    }
+
+                    // Find first empty drive slot
+                    for (int i = 0; i < driveSlots.length; i++) {
+                        int driveSlot = driveSlots[i];
+                        if (inventory.getItem(driveSlot) == null || inventory.getItem(driveSlot).getType().isAir()) {
+                            // Found empty slot, place disk here
+                            if (placeDiskInSlot(player, i, clickedItem)) {
+                                // Remove from player inventory
+                                clickedItem.setAmount(clickedItem.getAmount() - 1);
+                                if (clickedItem.getAmount() <= 0) {
+                                    event.setCurrentItem(null);
+                                }
+                                // Refresh the GUI to show the placed disk
+                                loadDrives();
+                            }
+                            return;
+                        }
+                    }
+
+                    player.sendMessage(ChatColor.RED + "No empty drive slots available!");
+                    return;
+                }
+            } else {
+                // Shift-clicking FROM drive bay TO player inventory
+                boolean isDriveSlot = false;
+                int driveSlotIndex = -1;
+                for (int i = 0; i < driveSlots.length; i++) {
+                    if (driveSlots[i] == slot) {
+                        isDriveSlot = true;
+                        driveSlotIndex = i;
+                        break;
+                    }
+                }
+
+                if (isDriveSlot) {
+                    ItemStack clickedItem = event.getCurrentItem();
+                    if (clickedItem != null && !clickedItem.getType().isAir() &&
+                            plugin.getItemManager().isStorageDisk(clickedItem)) {
+
+                        event.setCancelled(true);
+
+                        // Check if player has space
+                        if (player.getInventory().firstEmpty() == -1) {
+                            player.sendMessage(ChatColor.RED + "Your inventory is full!");
+                            return;
+                        }
+
+                        if (removeDiskFromSlot(player, driveSlotIndex)) {
+                            // Get updated disk with current stats before giving to player
+                            String diskId = plugin.getItemManager().getStorageDiskId(clickedItem);
+                            ItemStack updatedDisk = loadStorageDiskWithCurrentStats(diskId);
+                            if (updatedDisk != null) {
+                                player.getInventory().addItem(updatedDisk);
+                            } else {
+                                player.getInventory().addItem(clickedItem);
+                            }
+                            inventory.setItem(slot, null);
+                        }
+                    }
+                } else {
+                    // Clicking on background/decoration - cancel
+                    event.setCancelled(true);
+                }
+            }
+            return;
+        }
+
+        // Check if clicking on a drive slot (non-shift clicks)
         boolean isDriveSlot = false;
         int driveSlotIndex = -1;
         for (int i = 0; i < driveSlots.length; i++) {
@@ -163,13 +243,13 @@ public class DriveBayGUI implements Listener {
         }
 
         if (isDriveSlot) {
-            // Handle drive slot interactions
+            // Handle drive slot interactions (existing logic)
             handleDriveSlotClick(event, player, driveSlotIndex, slot);
         } else if (slot < inventory.getSize()) {
             // Clicking on background/decoration - cancel
             event.setCancelled(true);
         }
-        // Clicks in player inventory are allowed
+        // Clicks in player inventory are allowed (for non-shift clicks)
     }
 
     private void handleDriveSlotClick(InventoryClickEvent event, Player player, int driveSlotIndex, int slot) {
@@ -331,6 +411,9 @@ public class DriveBayGUI implements Listener {
                 }
             });
 
+            // CRITICAL FIX: Refresh all terminals in this network after disk insertion
+            plugin.getGUIManager().refreshNetworkTerminals(networkId);
+
             player.sendMessage(ChatColor.GREEN + "Storage disk inserted successfully!");
             plugin.getLogger().info("Successfully placed disk " + diskId + " in slot " + slotIndex);
             return true;
@@ -377,6 +460,9 @@ public class DriveBayGUI implements Listener {
                 // The disk keeps its data and network association for when it's re-inserted
             });
 
+            // CRITICAL FIX: Refresh all terminals in this network after disk removal
+            plugin.getGUIManager().refreshNetworkTerminals(networkId);
+
             player.sendMessage(ChatColor.YELLOW + "Storage disk removed successfully!");
             return true;
         } catch (Exception e) {
@@ -389,7 +475,10 @@ public class DriveBayGUI implements Listener {
     private boolean swapDisksInSlot(Player player, int slotIndex, ItemStack oldDisk, ItemStack newDisk) {
         // Remove old disk first, then place new disk
         if (removeDiskFromSlot(player, slotIndex)) {
-            return placeDiskInSlot(player, slotIndex, newDisk);
+            boolean success = placeDiskInSlot(player, slotIndex, newDisk);
+            // Note: Both removeDiskFromSlot and placeDiskInSlot already call refreshNetworkTerminals
+            // so terminals will be refreshed twice, but this ensures consistency
+            return success;
         }
         return false;
     }

@@ -51,6 +51,13 @@ public final class MassStorageServer extends JavaPlugin {
             storageManager = new StorageManager(this);
             guiManager = new GUIManager(this);
 
+            // Start periodic GUI validation task (every 30 seconds)
+            getServer().getScheduler().runTaskTimer(this, () -> {
+                if (guiManager != null) {
+                    guiManager.validateOpenGUIs();
+                }
+            }, 600L, 600L); // 30 seconds in ticks (20 ticks = 1 second)
+
             // Register listeners
             getServer().getPluginManager().registerEvents(new BlockListener(this), this);
             getServer().getPluginManager().registerEvents(new PlayerListener(this), this);

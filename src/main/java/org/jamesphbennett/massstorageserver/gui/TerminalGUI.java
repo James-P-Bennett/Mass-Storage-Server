@@ -196,7 +196,11 @@ public class TerminalGUI implements Listener {
      * Refresh the terminal display
      */
     public void refresh() {
+        plugin.getLogger().info("Refreshing terminal at " + terminalLocation + " for network " + networkId);
+        int itemCountBefore = allItems.size();
         loadItems();
+        int itemCountAfter = allItems.size();
+        plugin.getLogger().info("Terminal refresh complete: " + itemCountBefore + " -> " + itemCountAfter + " item types");
     }
 
     @EventHandler
@@ -206,6 +210,58 @@ public class TerminalGUI implements Listener {
 
         int slot = event.getRawSlot();
 
+        // Handle shift-clicks from player inventory for item storage
+        if ((event.getClick() == ClickType.SHIFT_LEFT || event.getClick() == ClickType.SHIFT_RIGHT) &&
+                slot >= inventory.getSize()) {
+
+            // Shift-clicking FROM player inventory TO terminal (to store items)
+            ItemStack itemToStore = event.getCurrentItem();
+
+            if (itemToStore != null && !itemToStore.getType().isAir()) {
+                event.setCancelled(true);
+
+                // Check if item is allowed to be stored
+                if (!plugin.getItemManager().isItemAllowed(itemToStore)) {
+                    player.sendMessage(ChatColor.RED + "This item cannot be stored in the network!");
+                    return;
+                }
+
+                // Store the item
+                try {
+                    List<ItemStack> toStore = new ArrayList<>();
+                    toStore.add(itemToStore.clone());
+
+                    List<ItemStack> remainders = plugin.getStorageManager().storeItems(networkId, toStore);
+
+                    if (remainders.isEmpty()) {
+                        // All items stored successfully
+                        event.setCurrentItem(null);
+                        player.sendMessage(ChatColor.GREEN + "Stored " + itemToStore.getAmount() + " " +
+                                itemToStore.getType().name().toLowerCase().replace("_", " "));
+
+                        // Refresh display immediately
+                        refresh();
+                    } else {
+                        // Some items couldn't be stored
+                        ItemStack remainder = remainders.get(0);
+                        event.setCurrentItem(remainder);
+                        int stored = itemToStore.getAmount() - remainder.getAmount();
+                        if (stored > 0) {
+                            player.sendMessage(ChatColor.YELLOW + "Stored " + stored + " items. " +
+                                    remainder.getAmount() + " items couldn't be stored (network full?)");
+                            refresh();
+                        } else {
+                            player.sendMessage(ChatColor.RED + "No space available in the network!");
+                        }
+                    }
+                } catch (Exception e) {
+                    player.sendMessage(ChatColor.RED + "Error storing items: " + e.getMessage());
+                    plugin.getLogger().severe("Error storing items: " + e.getMessage());
+                }
+            }
+            return;
+        }
+
         if (slot < 36) {
             // Clicking on item display area
             handleItemClick(event, player, slot);
@@ -214,10 +270,7 @@ public class TerminalGUI implements Listener {
             event.setCancelled(true);
             handleNavigationClick(event, player, slot);
         }
-        // Clicks in player inventory are handled separately for item storage
-        else {
-            handlePlayerInventoryClick(event, player);
-        }
+        // Regular clicks in player inventory are allowed for manual item management
     }
 
     private void handleItemClick(InventoryClickEvent event, Player player, int slot) {
@@ -301,54 +354,6 @@ public class TerminalGUI implements Listener {
             default:
                 // Do nothing for other slots
                 break;
-        }
-    }
-
-    private void handlePlayerInventoryClick(InventoryClickEvent event, Player player) {
-        // Check if shift-clicking from player inventory to store items
-        if (event.getClick() == ClickType.SHIFT_LEFT && event.getCurrentItem() != null) {
-            ItemStack itemToStore = event.getCurrentItem();
-
-            // Check if item is allowed to be stored
-            if (!plugin.getItemManager().isItemAllowed(itemToStore)) {
-                player.sendMessage(ChatColor.RED + "This item cannot be stored in the network!");
-                return;
-            }
-
-            // Store the item
-            try {
-                List<ItemStack> toStore = new ArrayList<>();
-                toStore.add(itemToStore.clone());
-
-                List<ItemStack> remainders = plugin.getStorageManager().storeItems(networkId, toStore);
-
-                if (remainders.isEmpty()) {
-                    // All items stored successfully
-                    event.setCurrentItem(null);
-                    player.sendMessage(ChatColor.GREEN + "Stored " + itemToStore.getAmount() + " " +
-                            itemToStore.getType().name().toLowerCase().replace("_", " "));
-
-                    // Refresh display immediately
-                    refresh();
-                } else {
-                    // Some items couldn't be stored
-                    ItemStack remainder = remainders.get(0);
-                    event.setCurrentItem(remainder);
-                    int stored = itemToStore.getAmount() - remainder.getAmount();
-                    if (stored > 0) {
-                        player.sendMessage(ChatColor.YELLOW + "Stored " + stored + " items. " +
-                                remainder.getAmount() + " items couldn't be stored (network full?)");
-                        refresh();
-                    } else {
-                        player.sendMessage(ChatColor.RED + "No space available in the network!");
-                    }
-                }
-
-                event.setCancelled(true);
-            } catch (Exception e) {
-                player.sendMessage(ChatColor.RED + "Error storing items: " + e.getMessage());
-                plugin.getLogger().severe("Error storing items: " + e.getMessage());
-            }
         }
     }
 

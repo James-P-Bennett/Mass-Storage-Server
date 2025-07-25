@@ -360,6 +360,8 @@ public class BlockListener implements Listener {
     }
 
     private void dropDriveBayContents(Location location, String networkId) {
+        plugin.getLogger().info("Dropping drive bay contents at " + location + " for network " + networkId);
+
         try (Connection conn = plugin.getDatabaseManager().getConnection();
              PreparedStatement stmt = conn.prepareStatement(
                      "SELECT disk_id FROM drive_bay_slots WHERE world_name = ? AND x = ? AND y = ? AND z = ? AND disk_id IS NOT NULL")) {
@@ -376,6 +378,8 @@ public class BlockListener implements Listener {
                 }
             }
 
+            plugin.getLogger().info("Found " + diskIds.size() + " disks to drop from drive bay");
+
             // Drop each disk and remove from database
             for (String diskId : diskIds) {
                 // Get disk info for recreation
@@ -390,17 +394,18 @@ public class BlockListener implements Listener {
                             int usedCells = diskRs.getInt("used_cells");
                             int maxCells = diskRs.getInt("max_cells");
 
-                            // Create disk item
-                            ItemStack disk = itemManager.createStorageDisk(crafterUUID, crafterName);
+                            // Create disk item with correct ID
+                            ItemStack disk = itemManager.createStorageDiskWithId(diskId, crafterUUID, crafterName);
                             disk = itemManager.updateStorageDiskLore(disk, usedCells, maxCells);
 
                             // Drop the disk
                             location.getWorld().dropItemNaturally(location, disk);
+                            plugin.getLogger().info("Dropped disk " + diskId + " with " + usedCells + "/" + maxCells + " cells used");
                         }
                     }
                 }
 
-                // Remove from drive bay slots
+                // Remove from drive bay slots (but keep disk data in storage_disks and storage_items)
                 try (PreparedStatement deleteStmt = conn.prepareStatement(
                         "DELETE FROM drive_bay_slots WHERE world_name = ? AND x = ? AND y = ? AND z = ? AND disk_id = ?")) {
                     deleteStmt.setString(1, location.getWorld().getName());
@@ -412,8 +417,15 @@ public class BlockListener implements Listener {
                 }
             }
 
+            // CRITICAL: Refresh all terminals in the network after drive bay destruction
+            if (!diskIds.isEmpty()) {
+                plugin.getGUIManager().refreshNetworkTerminals(networkId);
+                plugin.getLogger().info("Refreshed terminals after drive bay destruction containing " + diskIds.size() + " disks");
+            }
+
         } catch (Exception e) {
             plugin.getLogger().severe("Error dropping drive bay contents: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 

@@ -78,8 +78,10 @@ public class DriveBayGUI implements Listener {
     }
 
     private int[] getDriveSlots(int maxSlots) {
-        // Arrange 8 slots in a nice pattern (2 rows of 4)
-        return new int[]{10, 11, 12, 13, 19, 20, 21, 22};
+        // Arrange 7 slots centered in the middle row (slots 10-16, using 11-17 for centering)
+        // Row layout: [ ] [X] [X] [X] [X] [X] [X] [X] [ ]
+        //             9   10  11  12  13  14  15  16  17
+        return new int[]{10, 11, 12, 13, 14, 15, 16};
     }
 
     private void loadDrives() {
@@ -117,7 +119,7 @@ public class DriveBayGUI implements Listener {
     private ItemStack loadStorageDiskWithCurrentStats(String diskId) {
         try (Connection conn = plugin.getDatabaseManager().getConnection();
              PreparedStatement stmt = conn.prepareStatement(
-                     "SELECT crafter_uuid, crafter_name, used_cells, max_cells FROM storage_disks WHERE disk_id = ?")) {
+                     "SELECT crafter_uuid, crafter_name, used_cells, max_cells, tier FROM storage_disks WHERE disk_id = ?")) {
 
             stmt.setString(1, diskId);
             try (ResultSet rs = stmt.executeQuery()) {
@@ -126,9 +128,16 @@ public class DriveBayGUI implements Listener {
                     String crafterName = rs.getString("crafter_name");
                     int usedCells = rs.getInt("used_cells");
                     int maxCells = rs.getInt("max_cells");
+                    String tier = rs.getString("tier");
 
-                    // CRITICAL FIX: Use the specific disk ID instead of generating a new one
-                    ItemStack disk = plugin.getItemManager().createStorageDiskWithId(diskId, crafterUUID, crafterName);
+                    // CRITICAL FIX: Default to 1k if tier is null
+                    if (tier == null || tier.isEmpty()) {
+                        tier = "1k";
+                        plugin.getLogger().warning("Disk " + diskId + " had no tier, defaulting to 1k");
+                    }
+
+                    // Create disk with specific tier
+                    ItemStack disk = createStorageDiskWithSpecificTier(diskId, crafterUUID, crafterName, tier);
                     return plugin.getItemManager().updateStorageDiskLore(disk, usedCells, maxCells);
                 }
             }
@@ -136,6 +145,92 @@ public class DriveBayGUI implements Listener {
             plugin.getLogger().severe("Error loading storage disk: " + e.getMessage());
         }
         return null;
+    }
+
+    /**
+     * CRITICAL FIX: Create a storage disk with the exact tier from database
+     */
+    private ItemStack createStorageDiskWithSpecificTier(String diskId, String crafterUUID, String crafterName, String tier) {
+        // Get the correct material for the tier
+        Material material = getMaterialForTier(tier);
+        ItemStack item = new ItemStack(material);
+        ItemMeta meta = item.getItemMeta();
+
+        int defaultCells = 64; // HARDCODED: All disks have 64 cells
+
+        // Set display name with tier color
+        String displayName = switch (tier.toLowerCase()) {
+            case "1k" -> ChatColor.WHITE + "Storage Disk [1K]";
+            case "4k" -> ChatColor.YELLOW + "Storage Disk [4K]";
+            case "16k" -> ChatColor.AQUA + "Storage Disk [16K]";
+            case "64k" -> ChatColor.LIGHT_PURPLE + "Storage Disk [64K]";
+            default -> ChatColor.WHITE + "Storage Disk [1K]";
+        };
+        meta.setDisplayName(displayName);
+
+        // Calculate capacity info
+        int itemsPerCell = plugin.getItemManager().getItemsPerCellForTier(tier);
+        int totalCapacity = defaultCells * itemsPerCell;
+
+        List<String> lore = new ArrayList<>();
+        lore.add(ChatColor.GRAY + "Capacity: " + String.format("%,d", itemsPerCell) + " items per cell");
+        lore.add(ChatColor.YELLOW + "Cells Used: 0/" + defaultCells);
+        lore.add(ChatColor.AQUA + "Total Capacity: " + String.format("%,d", totalCapacity) + " items");
+        lore.add("");
+        lore.add(ChatColor.GRAY + "Tier: " + plugin.getItemManager().getTierDisplayName(tier));
+        lore.add("");
+        lore.add(ChatColor.DARK_GRAY + "Crafted by: " + crafterName);
+        lore.add(ChatColor.DARK_GRAY + "ID: " + diskId);
+        meta.setLore(lore);
+
+        meta.setCustomModelData(1004 + getTierModelOffset(tier));
+
+        // Set persistent data
+        NamespacedKey STORAGE_DISK_KEY = new NamespacedKey(plugin, "storage_disk");
+        NamespacedKey DISK_ID_KEY = new NamespacedKey(plugin, "disk_id");
+        NamespacedKey DISK_CRAFTER_UUID_KEY = new NamespacedKey(plugin, "disk_crafter_uuid");
+        NamespacedKey DISK_CRAFTER_NAME_KEY = new NamespacedKey(plugin, "disk_crafter_name");
+        NamespacedKey DISK_TIER_KEY = new NamespacedKey(plugin, "disk_tier");
+        NamespacedKey DISK_USED_CELLS_KEY = new NamespacedKey(plugin, "disk_used_cells");
+        NamespacedKey DISK_MAX_CELLS_KEY = new NamespacedKey(plugin, "disk_max_cells");
+
+        PersistentDataContainer pdc = meta.getPersistentDataContainer();
+        pdc.set(STORAGE_DISK_KEY, PersistentDataType.BOOLEAN, true);
+        pdc.set(DISK_ID_KEY, PersistentDataType.STRING, diskId);
+        pdc.set(DISK_CRAFTER_UUID_KEY, PersistentDataType.STRING, crafterUUID);
+        pdc.set(DISK_CRAFTER_NAME_KEY, PersistentDataType.STRING, crafterName);
+        pdc.set(DISK_TIER_KEY, PersistentDataType.STRING, tier);
+        pdc.set(DISK_USED_CELLS_KEY, PersistentDataType.INTEGER, 0);
+        pdc.set(DISK_MAX_CELLS_KEY, PersistentDataType.INTEGER, 64); // HARDCODED: All disks have 64 cells
+
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    /**
+     * Get material for tier (copied from ItemManager for consistency)
+     */
+    private Material getMaterialForTier(String tier) {
+        return switch (tier.toLowerCase()) {
+            case "1k" -> Material.ACACIA_PRESSURE_PLATE;
+            case "4k" -> Material.HEAVY_WEIGHTED_PRESSURE_PLATE;
+            case "16k" -> Material.LIGHT_WEIGHTED_PRESSURE_PLATE;
+            case "64k" -> Material.POLISHED_BLACKSTONE_PRESSURE_PLATE;
+            default -> Material.ACACIA_PRESSURE_PLATE;
+        };
+    }
+
+    /**
+     * Get model data offset for tier (copied from ItemManager for consistency)
+     */
+    private int getTierModelOffset(String tier) {
+        return switch (tier.toLowerCase()) {
+            case "1k" -> 0;
+            case "4k" -> 1;
+            case "16k" -> 2;
+            case "64k" -> 3;
+            default -> 0;
+        };
     }
 
     public void open(Player player) {
@@ -177,7 +272,9 @@ public class DriveBayGUI implements Listener {
                                     event.setCurrentItem(null);
                                 }
                                 // Refresh the GUI to show the placed disk
-                                loadDrives();
+                                plugin.getServer().getScheduler().runTask(plugin, () -> {
+                                    loadDrives();
+                                });
                             }
                             return;
                         }
@@ -221,6 +318,10 @@ public class DriveBayGUI implements Listener {
                                 player.getInventory().addItem(clickedItem);
                             }
                             inventory.setItem(slot, null);
+                            // Refresh GUI to show the disk removal
+                            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                                loadDrives();
+                            });
                         }
                     }
                 } else {
@@ -265,8 +366,11 @@ public class DriveBayGUI implements Listener {
                 if (clickedItem == null || clickedItem.getType().isAir()) {
                     // Empty slot - place the disk
                     if (placeDiskInSlot(player, driveSlotIndex, cursorItem)) {
-                        // Clear cursor - the GUI refresh will show the updated disk
+                        // Clear cursor and refresh GUI to show the placed disk
                         event.setCursor(null);
+                        plugin.getServer().getScheduler().runTask(plugin, () -> {
+                            loadDrives();
+                        });
                     } else {
                         // Database failed - don't update GUI, disk stays on cursor
                         player.sendMessage(ChatColor.RED + "Failed to place disk - database error");
@@ -276,7 +380,10 @@ public class DriveBayGUI implements Listener {
                     if (plugin.getItemManager().isStorageDisk(clickedItem)) {
                         if (swapDisksInSlot(player, driveSlotIndex, clickedItem, cursorItem)) {
                             event.setCursor(clickedItem);
-                            // The GUI refresh from placeDiskInSlot will show the new disk
+                            // Refresh GUI to show the swapped disk
+                            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                                loadDrives();
+                            });
                         }
                     }
                 }
@@ -300,6 +407,10 @@ public class DriveBayGUI implements Listener {
                             event.setCursor(clickedItem);
                         }
                         inventory.setItem(slot, null);
+                        // Refresh GUI to show the removed disk
+                        plugin.getServer().getScheduler().runTask(plugin, () -> {
+                            loadDrives();
+                        });
                     }
                 }
             }
@@ -319,15 +430,17 @@ public class DriveBayGUI implements Listener {
                 boolean diskExists = false;
                 String existingCrafterUUID = null;
                 String existingCrafterName = null;
+                String existingTier = null;
 
                 try (PreparedStatement checkStmt = conn.prepareStatement(
-                        "SELECT disk_id, crafter_uuid, crafter_name FROM storage_disks WHERE disk_id = ?")) {
+                        "SELECT disk_id, crafter_uuid, crafter_name, tier FROM storage_disks WHERE disk_id = ?")) {
                     checkStmt.setString(1, diskId);
                     try (ResultSet rs = checkStmt.executeQuery()) {
                         if (rs.next()) {
                             diskExists = true;
                             existingCrafterUUID = rs.getString("crafter_uuid");
                             existingCrafterName = rs.getString("crafter_name");
+                            existingTier = rs.getString("tier");
                         }
                     }
                 }
@@ -335,29 +448,34 @@ public class DriveBayGUI implements Listener {
                 // STEP 2: Only create disk if it doesn't exist at all
                 if (!diskExists) {
                     String crafterUUID = plugin.getItemManager().getDiskCrafterUUID(disk);
-                    String crafterName = plugin.getItemManager().getDiskCrafterName(disk); // You'll need to add this method
+                    String crafterName = plugin.getItemManager().getDiskCrafterName(disk);
+                    String tier = plugin.getItemManager().getDiskTier(disk);
 
-                    // Fallback to item lore if persistent data is missing
+                    // Fallback to item data if persistent data is missing
                     if (crafterUUID == null) {
                         crafterUUID = player.getUniqueId().toString();
                     }
                     if (crafterName == null) {
                         crafterName = player.getName();
                     }
+                    if (tier == null) {
+                        tier = "1k"; // Default fallback
+                    }
 
                     try (PreparedStatement insertStmt = conn.prepareStatement(
-                            "INSERT INTO storage_disks (disk_id, crafter_uuid, crafter_name, max_cells, used_cells) VALUES (?, ?, ?, ?, ?)")) {
+                            "INSERT INTO storage_disks (disk_id, crafter_uuid, crafter_name, tier, max_cells, used_cells) VALUES (?, ?, ?, ?, ?, ?)")) {
                         insertStmt.setString(1, diskId);
                         insertStmt.setString(2, crafterUUID);
                         insertStmt.setString(3, crafterName);
-                        insertStmt.setInt(4, plugin.getConfigManager().getDefaultCellsPerDisk());
-                        insertStmt.setInt(5, 0);
+                        insertStmt.setString(4, tier);
+                        insertStmt.setInt(5, plugin.getConfigManager().getDefaultCellsPerDisk()); // Should be 64
+                        insertStmt.setInt(6, 0);
                         insertStmt.executeUpdate();
                     }
 
-                    plugin.getLogger().info("Created new disk record for ID: " + diskId);
+                    plugin.getLogger().info("Created new disk record for ID: " + diskId + " with tier: " + tier);
                 } else {
-                    plugin.getLogger().info("Found existing disk record for ID: " + diskId + " by " + existingCrafterName);
+                    plugin.getLogger().info("Found existing disk record for ID: " + diskId + " by " + existingCrafterName + " (tier: " + existingTier + ")");
                 }
 
                 // STEP 3: Check if this disk is already in another drive bay slot

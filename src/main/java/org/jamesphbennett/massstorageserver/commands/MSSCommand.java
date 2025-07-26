@@ -159,13 +159,21 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
             case "server", "storage_server" -> plugin.getItemManager().createStorageServer();
             case "bay", "drive_bay" -> plugin.getItemManager().createDriveBay();
             case "terminal", "mss_terminal" -> plugin.getItemManager().createMSSTerminal();
-            case "disk", "storage_disk" -> plugin.getItemManager().createStorageDisk(
+            case "disk", "storage_disk", "disk1k" -> plugin.getItemManager().createStorageDisk(
+                    target.getUniqueId().toString(), target.getName());
+            case "disk4k" -> plugin.getItemManager().createStorageDisk4k(
+                    target.getUniqueId().toString(), target.getName());
+            case "disk16k" -> plugin.getItemManager().createStorageDisk16k(
+                    target.getUniqueId().toString(), target.getName());
+            case "disk64k" -> plugin.getItemManager().createStorageDisk64k(
                     target.getUniqueId().toString(), target.getName());
             default -> null;
         };
 
         if (item == null) {
-            sender.sendMessage(ChatColor.RED + "Invalid item type. Available: server, bay, terminal, disk");
+            sender.sendMessage(ChatColor.RED + "Invalid item type. Available:");
+            sender.sendMessage(ChatColor.YELLOW + "Blocks: server, bay, terminal");
+            sender.sendMessage(ChatColor.YELLOW + "Disks: disk1k, disk4k, disk16k, disk64k");
             return;
         }
 
@@ -260,7 +268,7 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
         if (args.length == 1) {
             List<String> commands = Arrays.asList("help");
             if (sender.hasPermission("massstorageserver.admin")) {
-                commands = Arrays.asList("help", "recovery", "give", "info", "cleanup");
+                commands = Arrays.asList("help", "recovery", "give", "info", "cleanup", "test");
             }
 
             for (String cmd : commands) {
@@ -269,7 +277,7 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
                 }
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("give")) {
-            List<String> items = Arrays.asList("server", "bay", "terminal", "disk");
+            List<String> items = Arrays.asList("server", "bay", "terminal", "disk1k", "disk4k", "disk16k", "disk64k");
             for (String item : items) {
                 if (item.toLowerCase().startsWith(args[1].toLowerCase())) {
                     completions.add(item);

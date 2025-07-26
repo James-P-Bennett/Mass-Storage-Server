@@ -20,7 +20,7 @@ public class DatabaseManager {
         initializeDatabase();
         createTables();
 
-        // CRITICAL: Run migration to fix storage constraints
+        // CRITICAL: Run migration to fix storage constraints and update cell counts
         migrateDatabaseSchema();
     }
 
@@ -59,6 +59,90 @@ public class DatabaseManager {
         } catch (Exception e) {
             plugin.getLogger().log(Level.SEVERE, "Failed to initialize database!", e);
             throw new SQLException("Database initialization failed", e);
+        }
+    }
+
+    /**
+     * Migrate database to add tier support if needed
+     */
+    private void migrateTierSupport() throws SQLException {
+        try (Connection conn = getConnection()) {
+            // Check if tier column exists
+            boolean needsTierMigration = false;
+
+            try (var stmt = conn.createStatement();
+                 var rs = stmt.executeQuery("PRAGMA table_info(storage_disks)")) {
+                boolean hasTierColumn = false;
+                while (rs.next()) {
+                    String columnName = rs.getString("name");
+                    if ("tier".equals(columnName)) {
+                        hasTierColumn = true;
+                        break;
+                    }
+                }
+
+                if (!hasTierColumn) {
+                    needsTierMigration = true;
+                    plugin.getLogger().info("Database migration needed - adding tier support to storage_disks");
+                }
+            }
+
+            if (needsTierMigration) {
+                conn.setAutoCommit(false);
+
+                try {
+                    // Add tier column with default value
+                    try (var stmt = conn.createStatement()) {
+                        stmt.execute("ALTER TABLE storage_disks ADD COLUMN tier TEXT DEFAULT '1k'");
+                    }
+
+                    // Update existing disks to 1k tier (safe default)
+                    try (var stmt = conn.createStatement()) {
+                        stmt.execute("UPDATE storage_disks SET tier = '1k' WHERE tier IS NULL");
+                    }
+
+                    conn.commit();
+                    plugin.getLogger().info("Successfully added tier support to storage_disks table");
+
+                } catch (Exception e) {
+                    conn.rollback();
+                    throw new SQLException("Failed to migrate tier support", e);
+                } finally {
+                    conn.setAutoCommit(true);
+                }
+            }
+        }
+    }
+
+    /**
+     * CRITICAL FIX: Update all storage disks to have 64 max_cells instead of old values
+     */
+    private void migrateCellCounts() throws SQLException {
+        try (Connection conn = getConnection()) {
+            conn.setAutoCommit(false);
+
+            try {
+                // Update all storage disks to have 64 max_cells (new standard)
+                try (var stmt = conn.prepareStatement(
+                        "UPDATE storage_disks SET max_cells = ? WHERE max_cells != ?")) {
+                    stmt.setInt(1, 64); // New standard
+                    stmt.setInt(2, 64); // Only update if not already 64
+                    int updatedCount = stmt.executeUpdate();
+
+                    if (updatedCount > 0) {
+                        plugin.getLogger().info("Updated " + updatedCount + " storage disks to have 64 max_cells");
+                    }
+                }
+
+                conn.commit();
+                plugin.getLogger().info("Cell count migration completed successfully");
+
+            } catch (Exception e) {
+                conn.rollback();
+                throw new SQLException("Failed to migrate cell counts", e);
+            } finally {
+                conn.setAutoCommit(true);
+            }
         }
     }
 
@@ -104,14 +188,15 @@ public class DatabaseManager {
             )
             """,
 
-                // Storage disks table
+                // Storage disks table - UPDATED with tier column and 64 default cells
                 """
             CREATE TABLE IF NOT EXISTS storage_disks (
                 disk_id TEXT PRIMARY KEY,
                 crafter_uuid TEXT NOT NULL,
                 crafter_name TEXT NOT NULL,
                 network_id TEXT,
-                max_cells INTEGER NOT NULL DEFAULT 27,
+                tier TEXT DEFAULT '1k',
+                max_cells INTEGER NOT NULL DEFAULT 64,
                 used_cells INTEGER NOT NULL DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -120,7 +205,7 @@ public class DatabaseManager {
             """,
 
                 // Drive bay slots table
-                """
+                """    
             CREATE TABLE IF NOT EXISTS drive_bay_slots (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 network_id TEXT NOT NULL,
@@ -134,26 +219,25 @@ public class DatabaseManager {
                 FOREIGN KEY (network_id) REFERENCES networks(network_id) ON DELETE CASCADE,
                 FOREIGN KEY (disk_id) REFERENCES storage_disks(disk_id) ON DELETE SET NULL,
                 UNIQUE(world_name, x, y, z, slot_number),
-                CHECK (slot_number >= 0 AND slot_number < 8)
+                CHECK (slot_number >= 0 AND slot_number < 7)
             )
             """,
 
-                // Storage items table
+                // Storage items table - UPDATED with higher quantity limit for 64K disks
                 """
-            CREATE TABLE IF NOT EXISTS storage_items (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                disk_id TEXT NOT NULL,
-                item_hash TEXT NOT NULL,
-                item_data TEXT NOT NULL,
-                quantity INTEGER NOT NULL DEFAULT 0,
-                max_stack_size INTEGER NOT NULL DEFAULT 64,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (disk_id) REFERENCES storage_disks(disk_id) ON DELETE CASCADE,
-                UNIQUE(disk_id, item_hash),
-                CHECK (quantity >= 0 AND quantity <= 1024)
-            )
-            """
+                CREATE TABLE IF NOT EXISTS storage_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    disk_id TEXT NOT NULL,
+                    item_hash TEXT NOT NULL,
+                    item_data TEXT NOT NULL,
+                    quantity INTEGER NOT NULL DEFAULT 0,
+                    max_stack_size INTEGER NOT NULL DEFAULT 64,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (disk_id) REFERENCES storage_disks(disk_id) ON DELETE CASCADE,
+                    CHECK (quantity >= 0 AND quantity <= 8128)
+                )
+                """
         };
 
         String[] indexCreationQueries = {
@@ -162,6 +246,7 @@ public class DatabaseManager {
                 "CREATE INDEX IF NOT EXISTS idx_custom_block_markers_location ON custom_block_markers(world_name, x, y, z)",
                 "CREATE INDEX IF NOT EXISTS idx_storage_disks_network ON storage_disks(network_id)",
                 "CREATE INDEX IF NOT EXISTS idx_storage_disks_crafter ON storage_disks(crafter_uuid)",
+                "CREATE INDEX IF NOT EXISTS idx_storage_disks_tier ON storage_disks(tier)",
                 "CREATE INDEX IF NOT EXISTS idx_drive_bay_slots_location ON drive_bay_slots(world_name, x, y, z)",
                 "CREATE INDEX IF NOT EXISTS idx_drive_bay_slots_network ON drive_bay_slots(network_id)",
                 "CREATE INDEX IF NOT EXISTS idx_drive_bay_slots_disk ON drive_bay_slots(disk_id)",
@@ -208,10 +293,17 @@ public class DatabaseManager {
 
     /**
      * Migrate database to remove the unique constraint that prevents multiple cells of same item type
+     * AND update cell counts to 64
      */
     private void migrateDatabaseSchema() throws SQLException {
         try (Connection conn = getConnection()) {
-            // Check if we need to migrate by looking for the constraint
+            // First run tier support migration
+            migrateTierSupport();
+
+            // Then run cell count migration
+            migrateCellCounts();
+
+            // Check if we need to migrate storage_items table constraint
             boolean needsMigration = false;
 
             try (var stmt = conn.createStatement();
@@ -229,7 +321,7 @@ public class DatabaseManager {
                 conn.setAutoCommit(false);
 
                 try {
-                    // Step 1: Create new table without the unique constraint
+                    // Step 1: Create new table without the unique constraint and with higher quantity limit
                     try (var stmt = conn.createStatement()) {
                         stmt.execute("""
                         CREATE TABLE storage_items_new (
@@ -242,7 +334,7 @@ public class DatabaseManager {
                             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                             FOREIGN KEY (disk_id) REFERENCES storage_disks(disk_id) ON DELETE CASCADE,
-                            CHECK (quantity >= 0 AND quantity <= 1024)
+                            CHECK (quantity >= 0 AND quantity <= 8128)
                         )
                         """);
                     }
@@ -250,7 +342,7 @@ public class DatabaseManager {
                     // Step 2: Copy data from old table to new table
                     try (var stmt = conn.createStatement()) {
                         stmt.execute("""
-                        INSERT INTO storage_items_new 
+                        INSERT INTO storage_items_new
                         (id, disk_id, item_hash, item_data, quantity, max_stack_size, created_at, updated_at)
                         SELECT id, disk_id, item_hash, item_data, quantity, max_stack_size, created_at, updated_at
                         FROM storage_items
@@ -274,7 +366,7 @@ public class DatabaseManager {
                     }
 
                     conn.commit();
-                    plugin.getLogger().info("Database migration completed successfully - multiple cells per item type now allowed");
+                    plugin.getLogger().info("Database migration completed successfully - multiple cells per item type now allowed with higher quantity limits");
 
                 } catch (Exception e) {
                     conn.rollback();

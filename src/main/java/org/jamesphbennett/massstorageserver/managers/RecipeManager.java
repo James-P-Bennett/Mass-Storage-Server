@@ -20,9 +20,12 @@ public class RecipeManager {
         registerStorageServerRecipe();
         registerDriveBayRecipe();
         registerMSSTerminalRecipe();
-        registerStorageDiskRecipe();
+        registerStorageDiskRecipe(); // 1k disk
+        registerStorageDisk4kRecipe();
+        registerStorageDisk16kRecipe();
+        registerStorageDisk64kRecipe();
 
-        plugin.getLogger().info("Registered " + 4 + " custom recipes");
+        plugin.getLogger().info("Registered " + 7 + " custom recipes (including 4 disk tiers)");
     }
 
     private void registerStorageServerRecipe() {
@@ -95,6 +98,66 @@ public class RecipeManager {
         recipe.setIngredient('I', Material.IRON_INGOT);
         recipe.setIngredient('G', Material.GLASS);
         recipe.setIngredient('D', Material.DIAMOND);
+
+        plugin.getServer().addRecipe(recipe);
+    }
+
+    private void registerStorageDisk4kRecipe() {
+        NamespacedKey key = new NamespacedKey(plugin, "storage_disk_4k");
+
+        // Create a template 4k disk for the recipe preview
+        ItemStack result = itemManager.createStorageDisk4k("00000000-0000-0000-0000-000000000000", "Unknown");
+
+        ShapedRecipe recipe = new ShapedRecipe(key, result);
+        recipe.shape(
+                "GEG",
+                "E1E",
+                "GEG"
+        );
+
+        recipe.setIngredient('G', Material.GOLD_INGOT);
+        recipe.setIngredient('E', Material.EMERALD);
+        recipe.setIngredient('1', Material.ACACIA_PRESSURE_PLATE); // 1k disk
+
+        plugin.getServer().addRecipe(recipe);
+    }
+
+    private void registerStorageDisk16kRecipe() {
+        NamespacedKey key = new NamespacedKey(plugin, "storage_disk_16k");
+
+        // Create a template 16k disk for the recipe preview
+        ItemStack result = itemManager.createStorageDisk16k("00000000-0000-0000-0000-000000000000", "Unknown");
+
+        ShapedRecipe recipe = new ShapedRecipe(key, result);
+        recipe.shape(
+                "DND",
+                "N4N",
+                "DND"
+        );
+
+        recipe.setIngredient('D', Material.DIAMOND);
+        recipe.setIngredient('N', Material.NETHERITE_INGOT);
+        recipe.setIngredient('4', Material.HEAVY_WEIGHTED_PRESSURE_PLATE); // 4k disk
+
+        plugin.getServer().addRecipe(recipe);
+    }
+
+    private void registerStorageDisk64kRecipe() {
+        NamespacedKey key = new NamespacedKey(plugin, "storage_disk_64k");
+
+        // Create a template 64k disk for the recipe preview
+        ItemStack result = itemManager.createStorageDisk64k("00000000-0000-0000-0000-000000000000", "Unknown");
+
+        ShapedRecipe recipe = new ShapedRecipe(key, result);
+        recipe.shape(
+                "ESE",
+                "S6S",
+                "ESE"
+        );
+
+        recipe.setIngredient('E', Material.ENDER_PEARL);
+        recipe.setIngredient('S', Material.NETHER_STAR);
+        recipe.setIngredient('6', Material.LIGHT_WEIGHTED_PRESSURE_PLATE); // 16k disk
 
         plugin.getServer().addRecipe(recipe);
     }

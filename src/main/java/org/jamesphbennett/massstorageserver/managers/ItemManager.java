@@ -11,6 +11,9 @@ import org.jamesphbennett.massstorageserver.MassStorageServer;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -29,6 +32,7 @@ public class ItemManager {
     private final NamespacedKey DISK_CRAFTER_NAME_KEY;
     private final NamespacedKey DISK_USED_CELLS_KEY;
     private final NamespacedKey DISK_MAX_CELLS_KEY;
+    private final NamespacedKey DISK_TIER_KEY;
 
     public ItemManager(MassStorageServer plugin) {
         this.plugin = plugin;
@@ -42,6 +46,7 @@ public class ItemManager {
         DISK_CRAFTER_NAME_KEY = new NamespacedKey(plugin, "disk_crafter_name");
         DISK_USED_CELLS_KEY = new NamespacedKey(plugin, "disk_used_cells");
         DISK_MAX_CELLS_KEY = new NamespacedKey(plugin, "disk_max_cells");
+        DISK_TIER_KEY = new NamespacedKey(plugin, "disk_tier");
     }
 
     public ItemStack createStorageServer() {
@@ -69,7 +74,7 @@ public class ItemManager {
         meta.setDisplayName(ChatColor.AQUA + "Drive Bay");
 
         List<String> lore = new ArrayList<>();
-        int maxSlots = plugin.getConfigManager() != null ? plugin.getConfigManager().getMaxDriveBaySlots() : 8;
+        int maxSlots = plugin.getConfigManager() != null ? plugin.getConfigManager().getMaxDriveBaySlots() : 7;
         lore.add(ChatColor.GRAY + "Holds up to " + maxSlots + " storage disks");
         lore.add(ChatColor.GRAY + "Must be connected to a Storage Server");
         meta.setLore(lore);
@@ -99,69 +104,110 @@ public class ItemManager {
         return item;
     }
 
+    // ==================== TIERED DISK CREATION METHODS ====================
+
+    /**
+     * Create a 1K storage disk (base tier)
+     */
     public ItemStack createStorageDisk(String crafterUUID, String crafterName) {
-        ItemStack item = new ItemStack(Material.ACACIA_PRESSURE_PLATE);
+        return createStorageDiskWithTier(crafterUUID, crafterName, "1k");
+    }
+
+    /**
+     * Create a 4K storage disk
+     */
+    public ItemStack createStorageDisk4k(String crafterUUID, String crafterName) {
+        return createStorageDiskWithTier(crafterUUID, crafterName, "4k");
+    }
+
+    /**
+     * Create a 16K storage disk
+     */
+    public ItemStack createStorageDisk16k(String crafterUUID, String crafterName) {
+        return createStorageDiskWithTier(crafterUUID, crafterName, "16k");
+    }
+
+    /**
+     * Create a 64K storage disk
+     */
+    public ItemStack createStorageDisk64k(String crafterUUID, String crafterName) {
+        return createStorageDiskWithTier(crafterUUID, crafterName, "64k");
+    }
+
+    /**
+     * Core method to create any tier of storage disk
+     */
+    private ItemStack createStorageDiskWithTier(String crafterUUID, String crafterName, String tier) {
+        String diskId = generateDiskId();
+        return createStorageDiskWithIdAndTier(diskId, crafterUUID, crafterName, tier);
+    }
+
+    /**
+     * Enhanced createStorageDiskWithId - now determines tier from database or defaults to 1k
+     */
+    public ItemStack createStorageDiskWithId(String diskId, String crafterUUID, String crafterName) {
+        // Try to get tier from database first
+        String tier = getTierFromDatabase(diskId);
+        if (tier == null) {
+            tier = "1k"; // Default fallback
+        }
+        return createStorageDiskWithIdAndTier(diskId, crafterUUID, crafterName, tier);
+    }
+
+    /**
+     * Create disk with specific ID and tier
+     */
+    private ItemStack createStorageDiskWithIdAndTier(String diskId, String crafterUUID, String crafterName, String tier) {
+        Material material = getMaterialForTier(tier);
+        ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
 
-        String diskId = generateDiskId();
-        int defaultCells = plugin.getConfigManager() != null ?
-                plugin.getConfigManager().getDefaultCellsPerDisk() : 27;
+        // HARDCODED: All disks have 64 cells
+        int defaultCells = 64;
 
-        meta.setDisplayName(ChatColor.LIGHT_PURPLE + "Storage Disk");
+        // Set display name with tier color
+        String displayName = switch (tier) {
+            case "1k" -> ChatColor.WHITE + "Storage Disk [1K]";
+            case "4k" -> ChatColor.YELLOW + "Storage Disk [4K]";
+            case "16k" -> ChatColor.AQUA + "Storage Disk [16K]";
+            case "64k" -> ChatColor.LIGHT_PURPLE + "Storage Disk [64K]";
+            default -> ChatColor.WHITE + "Storage Disk [1K]";
+        };
+        meta.setDisplayName(displayName);
+
+        // Calculate capacity info
+        int itemsPerCell = getItemsPerCellForTier(tier);
+        int totalCapacity = defaultCells * itemsPerCell;
 
         List<String> lore = new ArrayList<>();
-        lore.add(ChatColor.GRAY + "Capacity: 1024 items per cell");
+        lore.add(ChatColor.GRAY + "Capacity: " + String.format("%,d", itemsPerCell) + " items per cell");
         lore.add(ChatColor.YELLOW + "Cells Used: 0/" + defaultCells);
+        lore.add(ChatColor.AQUA + "Total Capacity: " + String.format("%,d", totalCapacity) + " items");
+        lore.add("");
+        lore.add(ChatColor.GRAY + "Tier: " + getTierDisplayName(tier));
         lore.add("");
         lore.add(ChatColor.DARK_GRAY + "Crafted by: " + crafterName);
         lore.add(ChatColor.DARK_GRAY + "ID: " + diskId);
         meta.setLore(lore);
 
-        meta.setCustomModelData(1004);
+        meta.setCustomModelData(1004 + getTierModelOffset(tier));
 
         PersistentDataContainer pdc = meta.getPersistentDataContainer();
         pdc.set(STORAGE_DISK_KEY, PersistentDataType.BOOLEAN, true);
         pdc.set(DISK_ID_KEY, PersistentDataType.STRING, diskId);
         pdc.set(DISK_CRAFTER_UUID_KEY, PersistentDataType.STRING, crafterUUID);
         pdc.set(DISK_CRAFTER_NAME_KEY, PersistentDataType.STRING, crafterName);
+        pdc.set(DISK_TIER_KEY, PersistentDataType.STRING, tier);
         pdc.set(DISK_USED_CELLS_KEY, PersistentDataType.INTEGER, 0);
-        pdc.set(DISK_MAX_CELLS_KEY, PersistentDataType.INTEGER, defaultCells);
+        pdc.set(DISK_MAX_CELLS_KEY, PersistentDataType.INTEGER, 64); // HARDCODED: All disks have 64 cells
 
         item.setItemMeta(meta);
         return item;
     }
 
-    public ItemStack createStorageDiskWithId(String diskId, String crafterUUID, String crafterName) {
-        ItemStack item = new ItemStack(Material.ACACIA_PRESSURE_PLATE);
-        ItemMeta meta = item.getItemMeta();
-
-        int defaultCells = plugin.getConfigManager() != null ?
-                plugin.getConfigManager().getDefaultCellsPerDisk() : 27;
-
-        meta.setDisplayName(ChatColor.LIGHT_PURPLE + "Storage Disk");
-
-        List<String> lore = new ArrayList<>();
-        lore.add(ChatColor.GRAY + "Capacity: 1024 items per cell");
-        lore.add(ChatColor.YELLOW + "Cells Used: 0/" + defaultCells);
-        lore.add("");
-        lore.add(ChatColor.DARK_GRAY + "Crafted by: " + crafterName);
-        lore.add(ChatColor.DARK_GRAY + "ID: " + diskId);
-        meta.setLore(lore);
-
-        meta.setCustomModelData(1004);
-
-        PersistentDataContainer pdc = meta.getPersistentDataContainer();
-        pdc.set(STORAGE_DISK_KEY, PersistentDataType.BOOLEAN, true);
-        pdc.set(DISK_ID_KEY, PersistentDataType.STRING, diskId); // Use provided ID
-        pdc.set(DISK_CRAFTER_UUID_KEY, PersistentDataType.STRING, crafterUUID);
-        pdc.set(DISK_CRAFTER_NAME_KEY, PersistentDataType.STRING, crafterName);
-        pdc.set(DISK_USED_CELLS_KEY, PersistentDataType.INTEGER, 0);
-        pdc.set(DISK_MAX_CELLS_KEY, PersistentDataType.INTEGER, defaultCells);
-
-        item.setItemMeta(meta);
-        return item;
-    }
-
+    /**
+     * Updated updateStorageDiskLore method with tier support
+     */
     public ItemStack updateStorageDiskLore(ItemStack disk, int usedCells, int maxCells) {
         if (!isStorageDisk(disk)) return disk;
 
@@ -170,10 +216,22 @@ public class ItemManager {
 
         String crafterName = meta.getPersistentDataContainer().get(DISK_CRAFTER_NAME_KEY, PersistentDataType.STRING);
         String diskId = meta.getPersistentDataContainer().get(DISK_ID_KEY, PersistentDataType.STRING);
+        String tier = getDiskTier(disk);
+
+        // Calculate capacity info
+        int itemsPerCell = getItemsPerCellForTier(tier);
+        int totalCapacity = maxCells * itemsPerCell;
+
+        // Color coding based on usage
+        ChatColor usageColor = (usedCells >= maxCells) ? ChatColor.RED :
+                (usedCells >= maxCells * 0.8) ? ChatColor.YELLOW : ChatColor.GREEN;
 
         List<String> lore = new ArrayList<>();
-        lore.add(ChatColor.GRAY + "Capacity: 1024 items per cell");
-        lore.add((usedCells == maxCells ? ChatColor.RED : ChatColor.YELLOW) + "Cells Used: " + usedCells + "/" + maxCells);
+        lore.add(ChatColor.GRAY + "Capacity: " + String.format("%,d", itemsPerCell) + " items per cell");
+        lore.add(usageColor + "Cells Used: " + usedCells + "/" + maxCells);
+        lore.add(ChatColor.AQUA + "Total Capacity: " + String.format("%,d", totalCapacity) + " items");
+        lore.add("");
+        lore.add(ChatColor.GRAY + "Tier: " + getTierDisplayName(tier));
         lore.add("");
         lore.add(ChatColor.DARK_GRAY + "Crafted by: " + crafterName);
         lore.add(ChatColor.DARK_GRAY + "ID: " + diskId);
@@ -186,6 +244,138 @@ public class ItemManager {
         newDisk.setItemMeta(meta);
         return newDisk;
     }
+
+    // ==================== TIER SYSTEM HELPER METHODS ====================
+
+    /**
+     * Get the tier of a storage disk
+     */
+    public String getDiskTier(ItemStack disk) {
+        if (!isStorageDisk(disk)) return null;
+        String tier = disk.getItemMeta().getPersistentDataContainer().get(DISK_TIER_KEY, PersistentDataType.STRING);
+        return tier != null ? tier : "1k"; // Default to 1k if not set
+    }
+
+    /**
+     * Get items per cell for a specific tier
+     * HARDCODED VALUES:
+     * 1K = 127 items per cell
+     * 4K = 508 items per cell
+     * 16K = 2,032 items per cell
+     * 64K = 8,128 items per cell
+     */
+    public int getItemsPerCellForTier(String tier) {
+        if (tier == null) return 127;
+        return switch (tier.toLowerCase()) {
+            case "1k" -> 127;
+            case "4k" -> 508;
+            case "16k" -> 2032;
+            case "64k" -> 8128;
+            default -> 127;
+        };
+    }
+
+    /**
+     * Get material for tier
+     */
+    private Material getMaterialForTier(String tier) {
+        return switch (tier.toLowerCase()) {
+            case "1k" -> Material.ACACIA_PRESSURE_PLATE;
+            case "4k" -> Material.HEAVY_WEIGHTED_PRESSURE_PLATE;
+            case "16k" -> Material.LIGHT_WEIGHTED_PRESSURE_PLATE;
+            case "64k" -> Material.POLISHED_BLACKSTONE_PRESSURE_PLATE;
+            default -> Material.ACACIA_PRESSURE_PLATE;
+        };
+    }
+
+    /**
+     * Get tier display name with color
+     */
+    public String getTierDisplayName(String tier) {
+        return switch (tier.toLowerCase()) {
+            case "1k" -> ChatColor.WHITE + "1K";
+            case "4k" -> ChatColor.YELLOW + "4K";
+            case "16k" -> ChatColor.AQUA + "16K";
+            case "64k" -> ChatColor.LIGHT_PURPLE + "64K";
+            default -> ChatColor.WHITE + "1K";
+        };
+    }
+
+    /**
+     * Get model data offset for tier (for custom model data)
+     */
+    private int getTierModelOffset(String tier) {
+        return switch (tier.toLowerCase()) {
+            case "1k" -> 0;
+            case "4k" -> 1;
+            case "16k" -> 2;
+            case "64k" -> 3;
+            default -> 0;
+        };
+    }
+
+    /**
+     * Get tier from database
+     */
+    private String getTierFromDatabase(String diskId) {
+        try (Connection conn = plugin.getDatabaseManager().getConnection();
+             PreparedStatement stmt = conn.prepareStatement("SELECT tier FROM storage_disks WHERE disk_id = ?")) {
+            stmt.setString(1, diskId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getString("tier");
+                }
+            }
+        } catch (Exception e) {
+            plugin.getLogger().warning("Error getting tier from database for disk " + diskId + ": " + e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Get maximum items per cell for a disk by checking its tier
+     */
+    public int getMaxItemsPerCell(ItemStack disk) {
+        String tier = getDiskTier(disk);
+        return getItemsPerCellForTier(tier);
+    }
+
+    /**
+     * Get maximum items per cell for a disk ID (for database operations)
+     */
+    public int getMaxItemsPerCellForDiskId(String diskId) throws Exception {
+        String tier = getTierFromDatabase(diskId);
+        return getItemsPerCellForTier(tier);
+    }
+
+    /**
+     * Check if item is a specific tier disk
+     */
+    public boolean isDiskOfTier(ItemStack item, String tier) {
+        if (!isStorageDisk(item)) return false;
+        String diskTier = getDiskTier(item);
+        return tier.equalsIgnoreCase(diskTier);
+    }
+
+    /**
+     * Get all available tiers
+     */
+    public String[] getAllTiers() {
+        return new String[]{"1k", "4k", "16k", "64k"};
+    }
+
+    /**
+     * Check if a tier is valid
+     */
+    public boolean isValidTier(String tier) {
+        if (tier == null) return false;
+        for (String validTier : getAllTiers()) {
+            if (validTier.equalsIgnoreCase(tier)) return true;
+        }
+        return false;
+    }
+
+    // ==================== EXISTING METHODS (UPDATED) ====================
 
     public String getDiskCrafterName(ItemStack disk) {
         if (!isStorageDisk(disk)) return null;
@@ -236,8 +426,8 @@ public class ItemManager {
     public int getDiskMaxCells(ItemStack disk) {
         if (!isStorageDisk(disk)) return 0;
         Integer cells = disk.getItemMeta().getPersistentDataContainer().get(DISK_MAX_CELLS_KEY, PersistentDataType.INTEGER);
-        return cells != null ? cells : (plugin.getConfigManager() != null ?
-                plugin.getConfigManager().getDefaultCellsPerDisk() : 27);
+        // HARDCODED: Always return 64 regardless of what's stored - for migration purposes
+        return 64;
     }
 
     private String generateDiskId() {

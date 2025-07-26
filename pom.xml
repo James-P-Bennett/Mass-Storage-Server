@@ -6,7 +6,7 @@
 
     <groupId>org.jamesphbennett</groupId>
     <artifactId>massstorageserver</artifactId>
-    <version>1.0.2</version>
+    <version>1.0.4</version>
     <packaging>jar</packaging>
 
     <name>Mass Storage Server</name>

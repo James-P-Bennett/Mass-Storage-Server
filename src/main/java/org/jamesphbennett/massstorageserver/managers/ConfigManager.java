@@ -16,8 +16,6 @@ public class ConfigManager {
     // Cached configuration values
     private int maxNetworkBlocks;
     private long operationCooldown;
-    private int maxItemsPerCell;
-    private int defaultCellsPerDisk;
     private int maxDriveBaySlots;
     private Set<Material> blacklistedItems;
     private boolean requireUsePermission;
@@ -28,6 +26,12 @@ public class ConfigManager {
     private boolean logDatabaseOperations;
     private boolean debugEnabled;
     private boolean debugVerbose;
+
+    // HARDCODED: All disks have 64 cells - no longer configurable
+    private static final int HARDCODED_CELLS_PER_DISK = 64;
+
+    // HARDCODED: Items per cell are tier-specific - no longer configurable
+    // 1K = 127, 4K = 508, 16K = 2032, 64K = 8128
 
     public ConfigManager(MassStorageServer plugin) {
         this.plugin = plugin;
@@ -51,6 +55,8 @@ public class ConfigManager {
         loadDebugSettings();
 
         plugin.getLogger().info("Configuration loaded successfully!");
+        plugin.getLogger().info("All storage disks hardcoded to " + HARDCODED_CELLS_PER_DISK + " cells");
+        plugin.getLogger().info("Items per cell are tier-specific: 1K=127, 4K=508, 16K=2032, 64K=8128");
     }
 
     private void loadNetworkSettings() {
@@ -59,9 +65,17 @@ public class ConfigManager {
     }
 
     private void loadStorageSettings() {
-        maxItemsPerCell = config.getInt("storage.max_items_per_cell", 1024);
-        defaultCellsPerDisk = config.getInt("storage.default_cells_per_disk", 27);
-        maxDriveBaySlots = config.getInt("storage.drive_bay_slots", 8);
+        maxDriveBaySlots = config.getInt("storage.drive_bay_slots", 7);
+
+        // NOTE: default_cells_per_disk config option is now IGNORED - hardcoded to 64
+        if (config.contains("storage.default_cells_per_disk")) {
+            plugin.getLogger().warning("Config option 'default_cells_per_disk' is deprecated and ignored. All disks now have " + HARDCODED_CELLS_PER_DISK + " cells.");
+        }
+
+        // NOTE: max_items_per_cell config option is now IGNORED - tier-specific values are hardcoded
+        if (config.contains("storage.max_items_per_cell")) {
+            plugin.getLogger().warning("Config option 'max_items_per_cell' is deprecated and ignored. Items per cell are now tier-specific and hardcoded.");
+        }
     }
 
     private void loadBlacklistedItems() {
@@ -109,12 +123,18 @@ public class ConfigManager {
         return operationCooldown;
     }
 
-    public int getMaxItemsPerCell() {
-        return maxItemsPerCell;
-    }
+    /**
+     * REMOVED: Items per cell are now tier-specific and hardcoded
+     * 1K = 127, 4K = 508, 16K = 2032, 64K = 8128
+     * Use ItemManager.getItemsPerCellForTier(tier) instead
+     */
 
+    /**
+     * HARDCODED: All storage disks have exactly 64 cells
+     * This method now ignores any config value and always returns 64
+     */
     public int getDefaultCellsPerDisk() {
-        return defaultCellsPerDisk;
+        return HARDCODED_CELLS_PER_DISK;
     }
 
     public int getMaxDriveBaySlots() {

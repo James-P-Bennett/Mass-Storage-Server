@@ -236,13 +236,16 @@ public class StorageManager {
         String itemData = serializeItemStack(item);
         int amountToStore = item.getAmount();
         int maxStackSize = item.getMaxStackSize();
-        final int MAX_ITEMS_PER_CELL = plugin.getConfigManager().getMaxItemsPerCell();
 
         plugin.getLogger().info("Storing " + amountToStore + " " + item.getType() + " (hash: " + itemHash.substring(0, 8) + "...)");
 
         // PHASE 1: Fill existing partial cells first (most space-efficient)
         for (String diskId : diskIds) {
             if (amountToStore <= 0) break;
+
+            // Get the maximum items per cell for this specific disk
+            int MAX_ITEMS_PER_CELL = getDiskMaxItemsPerCell(conn, diskId);
+            plugin.getLogger().info("Disk " + diskId + " has capacity of " + MAX_ITEMS_PER_CELL + " items per cell");
 
             // Get all partial cells for this item type, ordered by quantity DESC (fill fuller cells first)
             try (PreparedStatement stmt = conn.prepareStatement(
@@ -279,9 +282,12 @@ public class StorageManager {
         for (String diskId : diskIds) {
             if (amountToStore <= 0) break;
 
+            // Get the maximum items per cell for this specific disk
+            int MAX_ITEMS_PER_CELL = getDiskMaxItemsPerCell(conn, diskId);
+
             // Check available cells
             int availableCells = getAvailableCells(conn, diskId);
-            plugin.getLogger().info("Disk " + diskId + " has " + availableCells + " available cells");
+            plugin.getLogger().info("Disk " + diskId + " has " + availableCells + " available cells (capacity: " + MAX_ITEMS_PER_CELL + " per cell)");
 
             while (availableCells > 0 && amountToStore > 0) {
                 int canStore = Math.min(amountToStore, MAX_ITEMS_PER_CELL);
@@ -316,7 +322,9 @@ public class StorageManager {
                 try {
                     int availableCells = getAvailableCells(conn, diskId);
                     int maxCells = getMaxCells(conn, diskId);
-                    plugin.getLogger().info("Disk " + diskId + " final state: " + availableCells + "/" + maxCells + " cells available");
+                    int maxItemsPerCell = getDiskMaxItemsPerCell(conn, diskId);
+                    plugin.getLogger().info("Disk " + diskId + " final state: " + availableCells + "/" + maxCells +
+                            " cells available (" + maxItemsPerCell + " items per cell)");
                 } catch (SQLException e) {
                     plugin.getLogger().warning("Error getting final disk state: " + e.getMessage());
                 }
@@ -329,6 +337,34 @@ public class StorageManager {
 
         plugin.getLogger().info("Successfully stored all " + item.getAmount() + " items");
         return null;
+    }
+
+    // Helper method to get disk-specific capacity
+    private int getDiskMaxItemsPerCell(Connection conn, String diskId) throws SQLException {
+        try {
+            // Get the tier from the database and return tier-specific capacity
+            String tier = getTierFromDatabase(conn, diskId);
+            return plugin.getItemManager().getItemsPerCellForTier(tier);
+        } catch (Exception e) {
+            plugin.getLogger().warning("Error getting tier-specific capacity for disk " + diskId + ": " + e.getMessage());
+            return 127; // 1k tier default fallback
+        }
+    }
+
+    /**
+     * Helper method to get tier from database within an existing connection
+     */
+    private String getTierFromDatabase(Connection conn, String diskId) throws SQLException {
+        try (PreparedStatement stmt = conn.prepareStatement("SELECT tier FROM storage_disks WHERE disk_id = ?")) {
+            stmt.setString(1, diskId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    String tier = rs.getString("tier");
+                    return tier != null ? tier : "1k"; // Default to 1k if null
+                }
+            }
+        }
+        return "1k"; // Default fallback
     }
 
     // Helper method to get available cells (replace the existing hasAvailableCells method)

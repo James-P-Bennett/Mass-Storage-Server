@@ -79,12 +79,13 @@ public class StorageManager {
 
             try {
                 DatabaseManager.DatabaseTransaction transaction = (Connection conn) -> {
-                    // Find the item in storage
+                    // Find the item in storage - ONLY from disks currently in drive bays
                     try (PreparedStatement stmt = conn.prepareStatement(
                             "SELECT si.disk_id, si.item_data, si.quantity, si.max_stack_size " +
                                     "FROM storage_items si " +
                                     "JOIN storage_disks sd ON si.disk_id = sd.disk_id " +
-                                    "WHERE sd.network_id = ? AND si.item_hash = ? AND si.quantity > 0 " +
+                                    "JOIN drive_bay_slots dbs ON sd.disk_id = dbs.disk_id " + // CRITICAL: Only from drive bay disks
+                                    "WHERE dbs.network_id = ? AND si.item_hash = ? AND si.quantity > 0 AND dbs.disk_id IS NOT NULL " +
                                     "ORDER BY si.quantity DESC")) {
 
                         stmt.setString(1, networkId);
@@ -141,7 +142,7 @@ public class StorageManager {
                         }
                     }
 
-                    // Update disk cell counts
+                    // Update disk cell counts for disks that are currently in drive bays
                     List<String> diskIds = getNetworkDiskIds(conn, networkId);
                     updateDiskCellCounts(conn, diskIds);
                 };
@@ -167,7 +168,8 @@ public class StorageManager {
                          "SELECT si.item_hash, si.item_data, SUM(si.quantity) as total_quantity " +
                                  "FROM storage_items si " +
                                  "JOIN storage_disks sd ON si.disk_id = sd.disk_id " +
-                                 "WHERE sd.network_id = ? " +
+                                 "JOIN drive_bay_slots dbs ON sd.disk_id = dbs.disk_id " + // CRITICAL: Only disks in drive bays
+                                 "WHERE dbs.network_id = ? AND dbs.disk_id IS NOT NULL " + // Must be in a drive bay slot
                                  "GROUP BY si.item_hash, si.item_data " +
                                  "HAVING total_quantity > 0 " +
                                  "ORDER BY total_quantity DESC")) {
@@ -186,6 +188,9 @@ public class StorageManager {
                         }
                     }
                 }
+
+                plugin.getLogger().info("Found " + items.size() + " item types from active drive bay disks in network " + networkId);
+
             } catch (SQLException e) {
                 throw new RuntimeException(e);
             }

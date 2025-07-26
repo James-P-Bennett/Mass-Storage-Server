@@ -1,6 +1,6 @@
 # Mass Storage Server
 
-Mass Storage Server is a lightweight early-beta Minecraft plugin inspired by Applied Energistics 2 (AE2) and Refined Storage. It introduces an expandable item storage system built around craftable, removable drives and an intuitive terminal interface. All components are craftable using vanilla recipes or can be accessed through the `/mss` command.
+Mass Storage Server is a lightweight early-beta Minecraft plugin inspired by Applied Energistics 2 (AE2) and Refined Storage. It introduces an expandable item storage system built around craftable, removable disks and an intuitive terminal interface. All components are craftable using vanilla recipes or can be accessed through the `/mss` command.
 
 The plugin uses a fast and efficient SQLite database with HikariCP connection pooling. Each drive is uniquely identified and stores its own item pool, allowing for safe concurrent access from multiple users.
 
@@ -10,10 +10,10 @@ The plugin uses a fast and efficient SQLite database with HikariCP connection po
 
 ## Features
 
-- Expandable storage system using drives and drive bays
+- Expandable storage system using disks and drive bays
 - Vanilla-style crafting recipes, no mods required
 - Efficient SQLite database powered by HikariCP
-- Each drive stores items independently by UUID
+- Each disk stores items independently by UUID
 - Terminal interface supports multi-user access
 - Full configuration options for performance and security
 
@@ -93,45 +93,6 @@ debug:
   enabled: false
   verbose: false
 ```
-
----
-
-## Crafting Recipes
-
-All items can be crafted using the vanilla recipe book (if permissions allow) or accessed via /mss.
-
-### Storage Server
-
-```
-[ Glass ] [ Stone ] [ Glass ]
-[ Stone ] [ Chest ] [ Stone ]
-[ Glass ] [ Stone ] [ Glass ]
-```
-
-### Drive Bay
-
-```
-[ Stone ] [ Glass ]   [ Stone ]
-[ Glass ] [ Hopper ]  [ Glass ]
-[ Stone ] [ Glass ]   [ Stone ]
-```
-
-### MSS Terminal
-
-```
-[ Stone ]    [ Redstone ]    [ Stone ]
-[ Redstone ] [ Glass Pane ]  [ Redstone ]
-[ Stone ]    [ Redstone ]    [ Stone ]
-```
-
-### Storage Disk
-
-```
-[ Iron Ingot ] [ Glass ]   [ Iron Ingot ]
-[ Glass ]      [ Diamond ] [ Glass ]
-[ Iron Ingot ] [ Glass ]   [ Iron Ingot ]
-```
-
 ---
 
 ## Permissions

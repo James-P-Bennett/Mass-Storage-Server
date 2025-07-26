@@ -2,7 +2,7 @@
 
 Mass Storage Server is a lightweight early-beta Minecraft plugin inspired by Applied Energistics 2 (AE2) and Refined Storage. It introduces an expandable item storage system built around craftable, removable disks and an intuitive terminal interface. All components are craftable using vanilla recipes or can be accessed through the `/mss` command.
 
-The plugin uses a fast and efficient SQLite database with HikariCP connection pooling. Each drive is uniquely identified and stores its own item pool, allowing for safe concurrent access from multiple users.
+The plugin uses a fast and efficient SQLite database with HikariCP connection pooling. Each disk is uniquely identified and stores its own item pool, allowing for safe concurrent access from multiple users.
 
 **Note:** This plugin is in active development. Use at your own risk and report any issues via the GitHub issues tracker.
 

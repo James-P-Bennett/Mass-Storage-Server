@@ -114,9 +114,11 @@ public class TerminalGUI implements Listener {
         infoLore.add(ChatColor.GRAY + "Total Items: " + totalItems);
 
         infoLore.add("");
-        infoLore.add(ChatColor.YELLOW + "Left Click: Take 64 items");
-        infoLore.add(ChatColor.YELLOW + "Right Click: Take half stack");
-        infoLore.add(ChatColor.YELLOW + "Shift Click: Take all to inventory");
+        infoLore.add(ChatColor.YELLOW + "Left Click: Take 64 to cursor");
+        infoLore.add(ChatColor.YELLOW + "Right Click: Take 32 to cursor");
+        infoLore.add(ChatColor.YELLOW + "Shift Click: Take 64 to inventory");
+        infoLore.add("");
+        infoLore.add(ChatColor.AQUA + "Click with items on cursor to store them");
         infoMeta.setLore(infoLore);
         info.setItemMeta(infoMeta);
         inventory.setItem(49, info);
@@ -169,16 +171,25 @@ public class TerminalGUI implements Listener {
         ItemStack displayItem = storedItem.getDisplayStack();
         ItemMeta meta = displayItem.getItemMeta();
 
+        // NEW BEHAVIOR: Display logic based on quantity
+        if (storedItem.getQuantity() > 64) {
+            // For items > 64, show as single item (no number)
+            displayItem.setAmount(1);
+        } else {
+            // For items ≤ 64, show actual stack size
+            displayItem.setAmount(storedItem.getQuantity());
+        }
+
         // Add quantity information to lore
         List<String> lore = meta.hasLore() ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
         lore.add("");
         lore.add(ChatColor.YELLOW + "Stored: " + storedItem.getQuantity());
 
-        // Add interaction hints
+        // Add interaction hints with UPDATED click behavior
         lore.add("");
-        lore.add(ChatColor.GRAY + "Left Click: Take 64");
-        lore.add(ChatColor.GRAY + "Right Click: Take " + (storedItem.getQuantity() / 2));
-        lore.add(ChatColor.GRAY + "Shift Click: Take all");
+        lore.add(ChatColor.GRAY + "Left Click: Take 64 to cursor");
+        lore.add(ChatColor.GRAY + "Right Click: Take 32 to cursor");
+        lore.add(ChatColor.GRAY + "Shift Click: Take 64 to inventory");
 
         meta.setLore(lore);
         displayItem.setItemMeta(meta);
@@ -276,37 +287,100 @@ public class TerminalGUI implements Listener {
     private void handleItemClick(InventoryClickEvent event, Player player, int slot) {
         event.setCancelled(true);
 
+        ItemStack cursorItem = event.getCursor();
+
+        // PRIORITY 1: If player has items on cursor, try to store them
+        if (cursorItem != null && !cursorItem.getType().isAir()) {
+            plugin.getLogger().info("Player has " + cursorItem.getAmount() + " " + cursorItem.getType() + " on cursor, attempting to store");
+
+            // Check if item can be stored
+            if (!plugin.getItemManager().isItemAllowed(cursorItem)) {
+                player.sendMessage(ChatColor.RED + "This item cannot be stored in the network!");
+                return;
+            }
+
+            // Store the cursor item
+            try {
+                List<ItemStack> toStore = new ArrayList<>();
+                toStore.add(cursorItem.clone());
+
+                List<ItemStack> remainders = plugin.getStorageManager().storeItems(networkId, toStore);
+
+                if (remainders.isEmpty()) {
+                    // All items stored successfully
+                    event.setCursor(null);
+                    player.sendMessage(ChatColor.GREEN + "Stored " + cursorItem.getAmount() + " " +
+                            cursorItem.getType().name().toLowerCase().replace("_", " "));
+                    plugin.getLogger().info("Successfully stored all cursor items");
+                } else {
+                    // Some items couldn't be stored
+                    ItemStack remainder = remainders.get(0);
+                    event.setCursor(remainder);
+                    int stored = cursorItem.getAmount() - remainder.getAmount();
+                    if (stored > 0) {
+                        player.sendMessage(ChatColor.YELLOW + "Stored " + stored + " items. " +
+                                remainder.getAmount() + " items couldn't be stored (network full?)");
+                        plugin.getLogger().info("Partially stored " + stored + "/" + cursorItem.getAmount() + " cursor items");
+                    } else {
+                        player.sendMessage(ChatColor.RED + "No space available in the network!");
+                        plugin.getLogger().warning("Could not store any cursor items - network full");
+                    }
+                }
+
+                // Refresh the display
+                refresh();
+                return; // IMPORTANT: Return here, don't continue to retrieval logic
+
+            } catch (Exception e) {
+                player.sendMessage(ChatColor.RED + "Error storing items: " + e.getMessage());
+                plugin.getLogger().severe("Error storing cursor items: " + e.getMessage());
+                return;
+            }
+        }
+
+        // PRIORITY 2: If no cursor items, handle retrieval with NEW BEHAVIOR
         StoredItem storedItem = slotToStoredItem.get(slot);
-        if (storedItem == null) return;
+        if (storedItem == null) {
+            plugin.getLogger().info("No stored item found in slot " + slot);
+            return;
+        }
 
         ClickType clickType = event.getClick();
         int amountToRetrieve = 0;
+        boolean directToInventory = false;
 
         switch (clickType) {
             case LEFT:
-                // Take 64 items (or less if not available)
+                // Take 64 items (or less if not available) to cursor
                 amountToRetrieve = Math.min(64, storedItem.getQuantity());
+                directToInventory = false;
                 break;
             case RIGHT:
-                // Take half stack
-                amountToRetrieve = Math.max(1, storedItem.getQuantity() / 2);
+                // Take exactly 32 items (or max available up to 32) to cursor
+                amountToRetrieve = Math.min(32, storedItem.getQuantity());
+                directToInventory = false;
                 break;
             case SHIFT_LEFT:
-                // Take all to inventory
-                amountToRetrieve = storedItem.getQuantity();
+                // Take 64 items directly to inventory (like shift-clicking from chest)
+                amountToRetrieve = Math.min(64, storedItem.getQuantity());
+                directToInventory = true;
                 break;
             default:
+                plugin.getLogger().info("Unhandled click type: " + clickType);
                 return;
         }
 
         if (amountToRetrieve > 0) {
+            plugin.getLogger().info("Retrieving " + amountToRetrieve + " items of type " + storedItem.getItemStack().getType() +
+                    (directToInventory ? " to inventory" : " to cursor"));
+
             try {
                 ItemStack retrievedItem = plugin.getStorageManager().retrieveItems(
                         networkId, storedItem.getItemHash(), amountToRetrieve);
 
                 if (retrievedItem != null) {
-                    if (clickType == ClickType.SHIFT_LEFT) {
-                        // Add to player inventory
+                    if (directToInventory) {
+                        // Add directly to player inventory
                         HashMap<Integer, ItemStack> leftover = player.getInventory().addItem(retrievedItem);
                         if (!leftover.isEmpty()) {
                             // Drop leftover items
@@ -325,6 +399,11 @@ public class TerminalGUI implements Listener {
 
                     player.sendMessage(ChatColor.GREEN + "Retrieved " + amountToRetrieve + " " +
                             retrievedItem.getType().name().toLowerCase().replace("_", " "));
+                    plugin.getLogger().info("Successfully retrieved " + amountToRetrieve + " items");
+                } else {
+                    player.sendMessage(ChatColor.RED + "Could not retrieve items - they may have been taken by another player.");
+                    plugin.getLogger().warning("Retrieval returned null - items may have been taken");
+                    refresh(); // Refresh to show current state
                 }
             } catch (Exception e) {
                 player.sendMessage(ChatColor.RED + "Error retrieving items: " + e.getMessage());
@@ -361,45 +440,98 @@ public class TerminalGUI implements Listener {
     public void onInventoryDrag(InventoryDragEvent event) {
         if (!event.getInventory().equals(inventory)) return;
 
-        // Check if dragging into the top area (item display)
+        plugin.getLogger().info("Drag event detected with " + event.getRawSlots().size() + " slots affected");
+
+        // Check if dragging into the terminal area
+        boolean draggedIntoItemArea = false;
+        boolean draggedIntoNavArea = false;
+
         for (int slot : event.getRawSlots()) {
             if (slot < 36) {
-                // Dragging into item display area - try to store the item
-                if (event.getWhoClicked() instanceof Player player) {
-                    ItemStack draggedItem = event.getOldCursor();
+                draggedIntoItemArea = true;
+            } else if (slot < 54) {
+                draggedIntoNavArea = true;
+            }
+        }
 
-                    if (draggedItem != null && !draggedItem.getType().isAir()) {
-                        // Check if item can be stored
-                        if (!plugin.getItemManager().isItemAllowed(draggedItem)) {
-                            event.setCancelled(true);
-                            player.sendMessage(ChatColor.RED + "This item cannot be stored in the network!");
-                            return;
+        if (draggedIntoNavArea) {
+            // Dragging into navigation area - always cancel
+            event.setCancelled(true);
+            plugin.getLogger().info("Cancelled drag - attempted to drag into navigation area");
+            return;
+        }
+
+        if (draggedIntoItemArea) {
+            // Dragging into item display area - try to store the item
+            if (event.getWhoClicked() instanceof Player player) {
+                ItemStack draggedItem = event.getOldCursor();
+
+                if (draggedItem != null && !draggedItem.getType().isAir()) {
+                    plugin.getLogger().info("Player " + player.getName() + " dragging " +
+                            draggedItem.getAmount() + " " + draggedItem.getType() + " into terminal");
+
+                    // Check if item can be stored
+                    if (!plugin.getItemManager().isItemAllowed(draggedItem)) {
+                        event.setCancelled(true);
+                        player.sendMessage(ChatColor.RED + "This item cannot be stored in the network!");
+                        plugin.getLogger().info("Cancelled drag - item not allowed: " + draggedItem.getType());
+                        return;
+                    }
+
+                    // Calculate how much is being dragged (drag splits items across slots)
+                    int totalDraggedAmount = 0;
+                    for (Map.Entry<Integer, ItemStack> entry : event.getNewItems().entrySet()) {
+                        if (entry.getKey() < 36) { // Only count items in terminal area
+                            totalDraggedAmount += entry.getValue().getAmount();
                         }
+                    }
 
-                        // Store the entire stack
+                    if (totalDraggedAmount > 0) {
+                        // Create an item stack with the total dragged amount
+                        ItemStack itemToStore = draggedItem.clone();
+                        itemToStore.setAmount(totalDraggedAmount);
+
                         try {
                             List<ItemStack> toStore = new ArrayList<>();
-                            toStore.add(draggedItem.clone());
+                            toStore.add(itemToStore);
 
+                            plugin.getLogger().info("Attempting to store " + totalDraggedAmount + " " + draggedItem.getType() + " via drag");
                             List<ItemStack> remainders = plugin.getStorageManager().storeItems(networkId, toStore);
 
                             event.setCancelled(true);
 
                             if (remainders.isEmpty()) {
-                                // All stored
-                                event.setCursor(null);
-                                player.sendMessage(ChatColor.GREEN + "Stored " + draggedItem.getAmount() + " " +
+                                // All stored - calculate what should remain on cursor
+                                int remainingOnCursor = draggedItem.getAmount() - totalDraggedAmount;
+                                if (remainingOnCursor > 0) {
+                                    ItemStack newCursor = draggedItem.clone();
+                                    newCursor.setAmount(remainingOnCursor);
+                                    event.setCursor(newCursor);
+                                } else {
+                                    event.setCursor(null);
+                                }
+
+                                player.sendMessage(ChatColor.GREEN + "Stored " + totalDraggedAmount + " " +
                                         draggedItem.getType().name().toLowerCase().replace("_", " "));
+                                plugin.getLogger().info("Successfully stored all " + totalDraggedAmount + " dragged items");
                             } else {
                                 // Partial storage
                                 ItemStack remainder = remainders.get(0);
-                                event.setCursor(remainder);
-                                int stored = draggedItem.getAmount() - remainder.getAmount();
+                                int stored = totalDraggedAmount - remainder.getAmount();
+
+                                // Calculate new cursor amount
+                                int newCursorAmount = draggedItem.getAmount() - stored;
+                                ItemStack newCursor = draggedItem.clone();
+                                newCursor.setAmount(newCursorAmount);
+                                event.setCursor(newCursor);
+
                                 if (stored > 0) {
                                     player.sendMessage(ChatColor.YELLOW + "Stored " + stored + " items. " +
                                             remainder.getAmount() + " items couldn't be stored.");
+                                    plugin.getLogger().info("Partially stored " + stored + "/" + totalDraggedAmount + " dragged items");
                                 } else {
                                     player.sendMessage(ChatColor.RED + "No space available in the network!");
+                                    plugin.getLogger().warning("No space available for dragged items");
                                 }
                             }
 
@@ -408,18 +540,18 @@ public class TerminalGUI implements Listener {
                             return;
                         } catch (Exception e) {
                             player.sendMessage(ChatColor.RED + "Error storing items: " + e.getMessage());
-                            plugin.getLogger().severe("Error storing items: " + e.getMessage());
+                            plugin.getLogger().severe("Error storing dragged items: " + e.getMessage());
+                            e.printStackTrace();
                         }
                     }
                 }
-                event.setCancelled(true);
-                return;
-            } else if (slot < 54) {
-                // Dragging into navigation area - cancel
-                event.setCancelled(true);
-                return;
             }
+            event.setCancelled(true);
+            return;
         }
+
+        // If we get here, the drag is only in player inventory - allow it
+        plugin.getLogger().info("Allowing drag - only affects player inventory");
     }
 
     @EventHandler

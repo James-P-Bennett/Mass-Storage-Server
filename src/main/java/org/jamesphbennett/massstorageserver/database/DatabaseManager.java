@@ -19,6 +19,9 @@ public class DatabaseManager {
         this.plugin = plugin;
         initializeDatabase();
         createTables();
+
+        // CRITICAL: Run migration to fix storage constraints
+        migrateDatabaseSchema();
     }
 
     private void initializeDatabase() throws SQLException {
@@ -201,6 +204,86 @@ public class DatabaseManager {
             throw new SQLException("Database connection pool is not available");
         }
         return dataSource.getConnection();
+    }
+
+    /**
+     * Migrate database to remove the unique constraint that prevents multiple cells of same item type
+     */
+    private void migrateDatabaseSchema() throws SQLException {
+        try (Connection conn = getConnection()) {
+            // Check if we need to migrate by looking for the constraint
+            boolean needsMigration = false;
+
+            try (var stmt = conn.createStatement();
+                 var rs = stmt.executeQuery("SELECT sql FROM sqlite_master WHERE type='table' AND name='storage_items'")) {
+                if (rs.next()) {
+                    String tableSql = rs.getString("sql");
+                    if (tableSql.contains("UNIQUE(disk_id, item_hash)")) {
+                        needsMigration = true;
+                        plugin.getLogger().info("Database migration needed - removing unique constraint on storage_items");
+                    }
+                }
+            }
+
+            if (needsMigration) {
+                conn.setAutoCommit(false);
+
+                try {
+                    // Step 1: Create new table without the unique constraint
+                    try (var stmt = conn.createStatement()) {
+                        stmt.execute("""
+                        CREATE TABLE storage_items_new (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            disk_id TEXT NOT NULL,
+                            item_hash TEXT NOT NULL,
+                            item_data TEXT NOT NULL,
+                            quantity INTEGER NOT NULL DEFAULT 0,
+                            max_stack_size INTEGER NOT NULL DEFAULT 64,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            FOREIGN KEY (disk_id) REFERENCES storage_disks(disk_id) ON DELETE CASCADE,
+                            CHECK (quantity >= 0 AND quantity <= 1024)
+                        )
+                        """);
+                    }
+
+                    // Step 2: Copy data from old table to new table
+                    try (var stmt = conn.createStatement()) {
+                        stmt.execute("""
+                        INSERT INTO storage_items_new 
+                        (id, disk_id, item_hash, item_data, quantity, max_stack_size, created_at, updated_at)
+                        SELECT id, disk_id, item_hash, item_data, quantity, max_stack_size, created_at, updated_at
+                        FROM storage_items
+                        """);
+                    }
+
+                    // Step 3: Drop old table
+                    try (var stmt = conn.createStatement()) {
+                        stmt.execute("DROP TABLE storage_items");
+                    }
+
+                    // Step 4: Rename new table
+                    try (var stmt = conn.createStatement()) {
+                        stmt.execute("ALTER TABLE storage_items_new RENAME TO storage_items");
+                    }
+
+                    // Step 5: Recreate indexes
+                    try (var stmt = conn.createStatement()) {
+                        stmt.execute("CREATE INDEX IF NOT EXISTS idx_storage_items_disk ON storage_items(disk_id)");
+                        stmt.execute("CREATE INDEX IF NOT EXISTS idx_storage_items_hash ON storage_items(item_hash)");
+                    }
+
+                    conn.commit();
+                    plugin.getLogger().info("Database migration completed successfully - multiple cells per item type now allowed");
+
+                } catch (Exception e) {
+                    conn.rollback();
+                    throw new SQLException("Database migration failed", e);
+                } finally {
+                    conn.setAutoCommit(true);
+                }
+            }
+        }
     }
 
     /**

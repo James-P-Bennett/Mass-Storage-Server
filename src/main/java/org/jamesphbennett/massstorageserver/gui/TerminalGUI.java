@@ -4,6 +4,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -12,6 +13,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.jamesphbennett.massstorageserver.MassStorageServer;
@@ -28,8 +30,13 @@ public class TerminalGUI implements Listener {
     private final Map<Integer, StoredItem> slotToStoredItem = new HashMap<>();
 
     private List<StoredItem> allItems = new ArrayList<>();
+    private List<StoredItem> filteredItems = new ArrayList<>();
     private int currentPage = 0;
     private final int itemsPerPage = 36; // 4 rows of 9 slots
+
+    // Search functionality
+    private String currentSearchTerm = null;
+    private boolean isSearchActive = false;
 
     public TerminalGUI(MassStorageServer plugin, Location terminalLocation, String networkId) {
         this.plugin = plugin;
@@ -38,6 +45,14 @@ public class TerminalGUI implements Listener {
 
         // Create inventory - 6 rows (54 slots)
         this.inventory = Bukkit.createInventory(null, 54, ChatColor.GREEN + "MSS Terminal");
+
+        // Check for saved search term for this terminal location
+        String savedSearchTerm = plugin.getGUIManager().getTerminalSearchTerm(terminalLocation);
+        if (savedSearchTerm != null && !savedSearchTerm.isEmpty()) {
+            this.currentSearchTerm = savedSearchTerm;
+            this.isSearchActive = true;
+            plugin.getLogger().info("Loaded saved search term '" + savedSearchTerm + "' for terminal at " + terminalLocation);
+        }
 
         setupGUI();
         loadItems();
@@ -68,15 +83,54 @@ public class TerminalGUI implements Listener {
         titleMeta.setLore(titleLore);
         title.setItemMeta(titleMeta);
         inventory.setItem(40, title); // Bottom row center
+
+        // Add search button
+        updateSearchButton();
+    }
+
+    private void updateSearchButton() {
+        ItemStack searchButton = new ItemStack(Material.NAME_TAG);
+        ItemMeta searchMeta = searchButton.getItemMeta();
+
+        if (isSearchActive && currentSearchTerm != null) {
+            // Search is active - glowing button
+            searchMeta.setDisplayName(ChatColor.GOLD + "Search: " + ChatColor.YELLOW + currentSearchTerm);
+            List<String> searchLore = new ArrayList<>();
+            searchLore.add(ChatColor.GREEN + "Search is active!");
+            searchLore.add(ChatColor.GRAY + "Showing items matching: " + ChatColor.WHITE + currentSearchTerm);
+            searchLore.add(ChatColor.GRAY + "Results: " + filteredItems.size() + " item types");
+            searchLore.add("");
+            searchLore.add(ChatColor.YELLOW + "Right-click to clear search");
+            searchLore.add(ChatColor.YELLOW + "Left-click to search again");
+            searchMeta.setLore(searchLore);
+
+            // Add glowing effect
+            searchMeta.addEnchant(Enchantment.UNBREAKING, 1, true);
+            searchMeta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+        } else {
+            // No search active - normal button
+            searchMeta.setDisplayName(ChatColor.AQUA + "Search Items");
+            List<String> searchLore = new ArrayList<>();
+            searchLore.add(ChatColor.GRAY + "Click to search for specific items");
+            searchLore.add(ChatColor.GRAY + "Type part of the item name");
+            searchLore.add("");
+            searchLore.add(ChatColor.YELLOW + "Left-click to start search");
+            searchMeta.setLore(searchLore);
+        }
+
+        searchButton.setItemMeta(searchMeta);
+        inventory.setItem(36, searchButton); // Bottom left corner
     }
 
     private void updateNavigationItems() {
+        int maxPages = getMaxPages();
+
         // Previous page button
         ItemStack prevPage = new ItemStack(Material.ARROW);
         ItemMeta prevMeta = prevPage.getItemMeta();
         prevMeta.setDisplayName(ChatColor.YELLOW + "Previous Page");
         List<String> prevLore = new ArrayList<>();
-        prevLore.add(ChatColor.GRAY + "Page: " + (currentPage + 1) + "/" + getMaxPages());
+        prevLore.add(ChatColor.GRAY + "Page: " + (currentPage + 1) + "/" + maxPages);
         if (currentPage > 0) {
             prevLore.add(ChatColor.GREEN + "Click to go to previous page");
         } else {
@@ -91,8 +145,8 @@ public class TerminalGUI implements Listener {
         ItemMeta nextMeta = nextPage.getItemMeta();
         nextMeta.setDisplayName(ChatColor.YELLOW + "Next Page");
         List<String> nextLore = new ArrayList<>();
-        nextLore.add(ChatColor.GRAY + "Page: " + (currentPage + 1) + "/" + getMaxPages());
-        if (currentPage < getMaxPages() - 1) {
+        nextLore.add(ChatColor.GRAY + "Page: " + (currentPage + 1) + "/" + maxPages);
+        if (currentPage < maxPages - 1) {
             nextLore.add(ChatColor.GREEN + "Click to go to next page");
         } else {
             nextLore.add(ChatColor.RED + "Already on last page");
@@ -106,12 +160,20 @@ public class TerminalGUI implements Listener {
         ItemMeta infoMeta = info.getItemMeta();
         infoMeta.setDisplayName(ChatColor.AQUA + "Storage Info");
         List<String> infoLore = new ArrayList<>();
-        infoLore.add(ChatColor.GRAY + "Total Item Types: " + allItems.size());
-        infoLore.add(ChatColor.GRAY + "Page: " + (currentPage + 1) + "/" + getMaxPages());
+
+        if (isSearchActive) {
+            infoLore.add(ChatColor.YELLOW + "Search Results: " + filteredItems.size() + " types");
+            infoLore.add(ChatColor.GRAY + "Total Item Types: " + allItems.size());
+        } else {
+            infoLore.add(ChatColor.GRAY + "Total Item Types: " + allItems.size());
+        }
+
+        infoLore.add(ChatColor.GRAY + "Page: " + (currentPage + 1) + "/" + maxPages);
 
         // Calculate total items stored
-        long totalItems = allItems.stream().mapToLong(StoredItem::getQuantity).sum();
-        infoLore.add(ChatColor.GRAY + "Total Items: " + totalItems);
+        List<StoredItem> displayItems = isSearchActive ? filteredItems : allItems;
+        long totalItems = displayItems.stream().mapToLong(StoredItem::getQuantity).sum();
+        infoLore.add(ChatColor.GRAY + (isSearchActive ? "Filtered" : "Total") + " Items: " + totalItems);
 
         infoLore.add("");
         infoLore.add(ChatColor.YELLOW + "Left Click: Take full stack to cursor");
@@ -125,7 +187,8 @@ public class TerminalGUI implements Listener {
     }
 
     private int getMaxPages() {
-        return Math.max(1, (int) Math.ceil((double) allItems.size() / itemsPerPage));
+        List<StoredItem> displayItems = isSearchActive ? filteredItems : allItems;
+        return Math.max(1, (int) Math.ceil((double) displayItems.size() / itemsPerPage));
     }
 
     private void loadItems() {
@@ -133,12 +196,123 @@ public class TerminalGUI implements Listener {
             // Get all items from network storage
             allItems = plugin.getStorageManager().getNetworkItems(networkId);
 
-            // Sort alphabetically by item type name
+            // Sort alphabetically by item type name (will be re-sorted if search is active)
             allItems.sort(Comparator.comparing(item -> item.getItemStack().getType().name()));
 
+            // Apply search filter if active
+            applySearchFilter();
+
             updateDisplayedItems();
+
+            plugin.getLogger().info("Loaded " + allItems.size() + " total items" +
+                    (isSearchActive ? ", filtered to " + filteredItems.size() + " results" : ""));
         } catch (Exception e) {
             plugin.getLogger().severe("Error loading terminal items: " + e.getMessage());
+        }
+    }
+
+    private void applySearchFilter() {
+        filteredItems.clear();
+
+        if (!isSearchActive || currentSearchTerm == null || currentSearchTerm.trim().isEmpty()) {
+            isSearchActive = false;
+            return;
+        }
+
+        String searchLower = currentSearchTerm.toLowerCase().trim();
+        plugin.getLogger().info("Applying search filter for term: '" + searchLower + "'");
+
+        // Create a list to hold items with their relevance scores
+        List<ScoredItem> scoredItems = new ArrayList<>();
+
+        for (StoredItem item : allItems) {
+            String itemName = item.getItemStack().getType().name().toLowerCase().replace("_", " ");
+            String displayName = "";
+
+            // Check display name if it exists
+            if (item.getItemStack().hasItemMeta() && item.getItemStack().getItemMeta().hasDisplayName()) {
+                displayName = ChatColor.stripColor(item.getItemStack().getItemMeta().getDisplayName()).toLowerCase();
+            }
+
+            // Calculate relevance score
+            int score = calculateRelevanceScore(itemName, displayName, searchLower);
+
+            if (score > 0) {
+                scoredItems.add(new ScoredItem(item, score));
+            }
+        }
+
+        // Sort by relevance score (higher score = more relevant = appears first)
+        scoredItems.sort((a, b) -> Integer.compare(b.score, a.score));
+
+        // Extract the sorted items
+        for (ScoredItem scoredItem : scoredItems) {
+            filteredItems.add(scoredItem.item);
+        }
+
+        plugin.getLogger().info("Search for '" + currentSearchTerm + "' found " + filteredItems.size() + " matching items out of " + allItems.size() + " total");
+    }
+
+    /**
+     * Calculate relevance score for search matching
+     * Higher score = more relevant
+     */
+    private int calculateRelevanceScore(String itemName, String displayName, String searchTerm) {
+        int score = 0;
+
+        // Exact match gets highest score
+        if (itemName.equals(searchTerm) || displayName.equals(searchTerm)) {
+            score += 1000;
+        }
+
+        // Starts with search term gets high score
+        if (itemName.startsWith(searchTerm) || displayName.startsWith(searchTerm)) {
+            score += 500;
+        }
+
+        // Contains search term gets medium score
+        if (itemName.contains(searchTerm) || displayName.contains(searchTerm)) {
+            score += 100;
+        }
+
+        // Word boundary matches get bonus points
+        String[] itemWords = itemName.split(" ");
+        String[] displayWords = displayName.split(" ");
+
+        for (String word : itemWords) {
+            if (word.startsWith(searchTerm)) {
+                score += 200;
+            } else if (word.contains(searchTerm)) {
+                score += 50;
+            }
+        }
+
+        for (String word : displayWords) {
+            if (word.startsWith(searchTerm)) {
+                score += 200;
+            } else if (word.contains(searchTerm)) {
+                score += 50;
+            }
+        }
+
+        // Bonus for shorter item names (more specific matches)
+        if (score > 0 && itemName.length() < 20) {
+            score += 25;
+        }
+
+        return score;
+    }
+
+    /**
+     * Helper class for scored search results
+     */
+    private static class ScoredItem {
+        final StoredItem item;
+        final int score;
+
+        ScoredItem(StoredItem item, int score) {
+            this.item = item;
+            this.score = score;
         }
     }
 
@@ -149,13 +323,16 @@ public class TerminalGUI implements Listener {
         }
         slotToStoredItem.clear();
 
+        // Use filtered items if search is active, otherwise use all items
+        List<StoredItem> displayItems = isSearchActive ? filteredItems : allItems;
+
         // Calculate start and end indices for current page
         int startIndex = currentPage * itemsPerPage;
-        int endIndex = Math.min(startIndex + itemsPerPage, allItems.size());
+        int endIndex = Math.min(startIndex + itemsPerPage, displayItems.size());
 
         // Display items for current page
         for (int i = startIndex; i < endIndex; i++) {
-            StoredItem storedItem = allItems.get(i);
+            StoredItem storedItem = displayItems.get(i);
             int slot = i - startIndex;
 
             ItemStack displayItem = createDisplayItem(storedItem);
@@ -163,8 +340,9 @@ public class TerminalGUI implements Listener {
             slotToStoredItem.put(slot, storedItem);
         }
 
-        // Update navigation
+        // Update navigation and search button
         updateNavigationItems();
+        updateSearchButton();
     }
 
     private ItemStack createDisplayItem(StoredItem storedItem) {
@@ -198,6 +376,80 @@ public class TerminalGUI implements Listener {
         return displayItem;
     }
 
+    /**
+     * Set search term and apply filter (used when loading saved search)
+     */
+    public void setSearch(String searchTerm) {
+        plugin.getLogger().info("setSearch called with term: '" + searchTerm + "'");
+
+        if (searchTerm == null || searchTerm.trim().isEmpty()) {
+            clearSearch();
+            return;
+        }
+
+        this.currentSearchTerm = searchTerm.trim();
+        this.isSearchActive = true;
+        this.currentPage = 0; // Reset to first page
+
+        plugin.getLogger().info("Setting search term '" + currentSearchTerm + "' for terminal, active: " + isSearchActive);
+
+        // Apply the filter
+        applySearchFilter();
+
+        // Update display
+        updateDisplayedItems();
+
+        plugin.getLogger().info("Search applied: " + filteredItems.size() + " results out of " + allItems.size() + " total items");
+    }
+
+    /**
+     * Get the current filtered item count (for result display)
+     */
+    public int getFilteredItemCount() {
+        return isSearchActive ? filteredItems.size() : allItems.size();
+    }
+
+    /**
+     * Start search mode - close GUI and prompt for search term
+     */
+    public void startSearch(Player player) {
+        plugin.getLogger().info("Starting search mode for player " + player.getName());
+
+        // Close the inventory
+        player.closeInventory();
+
+        // Send chat message prompt
+        player.sendMessage("");
+        player.sendMessage(ChatColor.GOLD + "=== MSS Terminal Search ===");
+        player.sendMessage(ChatColor.YELLOW + "Type your search term in chat within 10 seconds.");
+        player.sendMessage(ChatColor.GRAY + "Example: 'diamond' or 'diam' to find diamond items");
+        player.sendMessage(ChatColor.RED + "Type 'cancel' to cancel the search.");
+        player.sendMessage("");
+
+        // Register the player for search input
+        plugin.getGUIManager().registerSearchInput(player, this);
+    }
+
+    /**
+     * REMOVED: applySearch method - now handled by GUIManager
+     */
+
+    /**
+     * Clear search and show all items
+     */
+    public void clearSearch() {
+        this.currentSearchTerm = null;
+        this.isSearchActive = false;
+        this.currentPage = 0; // Reset to first page
+        this.filteredItems.clear();
+
+        // Also clear from GUI manager's saved state
+        plugin.getGUIManager().setTerminalSearchTerm(terminalLocation, null);
+
+        updateDisplayedItems();
+        plugin.getLogger().info("Search cleared, showing all items");
+    }
+
     public void open(Player player) {
         player.openInventory(inventory);
         // Register this instance as a listener
@@ -210,9 +462,21 @@ public class TerminalGUI implements Listener {
     public void refresh() {
         plugin.getLogger().info("Refreshing terminal at " + terminalLocation + " for network " + networkId);
         int itemCountBefore = allItems.size();
+
+        // Store current search state
+        String savedSearchTerm = currentSearchTerm;
+        boolean wasSearchActive = isSearchActive;
+
         loadItems();
+
+        // Restore search state after refresh
+        if (wasSearchActive && savedSearchTerm != null) {
+            setSearch(savedSearchTerm);
+        }
+
         int itemCountAfter = allItems.size();
-        plugin.getLogger().info("Terminal refresh complete: " + itemCountBefore + " -> " + itemCountAfter + " item types");
+        plugin.getLogger().info("Terminal refresh complete: " + itemCountBefore + " -> " + itemCountAfter + " item types" +
+                (wasSearchActive ? " (search preserved: '" + savedSearchTerm + "')" : ""));
     }
 
     @EventHandler
@@ -221,6 +485,23 @@ public class TerminalGUI implements Listener {
         if (!(event.getWhoClicked() instanceof Player player)) return;
 
         int slot = event.getRawSlot();
+
+        // Handle search button click
+        if (slot == 36) {
+            event.setCancelled(true);
+
+            if (event.getClick() == ClickType.RIGHT && isSearchActive) {
+                // Right-click: Clear search
+                clearSearch();
+                player.sendMessage(ChatColor.YELLOW + "Search cleared!");
+                return;
+            } else if (event.getClick() == ClickType.LEFT) {
+                // Left-click: Start new search
+                startSearch(player);
+                return;
+            }
+            return;
+        }
 
         // Handle shift-clicks from player inventory for item storage
         if ((event.getClick() == ClickType.SHIFT_LEFT || event.getClick() == ClickType.SHIFT_RIGHT) &&
@@ -638,5 +919,22 @@ public class TerminalGUI implements Listener {
         if (event.getPlayer() instanceof Player player) {
             plugin.getGUIManager().closeGUI(player);
         }
+    }
+
+    // Getters for search state (for GUI manager)
+    public boolean isSearchActive() {
+        return isSearchActive;
+    }
+
+    public String getCurrentSearchTerm() {
+        return currentSearchTerm;
+    }
+
+    public Location getTerminalLocation() {
+        return terminalLocation;
+    }
+
+    public String getNetworkId() {
+        return networkId;
     }
 }

@@ -1,10 +1,10 @@
-// Enhanced GUIManager with comprehensive network change handling
 
 package org.jamesphbennett.massstorageserver.gui;
 
 import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import org.bukkit.Location;
+import org.bukkit.scheduler.BukkitRunnable;
 import org.jamesphbennett.massstorageserver.MassStorageServer;
 
 import java.util.Map;
@@ -24,6 +24,14 @@ public class GUIManager {
 
     // Track when networks have been modified
     private final Set<String> modifiedNetworks = ConcurrentHashMap.newKeySet();
+
+    // Search input handling
+    private final Map<UUID, TerminalGUI> playersAwaitingSearchInput = new ConcurrentHashMap<>();
+    private final Map<UUID, BukkitRunnable> searchTimeoutTasks = new ConcurrentHashMap<>();
+    private static final int SEARCH_TIMEOUT_SECONDS = 10;
+
+    // Terminal-specific search state storage (per location)
+    private final Map<String, String> terminalSearchTerms = new ConcurrentHashMap<>();
 
     public GUIManager(MassStorageServer plugin) {
         this.plugin = plugin;
@@ -77,8 +85,32 @@ public class GUIManager {
     }
 
     /**
-     * Open an MSS Terminal GUI for a player
+     * Generate a unique key for a terminal location
      */
+    private String getTerminalKey(Location location) {
+        return location.getWorld().getName() + "_" + location.getBlockX() + "_" + location.getBlockY() + "_" + location.getBlockZ();
+    }
+
+    /**
+     * Get saved search term for a terminal location
+     */
+    public String getTerminalSearchTerm(Location terminalLocation) {
+        return terminalSearchTerms.get(getTerminalKey(terminalLocation));
+    }
+
+    /**
+     * Save search term for a terminal location
+     */
+    public void setTerminalSearchTerm(Location terminalLocation, String searchTerm) {
+        String key = getTerminalKey(terminalLocation);
+        if (searchTerm == null || searchTerm.trim().isEmpty()) {
+            terminalSearchTerms.remove(key);
+            plugin.getLogger().info("Cleared search term for terminal at " + key);
+        } else {
+            terminalSearchTerms.put(key, searchTerm.trim());
+            plugin.getLogger().info("Saved search term '" + searchTerm + "' for terminal at " + key);
+        }
+    }
     public void openTerminalGUI(Player player, Location terminalLocation, String networkId) {
         try {
             // Validate network is still valid
@@ -111,6 +143,104 @@ public class GUIManager {
     }
 
     /**
+     * Register a player for search input (when they click the search button)
+     */
+    public void registerSearchInput(Player player, TerminalGUI terminalGUI) {
+        UUID playerId = player.getUniqueId();
+
+        // Cancel any existing timeout task
+        BukkitRunnable existingTask = searchTimeoutTasks.remove(playerId);
+        if (existingTask != null) {
+            existingTask.cancel();
+        }
+
+        // Register for search input
+        playersAwaitingSearchInput.put(playerId, terminalGUI);
+
+        // Create timeout task
+        BukkitRunnable timeoutTask = new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (playersAwaitingSearchInput.remove(playerId) != null) {
+                    searchTimeoutTasks.remove(playerId);
+                    if (player.isOnline()) {
+                        player.sendMessage(ChatColor.RED + "Search timed out. Right-click the terminal to open it again.");
+                    }
+                }
+            }
+        };
+
+        // Schedule timeout task
+        timeoutTask.runTaskLater(plugin, SEARCH_TIMEOUT_SECONDS * 20L);
+        searchTimeoutTasks.put(playerId, timeoutTask);
+
+        plugin.getLogger().info("Registered player " + player.getName() + " for search input with " + SEARCH_TIMEOUT_SECONDS + "s timeout");
+    }
+
+    /**
+     * Handle chat input for search (call this from PlayerListener)
+     */
+    public boolean handleSearchInput(Player player, String message) {
+        UUID playerId = player.getUniqueId();
+        TerminalGUI terminalGUI = playersAwaitingSearchInput.remove(playerId);
+
+        if (terminalGUI == null) {
+            return false; // Player is not awaiting search input
+        }
+
+        // Cancel timeout task
+        BukkitRunnable timeoutTask = searchTimeoutTasks.remove(playerId);
+        if (timeoutTask != null) {
+            timeoutTask.cancel();
+        }
+
+        plugin.getLogger().info("Received search input from player " + player.getName() + ": '" + message + "'");
+
+        // Save search term to the specific terminal location
+        Location terminalLocation = terminalGUI.getTerminalLocation();
+
+        if (message.equalsIgnoreCase("cancel")) {
+            // Clear search for this terminal
+            setTerminalSearchTerm(terminalLocation, null);
+            player.sendMessage(ChatColor.RED + "Search cancelled. Right-click the terminal to open it again.");
+        } else if (message.trim().isEmpty()) {
+            // Clear search for this terminal
+            setTerminalSearchTerm(terminalLocation, null);
+            player.sendMessage(ChatColor.YELLOW + "Search cleared. Right-click the terminal to open it again.");
+        } else {
+            // Save search term for this terminal
+            setTerminalSearchTerm(terminalLocation, message.trim());
+            player.sendMessage(ChatColor.GREEN + "Search saved: '" + message.trim() + "'. Right-click the terminal to view results.");
+        }
+
+        // DO NOT auto-reopen the terminal - let the player manually reopen it
+
+        return true; // Chat message was handled and should be cancelled
+    }
+
+    /**
+     * Check if a player is awaiting search input
+     */
+    public boolean isAwaitingSearchInput(Player player) {
+        return playersAwaitingSearchInput.containsKey(player.getUniqueId());
+    }
+
+    /**
+     * Cancel search input for a player (if they disconnect or something)
+     */
+    public void cancelSearchInput(Player player) {
+        UUID playerId = player.getUniqueId();
+
+        if (playersAwaitingSearchInput.remove(playerId) != null) {
+            BukkitRunnable timeoutTask = searchTimeoutTasks.remove(playerId);
+            if (timeoutTask != null) {
+                timeoutTask.cancel();
+            }
+            plugin.getLogger().info("Cancelled search input for player " + player.getName());
+        }
+    }
+
+    /**
      * Close any open MSS GUI for a player
      */
     public void closeGUI(Player player) {
@@ -118,6 +248,9 @@ public class GUIManager {
         String networkId = playerGUINetworkId.remove(player.getUniqueId());
         playerGUILocation.remove(player.getUniqueId());
         playerGUIInstance.remove(player.getUniqueId());
+
+        // Also cancel any pending search input
+        cancelSearchInput(player);
 
         if (guiType != null) {
             plugin.getLogger().info("Closed " + guiType + " GUI for player " + player.getName() +
@@ -374,10 +507,18 @@ public class GUIManager {
             }
         }
 
+        // Cancel all search input tasks
+        for (BukkitRunnable task : searchTimeoutTasks.values()) {
+            task.cancel();
+        }
+
         playerCurrentGUI.clear();
         playerGUILocation.clear();
         playerGUINetworkId.clear();
         playerGUIInstance.clear();
         modifiedNetworks.clear();
+        playersAwaitingSearchInput.clear();
+        searchTimeoutTasks.clear();
+        terminalSearchTerms.clear();
     }
 }

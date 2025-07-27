@@ -214,6 +214,12 @@ public class BlockListener implements Listener {
         Block block = event.getClickedBlock();
         Player player = event.getPlayer();
 
+        // IMPORTANT: Check if player is awaiting search input and cancel interaction
+        if (plugin.getGUIManager().isAwaitingSearchInput(player)) {
+            // Player is in search mode, don't open any GUIs
+            return;
+        }
+
         // Handle MSS Terminal interactions (only custom ones)
         if (isCustomMSSTerminal(block)) {
             event.setCancelled(true);

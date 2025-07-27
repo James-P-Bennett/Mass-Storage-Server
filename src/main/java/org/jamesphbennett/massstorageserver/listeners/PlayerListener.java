@@ -4,8 +4,11 @@ import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.CraftItemEvent;
+import org.bukkit.event.player.AsyncPlayerChatEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.Recipe;
 import org.bukkit.inventory.ShapedRecipe;
@@ -22,6 +25,45 @@ public class PlayerListener implements Listener {
     public PlayerListener(MassStorageServer plugin) {
         this.plugin = plugin;
         this.itemManager = plugin.getItemManager();
+    }
+
+    /**
+     * Handle chat events for terminal search input
+     */
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onPlayerChat(AsyncPlayerChatEvent event) {
+        Player player = event.getPlayer();
+        String message = event.getMessage().trim();
+
+        // Check if player is awaiting search input
+        if (plugin.getGUIManager().isAwaitingSearchInput(player)) {
+            plugin.getLogger().info("Player " + player.getName() + " sent search input: '" + message + "'");
+
+            // Cancel the chat event so it doesn't appear in public chat
+            event.setCancelled(true);
+
+            // Handle the search input on the main thread
+            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                boolean handled = plugin.getGUIManager().handleSearchInput(player, message);
+                if (!handled) {
+                    player.sendMessage(ChatColor.RED + "Search input expired. Please try again.");
+                }
+            });
+        }
+    }
+
+    /**
+     * Clean up search input when player disconnects
+     */
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        Player player = event.getPlayer();
+
+        // Cancel any pending search input
+        plugin.getGUIManager().cancelSearchInput(player);
+
+        // Close any open GUIs
+        plugin.getGUIManager().closeGUI(player);
     }
 
     @EventHandler

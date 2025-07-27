@@ -74,8 +74,7 @@ public class ItemManager {
         meta.setDisplayName(ChatColor.AQUA + "Drive Bay");
 
         List<String> lore = new ArrayList<>();
-        int maxSlots = plugin.getConfigManager() != null ? plugin.getConfigManager().getMaxDriveBaySlots() : 7;
-        lore.add(ChatColor.GRAY + "Holds up to " + maxSlots + " storage disks");
+        lore.add(ChatColor.GRAY + "Holds up to 7 storage disks");
         lore.add(ChatColor.GRAY + "Must be connected to a Storage Server");
         meta.setLore(lore);
 
@@ -528,7 +527,7 @@ public class ItemManager {
      * Check if an item is allowed to be stored in the network
      */
     public boolean isItemAllowed(ItemStack item) {
-        // Block storage disks
+        // Block storage disks (hardcoded - always blocked)
         if (isStorageDisk(item)) {
             return false;
         }
@@ -553,8 +552,8 @@ public class ItemManager {
             }
         }
 
-        // Block bundles with contents
-        if (item.getType() == Material.BUNDLE) {
+        // Block ALL bundles with contents (including all colored variants)
+        if (item.getType().name().contains("BUNDLE")) {
             if (item.hasItemMeta() && item.getItemMeta() instanceof org.bukkit.inventory.meta.BundleMeta bundleMeta) {
                 // Allow empty bundles only
                 if (!bundleMeta.getItems().isEmpty()) {
@@ -563,10 +562,7 @@ public class ItemManager {
             }
         }
 
-        // Block other problematic container items (hardcoded for safety)
-        return switch (item.getType()) {
-            case CHEST, TRAPPED_CHEST, BARREL, HOPPER, DROPPER, DISPENSER, ENDER_CHEST -> false;
-            default -> true;
-        };
+        // All other items are allowed by default unless in config blacklist
+        return true;
     }
 }

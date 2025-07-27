@@ -14,12 +14,29 @@ storage:
   # Number of drive bay slots per drive bay
   drive_bay_slots: 7
 
+  # NOTE: All storage disks now have exactly 64 cells (hardcoded)
+  # NOTE: Items per cell are tier-specific (hardcoded):
+  #   1K Disk: 127 items per cell  (8,128 total capacity)
+  #   4K Disk: 508 items per cell  (32,512 total capacity)
+  #   16K Disk: 2,032 items per cell (130,048 total capacity)
+  #   64K Disk: 8,128 items per cell (520,192 total capacity)
 
 # Item blacklist - Items that cannot be stored in the network
-# Storage disks themselves are hardcoded. Empty shulker boxes and bundles are allowed, ones with contents are blocked.
-# Add additional items here using their Material names ex. "DIAMOND_SWORD" or "massstorageserver:storage_disk"
+# Storage disks are always blocked (hardcoded for safety)
+# Empty shulker boxes and bundles are allowed, ones with contents are blocked
+# Add any items you want to prevent from being stored using their Material names
+# Examples: "DIAMOND_SWORD", "NETHERITE_PICKAXE", "CHEST", "BARREL"
+# Full list of materials: https://hub.spigotmc.org/javadocs/bukkit/org/bukkit/Material.html
 blacklisted_items:
-  - "massstorageserver:storage_cell_1k"
+# Example: Uncomment the lines below to block these items
+# - "CHEST"
+# - "TRAPPED_CHEST"
+# - "BARREL"
+# - "HOPPER"
+# - "DISPENSER"
+# - "DROPPER"
+# - "ENDER_CHEST"
+# - "DIAMOND_SWORD"
 
 # Database settings
 database:
@@ -53,5 +70,5 @@ logging:
 
 # Debug settings
 debug:
-  enabled: true
-  verbose: true
+  enabled: false
+  verbose: false

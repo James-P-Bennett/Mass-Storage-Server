@@ -114,9 +114,9 @@ public class TerminalGUI implements Listener {
         infoLore.add(ChatColor.GRAY + "Total Items: " + totalItems);
 
         infoLore.add("");
-        infoLore.add(ChatColor.YELLOW + "Left Click: Take 64 to cursor");
-        infoLore.add(ChatColor.YELLOW + "Right Click: Take 32 to cursor");
-        infoLore.add(ChatColor.YELLOW + "Shift Click: Take 64 to inventory");
+        infoLore.add(ChatColor.YELLOW + "Left Click: Take full stack to cursor");
+        infoLore.add(ChatColor.YELLOW + "Right Click: Take half stack to cursor");
+        infoLore.add(ChatColor.YELLOW + "Shift Click: Take full stack to inventory");
         infoLore.add("");
         infoLore.add(ChatColor.AQUA + "Click with items on cursor to store them");
         infoMeta.setLore(infoLore);
@@ -171,12 +171,13 @@ public class TerminalGUI implements Listener {
         ItemStack displayItem = storedItem.getDisplayStack();
         ItemMeta meta = displayItem.getItemMeta();
 
-        // NEW BEHAVIOR: Display logic based on quantity
-        if (storedItem.getQuantity() > 64) {
-            // For items > 64, show as single item (no number)
+        // NEW BEHAVIOR: Display logic based on quantity and max stack size
+        int maxStackSize = displayItem.getMaxStackSize();
+        if (storedItem.getQuantity() > maxStackSize) {
+            // For items > max stack size, show as single item (no number)
             displayItem.setAmount(1);
         } else {
-            // For items ≤ 64, show actual stack size
+            // For items ≤ max stack size, show actual quantity
             displayItem.setAmount(storedItem.getQuantity());
         }
 
@@ -187,9 +188,9 @@ public class TerminalGUI implements Listener {
 
         // Add interaction hints with UPDATED click behavior
         lore.add("");
-        lore.add(ChatColor.GRAY + "Left Click: Take 64 to cursor");
-        lore.add(ChatColor.GRAY + "Right Click: Take 32 to cursor");
-        lore.add(ChatColor.GRAY + "Shift Click: Take 64 to inventory");
+        lore.add(ChatColor.GRAY + "Left Click: Take full stack to cursor");
+        lore.add(ChatColor.GRAY + "Right Click: Take half stack to cursor");
+        lore.add(ChatColor.GRAY + "Shift Click: Take full stack to inventory");
 
         meta.setLore(lore);
         displayItem.setItemMeta(meta);
@@ -284,6 +285,31 @@ public class TerminalGUI implements Listener {
         // Regular clicks in player inventory are allowed for manual item management
     }
 
+    /**
+     * Calculate how much space is available in player inventory for a specific item type
+     * WITHOUT modifying the inventory
+     */
+    private int calculateInventorySpace(Player player, ItemStack item) {
+        int totalSpace = 0;
+
+        // Check slots 0-35 (main inventory, excluding hotbar which is 0-8 but we want to include it)
+        for (int i = 0; i < 36; i++) {
+            ItemStack invItem = player.getInventory().getItem(i);
+
+            if (invItem == null || invItem.getType().isAir()) {
+                // Empty slot - can fit a full stack
+                totalSpace += item.getMaxStackSize();
+            } else if (invItem.isSimilar(item)) {
+                // Similar item - can add to existing stack
+                int canAdd = invItem.getMaxStackSize() - invItem.getAmount();
+                totalSpace += canAdd;
+            }
+            // Different items take up space but don't contribute to our item's space
+        }
+
+        return totalSpace;
+    }
+
     private void handleItemClick(InventoryClickEvent event, Player player, int slot) {
         event.setCancelled(true);
 
@@ -338,7 +364,7 @@ public class TerminalGUI implements Listener {
             }
         }
 
-        // PRIORITY 2: If no cursor items, handle retrieval with NEW BEHAVIOR
+        // PRIORITY 2: If no cursor items, handle retrieval with FIXED BEHAVIOR
         StoredItem storedItem = slotToStoredItem.get(slot);
         if (storedItem == null) {
             plugin.getLogger().info("No stored item found in slot " + slot);
@@ -349,21 +375,46 @@ public class TerminalGUI implements Listener {
         int amountToRetrieve = 0;
         boolean directToInventory = false;
 
+        // Get the max stack size for this item type
+        int maxStackSize = storedItem.getItemStack().getMaxStackSize();
+
         switch (clickType) {
             case LEFT:
-                // Take 64 items (or less if not available) to cursor
-                amountToRetrieve = Math.min(64, storedItem.getQuantity());
+                // Take up to max stack size (or less if not available) to cursor
+                amountToRetrieve = Math.min(maxStackSize, storedItem.getQuantity());
                 directToInventory = false;
                 break;
             case RIGHT:
-                // Take exactly 32 items (or max available up to 32) to cursor
-                amountToRetrieve = Math.min(32, storedItem.getQuantity());
+                // Take half of max stack size (or less if not available) to cursor
+                int halfStack = Math.max(1, maxStackSize / 2);
+                amountToRetrieve = Math.min(halfStack, storedItem.getQuantity());
                 directToInventory = false;
                 break;
             case SHIFT_LEFT:
-                // Take 64 items directly to inventory (like shift-clicking from chest)
-                amountToRetrieve = Math.min(64, storedItem.getQuantity());
+                // Take up to max stack size directly to inventory, but respect available quantity
+                amountToRetrieve = Math.min(maxStackSize, storedItem.getQuantity());
                 directToInventory = true;
+
+                // CRITICAL FIX: Check if player inventory has space BEFORE retrieving
+                if (amountToRetrieve > 0) {
+                    // Create a test item to check space requirements
+                    ItemStack testItem = storedItem.getItemStack().clone();
+                    testItem.setAmount(amountToRetrieve);
+
+                    // Calculate available space WITHOUT modifying inventory
+                    int spaceAvailable = calculateInventorySpace(player, testItem);
+
+                    // Adjust amount to what actually fits
+                    amountToRetrieve = Math.min(amountToRetrieve, spaceAvailable);
+
+                    if (amountToRetrieve <= 0) {
+                        player.sendMessage(ChatColor.RED + "Your inventory is full!");
+                        plugin.getLogger().info("Cancelled shift-click retrieval - player inventory full");
+                        return;
+                    } else if (amountToRetrieve < Math.min(maxStackSize, storedItem.getQuantity())) {
+                        player.sendMessage(ChatColor.YELLOW + "Only retrieving " + amountToRetrieve + " items due to inventory space");
+                    }
+                }
                 break;
             default:
                 plugin.getLogger().info("Unhandled click type: " + clickType);
@@ -372,6 +423,7 @@ public class TerminalGUI implements Listener {
 
         if (amountToRetrieve > 0) {
             plugin.getLogger().info("Retrieving " + amountToRetrieve + " items of type " + storedItem.getItemStack().getType() +
+                    " (available: " + storedItem.getQuantity() + ", max stack: " + maxStackSize + ")" +
                     (directToInventory ? " to inventory" : " to cursor"));
 
             try {
@@ -382,12 +434,31 @@ public class TerminalGUI implements Listener {
                     if (directToInventory) {
                         // Add directly to player inventory
                         HashMap<Integer, ItemStack> leftover = player.getInventory().addItem(retrievedItem);
+
                         if (!leftover.isEmpty()) {
-                            // Drop leftover items
-                            for (ItemStack item : leftover.values()) {
-                                player.getWorld().dropItemNaturally(player.getLocation(), item);
+                            // This should rarely happen since we pre-checked, but handle it
+                            plugin.getLogger().warning("Unexpected: " + leftover.size() + " items didn't fit after pre-check!");
+                            // Put the items back in storage
+                            try {
+                                List<ItemStack> putBack = new ArrayList<>();
+                                putBack.addAll(leftover.values());
+                                plugin.getStorageManager().storeItems(networkId, putBack);
+
+                                // Calculate what was actually added
+                                int actuallyAdded = retrievedItem.getAmount() - leftover.values().stream().mapToInt(ItemStack::getAmount).sum();
+                                if (actuallyAdded > 0) {
+                                    player.sendMessage(ChatColor.YELLOW + "Retrieved " + actuallyAdded + " items. " +
+                                            (retrievedItem.getAmount() - actuallyAdded) + " items returned to storage (inventory full)");
+                                } else {
+                                    player.sendMessage(ChatColor.RED + "Items returned to storage - inventory full");
+                                }
+                            } catch (Exception e) {
+                                // Last resort - drop the items
+                                for (ItemStack item : leftover.values()) {
+                                    player.getWorld().dropItemNaturally(player.getLocation(), item);
+                                }
+                                player.sendMessage(ChatColor.RED + "Critical error - some items were dropped!");
                             }
-                            player.sendMessage(ChatColor.YELLOW + "Some items were dropped due to full inventory!");
                         }
                     } else {
                         // Put on cursor

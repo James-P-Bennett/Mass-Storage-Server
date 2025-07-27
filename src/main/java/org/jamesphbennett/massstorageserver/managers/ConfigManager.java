@@ -84,17 +84,15 @@ public class ConfigManager {
 
         for (String itemName : blacklistedItemNames) {
             try {
-                // Skip MSS items as they're handled separately
-                if (itemName.startsWith("massstorageserver:")) {
-                    continue;
-                }
-
                 Material material = Material.valueOf(itemName.toUpperCase());
                 blacklistedItems.add(material);
+                plugin.getLogger().info("Blacklisted item: " + material.name());
             } catch (IllegalArgumentException e) {
                 plugin.getLogger().warning("Invalid material in blacklist: " + itemName);
             }
         }
+
+        plugin.getLogger().info("Loaded " + blacklistedItems.size() + " blacklisted items from config");
     }
 
     private void loadPermissionSettings() {

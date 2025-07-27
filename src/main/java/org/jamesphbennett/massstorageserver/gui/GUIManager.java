@@ -1,3 +1,4 @@
+// Enhanced GUIManager with comprehensive network change handling and search input
 
 package org.jamesphbennett.massstorageserver.gui;
 
@@ -32,6 +33,9 @@ public class GUIManager {
 
     // Terminal-specific search state storage (per location)
     private final Map<String, String> terminalSearchTerms = new ConcurrentHashMap<>();
+
+    // Terminal-specific sorting state storage (per location)
+    private final Map<String, Boolean> terminalQuantitySort = new ConcurrentHashMap<>();
 
     public GUIManager(MassStorageServer plugin) {
         this.plugin = plugin;
@@ -109,6 +113,27 @@ public class GUIManager {
         } else {
             terminalSearchTerms.put(key, searchTerm.trim());
             plugin.getLogger().info("Saved search term '" + searchTerm + "' for terminal at " + key);
+        }
+    }
+
+    /**
+     * Get saved quantity sort setting for a terminal location
+     */
+    public boolean getTerminalQuantitySort(Location terminalLocation) {
+        return terminalQuantitySort.getOrDefault(getTerminalKey(terminalLocation), false);
+    }
+
+    /**
+     * Save quantity sort setting for a terminal location
+     */
+    public void setTerminalQuantitySort(Location terminalLocation, boolean quantitySort) {
+        String key = getTerminalKey(terminalLocation);
+        if (quantitySort) {
+            terminalQuantitySort.put(key, true);
+            plugin.getLogger().info("Saved quantity sort setting for terminal at " + key);
+        } else {
+            terminalQuantitySort.remove(key);
+            plugin.getLogger().info("Cleared quantity sort setting for terminal at " + key + " (using default alphabetical)");
         }
     }
     public void openTerminalGUI(Player player, Location terminalLocation, String networkId) {
@@ -520,5 +545,6 @@ public class GUIManager {
         playersAwaitingSearchInput.clear();
         searchTimeoutTasks.clear();
         terminalSearchTerms.clear();
+        terminalQuantitySort.clear();
     }
 }

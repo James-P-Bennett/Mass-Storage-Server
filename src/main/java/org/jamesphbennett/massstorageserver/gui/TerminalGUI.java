@@ -38,6 +38,9 @@ public class TerminalGUI implements Listener {
     private String currentSearchTerm = null;
     private boolean isSearchActive = false;
 
+    // Sorting functionality
+    private boolean isQuantitySortActive = false; // false = alphabetical, true = quantity
+
     public TerminalGUI(MassStorageServer plugin, Location terminalLocation, String networkId) {
         this.plugin = plugin;
         this.terminalLocation = terminalLocation;
@@ -52,6 +55,12 @@ public class TerminalGUI implements Listener {
             this.currentSearchTerm = savedSearchTerm;
             this.isSearchActive = true;
             plugin.getLogger().info("Loaded saved search term '" + savedSearchTerm + "' for terminal at " + terminalLocation);
+        }
+
+        // Check for saved sorting preference for this terminal location
+        this.isQuantitySortActive = plugin.getGUIManager().getTerminalQuantitySort(terminalLocation);
+        if (isQuantitySortActive) {
+            plugin.getLogger().info("Loaded quantity sort preference for terminal at " + terminalLocation);
         }
 
         setupGUI();
@@ -86,6 +95,9 @@ public class TerminalGUI implements Listener {
 
         // Add search button
         updateSearchButton();
+
+        // Add sorting button
+        updateSortingButton();
     }
 
     private void updateSearchButton() {
@@ -120,6 +132,38 @@ public class TerminalGUI implements Listener {
 
         searchButton.setItemMeta(searchMeta);
         inventory.setItem(36, searchButton); // Bottom left corner
+    }
+
+    private void updateSortingButton() {
+        ItemStack sortButton = new ItemStack(Material.HOPPER);
+        ItemMeta sortMeta = sortButton.getItemMeta();
+
+        if (isQuantitySortActive) {
+            // Quantity sorting is active
+            sortMeta.setDisplayName(ChatColor.GOLD + "Sort: By Quantity");
+            List<String> sortLore = new ArrayList<>();
+            sortLore.add(ChatColor.GREEN + "Currently sorting by quantity!");
+            sortLore.add(ChatColor.GRAY + "Items with most quantity shown first");
+            sortLore.add("");
+            sortLore.add(ChatColor.YELLOW + "Click to switch to alphabetical sorting");
+            sortMeta.setLore(sortLore);
+
+            // Add glowing effect
+            sortMeta.addEnchant(Enchantment.UNBREAKING, 1, true);
+            sortMeta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+        } else {
+            // Alphabetical sorting is active (default)
+            sortMeta.setDisplayName(ChatColor.AQUA + "Sort: Alphabetical");
+            List<String> sortLore = new ArrayList<>();
+            sortLore.add(ChatColor.GRAY + "Currently sorting alphabetically");
+            sortLore.add(ChatColor.GRAY + "Items sorted A-Z by name");
+            sortLore.add("");
+            sortLore.add(ChatColor.YELLOW + "Click to switch to quantity sorting");
+            sortMeta.setLore(sortLore);
+        }
+
+        sortButton.setItemMeta(sortMeta);
+        inventory.setItem(37, sortButton); // Next to search button
     }
 
     private void updateNavigationItems() {
@@ -169,6 +213,7 @@ public class TerminalGUI implements Listener {
         }
 
         infoLore.add(ChatColor.GRAY + "Page: " + (currentPage + 1) + "/" + maxPages);
+        infoLore.add(ChatColor.GRAY + "Sort: " + (isQuantitySortActive ? "By Quantity" : "Alphabetical"));
 
         // Calculate total items stored
         List<StoredItem> displayItems = isSearchActive ? filteredItems : allItems;
@@ -196,8 +241,8 @@ public class TerminalGUI implements Listener {
             // Get all items from network storage
             allItems = plugin.getStorageManager().getNetworkItems(networkId);
 
-            // Sort alphabetically by item type name (will be re-sorted if search is active)
-            allItems.sort(Comparator.comparing(item -> item.getItemStack().getType().name()));
+            // Apply sorting based on current sort mode
+            applySorting();
 
             // Apply search filter if active
             applySearchFilter();
@@ -205,9 +250,32 @@ public class TerminalGUI implements Listener {
             updateDisplayedItems();
 
             plugin.getLogger().info("Loaded " + allItems.size() + " total items" +
-                    (isSearchActive ? ", filtered to " + filteredItems.size() + " results" : ""));
+                    (isSearchActive ? ", filtered to " + filteredItems.size() + " results" : "") +
+                    ", sorted by " + (isQuantitySortActive ? "quantity" : "alphabetical"));
         } catch (Exception e) {
             plugin.getLogger().severe("Error loading terminal items: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Apply sorting to the items list based on current sort mode
+     */
+    private void applySorting() {
+        if (isQuantitySortActive) {
+            // Sort by quantity (descending) - most items first
+            allItems.sort((a, b) -> {
+                int quantityCompare = Integer.compare(b.getQuantity(), a.getQuantity());
+                if (quantityCompare != 0) {
+                    return quantityCompare;
+                }
+                // If quantities are equal, fall back to alphabetical
+                return a.getItemStack().getType().name().compareTo(b.getItemStack().getType().name());
+            });
+            plugin.getLogger().info("Applied quantity sorting (most items first)");
+        } else {
+            // Sort alphabetically by item type name (default)
+            allItems.sort(Comparator.comparing(item -> item.getItemStack().getType().name()));
+            plugin.getLogger().info("Applied alphabetical sorting");
         }
     }
 
@@ -243,7 +311,21 @@ public class TerminalGUI implements Listener {
         }
 
         // Sort by relevance score (higher score = more relevant = appears first)
-        scoredItems.sort((a, b) -> Integer.compare(b.score, a.score));
+        scoredItems.sort((a, b) -> {
+            int scoreCompare = Integer.compare(b.score, a.score);
+            if (scoreCompare != 0) {
+                return scoreCompare;
+            }
+            // If scores are equal, use current sort mode as tiebreaker
+            if (isQuantitySortActive) {
+                int quantityCompare = Integer.compare(b.item.getQuantity(), a.item.getQuantity());
+                if (quantityCompare != 0) {
+                    return quantityCompare;
+                }
+            }
+            // Final fallback to alphabetical
+            return a.item.getItemStack().getType().name().compareTo(b.item.getItemStack().getType().name());
+        });
 
         // Extract the sorted items
         for (ScoredItem scoredItem : scoredItems) {
@@ -343,6 +425,7 @@ public class TerminalGUI implements Listener {
         // Update navigation and search button
         updateNavigationItems();
         updateSearchButton();
+        updateSortingButton();
     }
 
     private ItemStack createDisplayItem(StoredItem storedItem) {
@@ -377,8 +460,28 @@ public class TerminalGUI implements Listener {
     }
 
     /**
-     * Set search term and apply filter (used when loading saved search)
+     * Toggle sorting mode between alphabetical and quantity-based
      */
+    public void toggleSorting() {
+        isQuantitySortActive = !isQuantitySortActive;
+        this.currentPage = 0; // Reset to first page
+
+        // Save the sorting preference for this terminal
+        plugin.getGUIManager().setTerminalQuantitySort(terminalLocation, isQuantitySortActive);
+
+        plugin.getLogger().info("Toggled sorting to: " + (isQuantitySortActive ? "quantity" : "alphabetical"));
+
+        // Re-apply sorting to all items
+        applySorting();
+
+        // Re-apply search filter if active (this respects the new sorting)
+        if (isSearchActive) {
+            applySearchFilter();
+        }
+
+        // Update display
+        updateDisplayedItems();
+    }
     public void setSearch(String searchTerm) {
         plugin.getLogger().info("setSearch called with term: '" + searchTerm + "'");
 
@@ -463,9 +566,10 @@ public class TerminalGUI implements Listener {
         plugin.getLogger().info("Refreshing terminal at " + terminalLocation + " for network " + networkId);
         int itemCountBefore = allItems.size();
 
-        // Store current search state
+        // Store current search state and sorting mode
         String savedSearchTerm = currentSearchTerm;
         boolean wasSearchActive = isSearchActive;
+        boolean wasSortingByQuantity = isQuantitySortActive;
 
         loadItems();
 
@@ -474,9 +578,20 @@ public class TerminalGUI implements Listener {
             setSearch(savedSearchTerm);
         }
 
+        // Restore sorting mode
+        if (wasSortingByQuantity != isQuantitySortActive) {
+            isQuantitySortActive = wasSortingByQuantity;
+            applySorting();
+            if (isSearchActive) {
+                applySearchFilter();
+            }
+            updateDisplayedItems();
+        }
+
         int itemCountAfter = allItems.size();
         plugin.getLogger().info("Terminal refresh complete: " + itemCountBefore + " -> " + itemCountAfter + " item types" +
-                (wasSearchActive ? " (search preserved: '" + savedSearchTerm + "')" : ""));
+                (wasSearchActive ? " (search preserved: '" + savedSearchTerm + "')" : "") +
+                " (sorting: " + (isQuantitySortActive ? "quantity" : "alphabetical") + ")");
     }
 
     @EventHandler
@@ -500,6 +615,16 @@ public class TerminalGUI implements Listener {
                 startSearch(player);
                 return;
             }
+            return;
+        }
+
+        // Handle sorting button click
+        if (slot == 37) {
+            event.setCancelled(true);
+
+            toggleSorting();
+            String newMode = isQuantitySortActive ? "quantity (most items first)" : "alphabetical (A-Z)";
+            player.sendMessage(ChatColor.GREEN + "Sorting changed to: " + newMode);
             return;
         }
 
@@ -936,5 +1061,9 @@ public class TerminalGUI implements Listener {
 
     public String getNetworkId() {
         return networkId;
+    }
+
+    public boolean isQuantitySortActive() {
+        return isQuantitySortActive;
     }
 }

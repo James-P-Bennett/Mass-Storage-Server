@@ -82,17 +82,6 @@ public class TerminalGUI implements Listener {
         // Add navigation and info items
         updateNavigationItems();
 
-        // Add title item
-        ItemStack title = new ItemStack(Material.CRAFTER);
-        ItemMeta titleMeta = title.getItemMeta();
-        titleMeta.setDisplayName(ChatColor.GREEN + "MSS Terminal");
-        List<String> titleLore = new ArrayList<>();
-        titleLore.add(ChatColor.GRAY + "Access your stored items");
-        titleLore.add(ChatColor.GRAY + "Network: " + networkId);
-        titleMeta.setLore(titleLore);
-        title.setItemMeta(titleMeta);
-        inventory.setItem(40, title); // Bottom row center
-
         // Add search button
         updateSearchButton();
 
@@ -101,14 +90,13 @@ public class TerminalGUI implements Listener {
     }
 
     private void updateSearchButton() {
-        ItemStack searchButton = new ItemStack(Material.NAME_TAG);
+        ItemStack searchButton = new ItemStack(Material.SPYGLASS);
         ItemMeta searchMeta = searchButton.getItemMeta();
 
         if (isSearchActive && currentSearchTerm != null) {
             // Search is active - glowing button
             searchMeta.setDisplayName(ChatColor.GOLD + "Search: " + ChatColor.YELLOW + currentSearchTerm);
             List<String> searchLore = new ArrayList<>();
-            searchLore.add(ChatColor.GREEN + "Search is active!");
             searchLore.add(ChatColor.GRAY + "Showing items matching: " + ChatColor.WHITE + currentSearchTerm);
             searchLore.add(ChatColor.GRAY + "Results: " + filteredItems.size() + " item types");
             searchLore.add("");
@@ -121,31 +109,27 @@ public class TerminalGUI implements Listener {
             searchMeta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
         } else {
             // No search active - normal button
-            searchMeta.setDisplayName(ChatColor.AQUA + "Search Items");
+            searchMeta.setDisplayName(ChatColor.AQUA + "Search");
             List<String> searchLore = new ArrayList<>();
-            searchLore.add(ChatColor.GRAY + "Click to search for specific items");
-            searchLore.add(ChatColor.GRAY + "Type part of the item name");
             searchLore.add("");
-            searchLore.add(ChatColor.YELLOW + "Left-click to start search");
+            searchLore.add(ChatColor.YELLOW + "Left-click to open search");
             searchMeta.setLore(searchLore);
         }
 
         searchButton.setItemMeta(searchMeta);
-        inventory.setItem(36, searchButton); // Bottom left corner
+        inventory.setItem(48, searchButton); // Bottom left corner
     }
 
     private void updateSortingButton() {
-        ItemStack sortButton = new ItemStack(Material.HOPPER);
+        ItemStack sortButton = new ItemStack(Material.NAME_TAG);
         ItemMeta sortMeta = sortButton.getItemMeta();
 
         if (isQuantitySortActive) {
             // Quantity sorting is active
-            sortMeta.setDisplayName(ChatColor.GOLD + "Sort: By Quantity");
+            sortMeta.setDisplayName(ChatColor.GOLD + "Sorting: Quantity");
             List<String> sortLore = new ArrayList<>();
-            sortLore.add(ChatColor.GREEN + "Currently sorting by quantity!");
-            sortLore.add(ChatColor.GRAY + "Items with most quantity shown first");
             sortLore.add("");
-            sortLore.add(ChatColor.YELLOW + "Click to switch to alphabetical sorting");
+            sortLore.add(ChatColor.YELLOW + "Click to sort alphabetically.");
             sortMeta.setLore(sortLore);
 
             // Add glowing effect
@@ -153,21 +137,26 @@ public class TerminalGUI implements Listener {
             sortMeta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
         } else {
             // Alphabetical sorting is active (default)
-            sortMeta.setDisplayName(ChatColor.AQUA + "Sort: Alphabetical");
+            sortMeta.setDisplayName(ChatColor.AQUA + "Sorting: Alphabetically");
             List<String> sortLore = new ArrayList<>();
-            sortLore.add(ChatColor.GRAY + "Currently sorting alphabetically");
-            sortLore.add(ChatColor.GRAY + "Items sorted A-Z by name");
             sortLore.add("");
-            sortLore.add(ChatColor.YELLOW + "Click to switch to quantity sorting");
+            sortLore.add(ChatColor.YELLOW + "Click to sort by quantity");
             sortMeta.setLore(sortLore);
         }
 
         sortButton.setItemMeta(sortMeta);
-        inventory.setItem(37, sortButton); // Next to search button
+        inventory.setItem(50, sortButton); // Next to search button
     }
 
     private void updateNavigationItems() {
         int maxPages = getMaxPages();
+
+        // Ensure currentPage is within valid bounds
+        if (currentPage < 0) {
+            currentPage = 0;
+        } else if (currentPage >= maxPages) {
+            currentPage = Math.max(0, maxPages - 1);
+        }
 
         // Previous page button
         ItemStack prevPage = new ItemStack(Material.ARROW);
@@ -199,15 +188,18 @@ public class TerminalGUI implements Listener {
         nextPage.setItemMeta(nextMeta);
         inventory.setItem(53, nextPage);
 
-        // Info item
+        // Info item with better feedback
         ItemStack info = new ItemStack(Material.BOOK);
         ItemMeta infoMeta = info.getItemMeta();
         infoMeta.setDisplayName(ChatColor.AQUA + "Storage Info");
         List<String> infoLore = new ArrayList<>();
 
+        List<StoredItem> displayItems = isSearchActive ? filteredItems : allItems;
+
         if (isSearchActive) {
             infoLore.add(ChatColor.YELLOW + "Search Results: " + filteredItems.size() + " types");
             infoLore.add(ChatColor.GRAY + "Total Item Types: " + allItems.size());
+            infoLore.add(ChatColor.GOLD + "Search: '" + currentSearchTerm + "'");
         } else {
             infoLore.add(ChatColor.GRAY + "Total Item Types: " + allItems.size());
         }
@@ -215,17 +207,20 @@ public class TerminalGUI implements Listener {
         infoLore.add(ChatColor.GRAY + "Page: " + (currentPage + 1) + "/" + maxPages);
         infoLore.add(ChatColor.GRAY + "Sort: " + (isQuantitySortActive ? "By Quantity" : "Alphabetical"));
 
+        // Show items on current page
+        int startIndex = currentPage * itemsPerPage;
+        int endIndex = Math.min(startIndex + itemsPerPage, displayItems.size());
+        if (displayItems.size() > 0) {
+            infoLore.add(ChatColor.GRAY + "Showing: " + (startIndex + 1) + "-" + endIndex + " of " + displayItems.size());
+        }
+
         // Calculate total items stored
-        List<StoredItem> displayItems = isSearchActive ? filteredItems : allItems;
         long totalItems = displayItems.stream().mapToLong(StoredItem::getQuantity).sum();
-        infoLore.add(ChatColor.GRAY + (isSearchActive ? "Filtered" : "Total") + " Items: " + totalItems);
+        infoLore.add(ChatColor.GRAY + (isSearchActive ? "Filtered" : "Total") + " Items: " + String.format("%,d", totalItems));
 
         infoLore.add("");
-        infoLore.add(ChatColor.YELLOW + "Left Click: Take full stack to cursor");
-        infoLore.add(ChatColor.YELLOW + "Right Click: Take half stack to cursor");
-        infoLore.add(ChatColor.YELLOW + "Shift Click: Take full stack to inventory");
-        infoLore.add("");
-        infoLore.add(ChatColor.AQUA + "Click with items on cursor to store them");
+        infoLore.add(ChatColor.GRAY + "Click for more detailed info.");
+
         infoMeta.setLore(infoLore);
         info.setItemMeta(infoMeta);
         inventory.setItem(49, info);
@@ -233,7 +228,10 @@ public class TerminalGUI implements Listener {
 
     private int getMaxPages() {
         List<StoredItem> displayItems = isSearchActive ? filteredItems : allItems;
-        return Math.max(1, (int) Math.ceil((double) displayItems.size() / itemsPerPage));
+        if (displayItems.isEmpty()) {
+            return 1; // Always have at least 1 page, even if empty
+        }
+        return (int) Math.ceil((double) displayItems.size() / itemsPerPage);
     }
 
     private void loadItems() {
@@ -482,6 +480,7 @@ public class TerminalGUI implements Listener {
         // Update display
         updateDisplayedItems();
     }
+
     public void setSearch(String searchTerm) {
         plugin.getLogger().info("setSearch called with term: '" + searchTerm + "'");
 
@@ -524,18 +523,13 @@ public class TerminalGUI implements Listener {
         // Send chat message prompt
         player.sendMessage("");
         player.sendMessage(ChatColor.GOLD + "=== MSS Terminal Search ===");
-        player.sendMessage(ChatColor.YELLOW + "Type your search term in chat within 10 seconds.");
-        player.sendMessage(ChatColor.GRAY + "Example: 'diamond' or 'diam' to find diamond items");
+        player.sendMessage(ChatColor.YELLOW + "Enter your search term.");
         player.sendMessage(ChatColor.RED + "Type 'cancel' to cancel the search.");
         player.sendMessage("");
 
         // Register the player for search input
         plugin.getGUIManager().registerSearchInput(player, this);
     }
-
-    /**
-     * REMOVED: applySearch method - now handled by GUIManager
-     */
 
     /**
      * Clear search and show all items
@@ -601,8 +595,8 @@ public class TerminalGUI implements Listener {
 
         int slot = event.getRawSlot();
 
-        // Handle search button click
-        if (slot == 36) {
+        // Handle search button click (slot 48)
+        if (slot == 48) {
             event.setCancelled(true);
 
             if (event.getClick() == ClickType.RIGHT && isSearchActive) {
@@ -618,13 +612,20 @@ public class TerminalGUI implements Listener {
             return;
         }
 
-        // Handle sorting button click
-        if (slot == 37) {
+        // Handle sorting button click (slot 50)
+        if (slot == 50) {
             event.setCancelled(true);
 
             toggleSorting();
             String newMode = isQuantitySortActive ? "quantity (most items first)" : "alphabetical (A-Z)";
             player.sendMessage(ChatColor.GREEN + "Sorting changed to: " + newMode);
+            return;
+        }
+
+        // Handle navigation clicks (slots 45, 49, 53) - FIXED: This was missing!
+        if (slot == 45 || slot == 49 || slot == 53) {
+            event.setCancelled(true);
+            handleNavigationClick(event, player, slot);
             return;
         }
 
@@ -654,8 +655,8 @@ public class TerminalGUI implements Listener {
                     if (remainders.isEmpty()) {
                         // All items stored successfully
                         event.setCurrentItem(null);
-                        player.sendMessage(ChatColor.GREEN + "Stored " + itemToStore.getAmount() + " " +
-                                itemToStore.getType().name().toLowerCase().replace("_", " "));
+//                        player.sendMessage(ChatColor.GREEN + "Stored " + itemToStore.getAmount() + " " +
+//                                itemToStore.getType().name().toLowerCase().replace("_", " "));
 
                         // Refresh display immediately
                         refresh();
@@ -680,15 +681,36 @@ public class TerminalGUI implements Listener {
             return;
         }
 
-        if (slot < 36) {
-            // Clicking on item display area
+        // Handle clicks in the item display area (slots 0-35)
+        if (slot >= 0 && slot < 36) {
             handleItemClick(event, player, slot);
-        } else if (slot < 54) {
-            // Clicking on bottom navigation/control area
-            event.setCancelled(true);
-            handleNavigationClick(event, player, slot);
+            return;
         }
-        // Regular clicks in player inventory are allowed for manual item management
+
+        // Handle clicks in the bottom control area (slots 36-53) that aren't already handled
+        if (slot >= 36 && slot < 54) {
+            // Cancel all clicks in the control area that we haven't specifically handled
+            event.setCancelled(true);
+
+            // Provide feedback for unhandled control area clicks
+            if (slot >= 36 && slot < 45) {
+                // Background slots - do nothing silently
+                return;
+            } else if (slot >= 46 && slot < 48) {
+                // Background slots near navigation - do nothing silently
+                return;
+            } else if (slot == 51 || slot == 52) {
+                // Background slots - do nothing silently
+                return;
+            } else {
+                // Unknown control slot
+                plugin.getLogger().info("Unhandled click in control area slot: " + slot);
+            }
+            return;
+        }
+
+        // All other clicks (in player inventory) are allowed for manual item management
+        // Don't cancel these clicks
     }
 
     /**
@@ -741,8 +763,8 @@ public class TerminalGUI implements Listener {
                 if (remainders.isEmpty()) {
                     // All items stored successfully
                     event.setCursor(null);
-                    player.sendMessage(ChatColor.GREEN + "Stored " + cursorItem.getAmount() + " " +
-                            cursorItem.getType().name().toLowerCase().replace("_", " "));
+//                    player.sendMessage(ChatColor.GREEN + "Stored " + cursorItem.getAmount() + " " +
+//                            cursorItem.getType().name().toLowerCase().replace("_", " "));
                     plugin.getLogger().info("Successfully stored all cursor items");
                 } else {
                     // Some items couldn't be stored
@@ -874,8 +896,8 @@ public class TerminalGUI implements Listener {
                     // Refresh the display
                     refresh();
 
-                    player.sendMessage(ChatColor.GREEN + "Retrieved " + amountToRetrieve + " " +
-                            retrievedItem.getType().name().toLowerCase().replace("_", " "));
+//                    player.sendMessage(ChatColor.GREEN + "Retrieved " + amountToRetrieve + " " +
+//                            retrievedItem.getType().name().toLowerCase().replace("_", " "));
                     plugin.getLogger().info("Successfully retrieved " + amountToRetrieve + " items");
                 } else {
                     player.sendMessage(ChatColor.RED + "Could not retrieve items - they may have been taken by another player.");
@@ -890,25 +912,58 @@ public class TerminalGUI implements Listener {
     }
 
     private void handleNavigationClick(InventoryClickEvent event, Player player, int slot) {
+        plugin.getLogger().info("Navigation click detected in slot " + slot + " by player " + player.getName());
+
         switch (slot) {
             case 45: // Previous page
+                plugin.getLogger().info("Previous page clicked, current page: " + currentPage);
                 if (currentPage > 0) {
                     currentPage--;
                     updateDisplayedItems();
                     player.sendMessage(ChatColor.YELLOW + "Page " + (currentPage + 1) + "/" + getMaxPages());
+                    plugin.getLogger().info("Moved to page " + (currentPage + 1));
+                } else {
+                    player.sendMessage(ChatColor.RED + "Already on the first page!");
+                    plugin.getLogger().info("Already on first page");
                 }
                 break;
+
             case 53: // Next page
-                if (currentPage < getMaxPages() - 1) {
+                plugin.getLogger().info("Next page clicked, current page: " + currentPage);
+                int maxPages = getMaxPages();
+                if (currentPage < maxPages - 1) {
                     currentPage++;
                     updateDisplayedItems();
-                    player.sendMessage(ChatColor.YELLOW + "Page " + (currentPage + 1) + "/" + getMaxPages());
+                    player.sendMessage(ChatColor.YELLOW + "Page " + (currentPage + 1) + "/" + maxPages);
+                    plugin.getLogger().info("Moved to page " + (currentPage + 1));
+                } else {
+                    player.sendMessage(ChatColor.RED + "Already on the last page!");
+                    plugin.getLogger().info("Already on last page");
                 }
                 break;
-            case 40: // Title item
+
             case 49: // Info item
+                plugin.getLogger().info("Info item clicked");
+                // Calculate and show current page info
+                List<StoredItem> displayItems = isSearchActive ? filteredItems : allItems;
+                int totalItems = displayItems.size();
+                int startIndex = currentPage * itemsPerPage;
+                int endIndex = Math.min(startIndex + itemsPerPage, totalItems);
+
+                player.sendMessage(ChatColor.AQUA + "=== Storage Information ===");
+                player.sendMessage(ChatColor.GRAY + "Showing items " + (startIndex + 1) + "-" + endIndex + " of " + totalItems);
+                player.sendMessage(ChatColor.GRAY + "Page " + (currentPage + 1) + " of " + getMaxPages());
+
+                if (isSearchActive) {
+                    player.sendMessage(ChatColor.YELLOW + "Active search: '" + currentSearchTerm + "'");
+                }
+
+                String sortMode = isQuantitySortActive ? "By Quantity" : "Alphabetical";
+                player.sendMessage(ChatColor.GRAY + "Sort mode: " + sortMode);
+                break;
+
             default:
-                // Do nothing for other slots
+                plugin.getLogger().info("Unhandled navigation slot: " + slot);
                 break;
         }
     }
@@ -988,9 +1043,9 @@ public class TerminalGUI implements Listener {
                                     event.setCursor(null);
                                 }
 
-                                player.sendMessage(ChatColor.GREEN + "Stored " + totalDraggedAmount + " " +
-                                        draggedItem.getType().name().toLowerCase().replace("_", " "));
-                                plugin.getLogger().info("Successfully stored all " + totalDraggedAmount + " dragged items");
+//                                player.sendMessage(ChatColor.GREEN + "Stored " + totalDraggedAmount + " " +
+//                                        draggedItem.getType().name().toLowerCase().replace("_", " "));
+//                                plugin.getLogger().info("Successfully stored all " + totalDraggedAmount + " dragged items");
                             } else {
                                 // Partial storage
                                 ItemStack remainder = remainders.get(0);

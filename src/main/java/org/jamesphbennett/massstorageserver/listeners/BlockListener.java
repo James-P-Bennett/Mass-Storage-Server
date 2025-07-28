@@ -44,6 +44,12 @@ public class BlockListener implements Listener {
         Block block = event.getBlockPlaced();
         Location location = block.getLocation();
 
+        // Prevent storage disks from being placed as blocks
+        if (itemManager.isStorageDisk(item)) {
+            event.setCancelled(true);
+            return;
+        }
+
         // Check if it's one of our CUSTOM network blocks (not just vanilla blocks)
         if (!itemManager.isNetworkBlock(item)) {
             return;

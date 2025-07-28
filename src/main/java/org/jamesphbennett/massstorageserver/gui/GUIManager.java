@@ -189,7 +189,7 @@ public class GUIManager {
                 if (playersAwaitingSearchInput.remove(playerId) != null) {
                     searchTimeoutTasks.remove(playerId);
                     if (player.isOnline()) {
-                        player.sendMessage(ChatColor.RED + "Search timed out. Right-click the terminal to open it again.");
+                        player.sendMessage(ChatColor.RED + "Search timed out.");
                     }
                 }
             }
@@ -227,15 +227,15 @@ public class GUIManager {
         if (message.equalsIgnoreCase("cancel")) {
             // Clear search for this terminal
             setTerminalSearchTerm(terminalLocation, null);
-            player.sendMessage(ChatColor.RED + "Search cancelled. Right-click the terminal to open it again.");
+            player.sendMessage(ChatColor.RED + "Search cancelled.");
         } else if (message.trim().isEmpty()) {
             // Clear search for this terminal
             setTerminalSearchTerm(terminalLocation, null);
-            player.sendMessage(ChatColor.YELLOW + "Search cleared. Right-click the terminal to open it again.");
+            player.sendMessage(ChatColor.YELLOW + "Search cleared.");
         } else {
             // Save search term for this terminal
             setTerminalSearchTerm(terminalLocation, message.trim());
-            player.sendMessage(ChatColor.GREEN + "Search saved: '" + message.trim() + "'. Right-click the terminal to view results.");
+            player.sendMessage(ChatColor.GREEN + "Search saved: '" + message.trim() + "'.");
         }
 
         // DO NOT auto-reopen the terminal - let the player manually reopen it

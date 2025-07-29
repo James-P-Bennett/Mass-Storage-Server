@@ -141,6 +141,12 @@ public class GUIManager {
 
     public void openTerminalGUI(Player player, Location terminalLocation, String networkId) {
         try {
+            // QUICK FIX: Cancel any pending search input when opening a terminal
+            if (isAwaitingSearchInput(player)) {
+                cancelSearchInput(player);
+                plugin.getLogger().info("Cancelled pending search input for player " + player.getName() + " when opening terminal");
+            }
+
             // Validate network is still valid
             if (!isNetworkValid(networkId)) {
                 player.sendMessage(ChatColor.RED + "This terminal is no longer connected to a valid network.");

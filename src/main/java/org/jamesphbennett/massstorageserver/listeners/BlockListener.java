@@ -10,6 +10,8 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityExplodeEvent;
+import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.ItemStack;
 import org.jamesphbennett.massstorageserver.MassStorageServer;
@@ -21,7 +23,10 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 
 import static org.bukkit.ChatColor.*;
 
@@ -90,12 +95,20 @@ public class BlockListener implements Listener {
                         return;
                     }
 
-                    // Register the network
+                    // ENHANCED: Register the network with comprehensive drive bay restoration
                     networkManager.registerNetwork(network, player.getUniqueId());
+
+                    // ENHANCED: Check if any drive bay contents were restored
+                    boolean hasRestoredContent = checkForRestoredContent(network.getDriveBays());
 
                     player.sendMessage(GREEN + "Mass Storage Network formed successfully!");
                     player.sendMessage(GRAY + "Network ID: " + network.getNetworkId());
                     player.sendMessage(GRAY + "Network Size: " + network.getAllBlocks().size() + "/" + maxBlocks + " blocks");
+
+                    if (hasRestoredContent) {
+                        player.sendMessage(AQUA + "Restored drive bay contents from previous network!");
+                        player.sendMessage(YELLOW + "Check your terminals to see restored items.");
+                    }
                 } else {
                     // Check if this block connects to an existing network
                     for (Location adjacent : getAdjacentLocations(location)) {
@@ -115,9 +128,19 @@ public class BlockListener implements Listener {
                                     return;
                                 }
 
+                                // ENHANCED: Register the expanded network with restoration
                                 networkManager.registerNetwork(expandedNetwork, player.getUniqueId());
+
+                                // ENHANCED: Check if any drive bay contents were restored
+                                boolean hasRestoredContent = checkForRestoredContent(expandedNetwork.getDriveBays());
+
                                 player.sendMessage(GREEN + "Block added to existing network!");
                                 player.sendMessage(GRAY + "Network Size: " + expandedNetwork.getAllBlocks().size() + "/" + maxBlocks + " blocks");
+
+                                if (hasRestoredContent) {
+                                    player.sendMessage(AQUA + "Restored drive bay contents!");
+                                    player.sendMessage(YELLOW + "Check your terminals to see restored items.");
+                                }
                                 return;
                             }
                         }
@@ -151,10 +174,15 @@ public class BlockListener implements Listener {
         try {
             String networkId = networkManager.getNetworkId(location);
 
-            if (networkId != null) {
-                // If breaking a drive bay, drop all storage disks
-                if (isCustomDriveBay(block)) {
+            // ENHANCED: Always drop drive bay contents, whether part of network or not
+            if (isCustomDriveBay(block)) {
+                if (networkId != null) {
+                    // Drive bay is part of a network - use network-aware dropping
                     dropDriveBayContents(location, networkId);
+                } else {
+                    // Drive bay is not part of a network - check for orphaned/standalone contents
+                    plugin.getLogger().info("Drive bay at " + location + " is not part of a network, checking for standalone contents");
+                    dropDriveBayContentsWithoutNetwork(location);
                 }
             }
 
@@ -205,6 +233,278 @@ public class BlockListener implements Listener {
         } catch (Exception e) {
             player.sendMessage(RED + "Error handling block break: " + e.getMessage());
             plugin.getLogger().severe("Error handling block break: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Handle entity explosions (creepers, TNT, etc.) that destroy MSS blocks
+     */
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onEntityExplode(EntityExplodeEvent event) {
+        if (event.isCancelled()) return;
+
+        handleExplosion(event.blockList(), event.getLocation());
+    }
+
+    /**
+     * Handle block explosions (beds, respawn anchors, etc.) that destroy MSS blocks
+     */
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onBlockExplode(BlockExplodeEvent event) {
+        if (event.isCancelled()) return;
+
+        handleExplosion(event.blockList(), event.getBlock().getLocation());
+    }
+
+    /**
+     * Common explosion handling for both entity and block explosions
+     */
+    private void handleExplosion(List<Block> blockList, Location explosionLocation) {
+        List<Block> customBlocksToHandle = new ArrayList<>();
+        List<Location> driveBayLocations = new ArrayList<>();
+
+        // First pass: identify our custom blocks in the explosion
+        for (Block block : blockList) {
+            if (isCustomNetworkBlock(block)) {
+                customBlocksToHandle.add(block);
+
+                if (isCustomDriveBay(block)) {
+                    driveBayLocations.add(block.getLocation());
+                }
+            }
+        }
+
+        if (customBlocksToHandle.isEmpty()) {
+            return; // No MSS blocks affected
+        }
+
+        plugin.getLogger().info("Explosion at " + explosionLocation + " affecting " + customBlocksToHandle.size() +
+                " MSS blocks (" + driveBayLocations.size() + " drive bays)");
+
+        // Handle drive bay contents BEFORE blocks are destroyed
+        for (Location driveBayLoc : driveBayLocations) {
+            try {
+                // Find network ID for this drive bay (if any)
+                String networkId = findNetworkIdForLocation(driveBayLoc);
+                if (networkId == null) {
+                    // Try to find from drive bay slots table directly
+                    networkId = findDriveBayNetworkIdFromDatabase(driveBayLoc);
+                }
+
+                if (networkId != null) {
+                    plugin.getLogger().info("Dropping drive bay contents at " + driveBayLoc + " (network: " + networkId + ") due to explosion");
+                    dropDriveBayContents(driveBayLoc, networkId);
+                } else {
+                    plugin.getLogger().info("Drive bay at " + driveBayLoc + " has no network association, checking for orphaned contents");
+                    dropDriveBayContentsWithoutNetwork(driveBayLoc);
+                }
+            } catch (Exception e) {
+                plugin.getLogger().severe("Error handling drive bay explosion at " + driveBayLoc + ": " + e.getMessage());
+                e.printStackTrace();
+            }
+        }
+
+        // Remove custom block markers and drop custom items
+        Iterator<Block> iterator = blockList.iterator();
+        while (iterator.hasNext()) {
+            Block block = iterator.next();
+
+            if (isCustomNetworkBlock(block)) {
+                try {
+                    // Remove from explosion list so vanilla block isn't dropped
+                    iterator.remove();
+
+                    // Drop our custom item instead
+                    ItemStack customItem = getCustomItemForBlock(block);
+                    if (customItem != null) {
+                        block.getWorld().dropItemNaturally(block.getLocation(), customItem);
+                        plugin.getLogger().info("Dropped custom item for " + getBlockTypeFromBlock(block) + " at " + block.getLocation());
+                    }
+
+                    // Remove custom block marker
+                    removeCustomBlockMarker(block.getLocation());
+
+                } catch (Exception e) {
+                    plugin.getLogger().severe("Error handling custom block explosion: " + e.getMessage());
+                }
+            }
+        }
+
+        // Schedule network updates after explosion
+        if (!customBlocksToHandle.isEmpty()) {
+            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                updateNetworksAfterExplosion(customBlocksToHandle);
+            });
+        }
+    }
+
+    /**
+     * Find network ID for a location by checking adjacent blocks
+     */
+    private String findNetworkIdForLocation(Location location) {
+        try {
+            return networkManager.getNetworkId(location);
+        } catch (Exception e) {
+            plugin.getLogger().warning("Error finding network ID for location " + location + ": " + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Find network ID for a drive bay from the database
+     */
+    private String findDriveBayNetworkIdFromDatabase(Location location) {
+        try (Connection conn = plugin.getDatabaseManager().getConnection();
+             PreparedStatement stmt = conn.prepareStatement(
+                     "SELECT DISTINCT network_id FROM drive_bay_slots WHERE world_name = ? AND x = ? AND y = ? AND z = ? LIMIT 1")) {
+
+            stmt.setString(1, location.getWorld().getName());
+            stmt.setInt(2, location.getBlockX());
+            stmt.setInt(3, location.getBlockY());
+            stmt.setInt(4, location.getBlockZ());
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getString("network_id");
+                }
+            }
+        } catch (Exception e) {
+            plugin.getLogger().warning("Error finding drive bay network ID from database: " + e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Drop drive bay contents when network association is unknown
+     */
+    private void dropDriveBayContentsWithoutNetwork(Location location) {
+        try (Connection conn = plugin.getDatabaseManager().getConnection();
+             PreparedStatement stmt = conn.prepareStatement(
+                     "SELECT disk_id FROM drive_bay_slots WHERE world_name = ? AND x = ? AND y = ? AND z = ? AND disk_id IS NOT NULL")) {
+
+            stmt.setString(1, location.getWorld().getName());
+            stmt.setInt(2, location.getBlockX());
+            stmt.setInt(3, location.getBlockY());
+            stmt.setInt(4, location.getBlockZ());
+
+            List<String> diskIds = new ArrayList<>();
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    diskIds.add(rs.getString("disk_id"));
+                }
+            }
+
+            plugin.getLogger().info("Found " + diskIds.size() + " disks to drop from networkless drive bay");
+
+            // Drop each disk and remove from database
+            for (String diskId : diskIds) {
+                // Get disk info for recreation
+                try (PreparedStatement diskStmt = conn.prepareStatement(
+                        "SELECT crafter_uuid, crafter_name, used_cells, max_cells FROM storage_disks WHERE disk_id = ?")) {
+                    diskStmt.setString(1, diskId);
+
+                    try (ResultSet diskRs = diskStmt.executeQuery()) {
+                        if (diskRs.next()) {
+                            String crafterUUID = diskRs.getString("crafter_uuid");
+                            String crafterName = diskRs.getString("crafter_name");
+                            int usedCells = diskRs.getInt("used_cells");
+                            int maxCells = diskRs.getInt("max_cells");
+
+                            // Create disk item with correct ID
+                            ItemStack disk = itemManager.createStorageDiskWithId(diskId, crafterUUID, crafterName);
+                            disk = itemManager.updateStorageDiskLore(disk, usedCells, maxCells);
+
+                            // Drop the disk
+                            location.getWorld().dropItemNaturally(location, disk);
+                            plugin.getLogger().info("Dropped disk " + diskId + " with " + usedCells + "/" + maxCells + " cells used");
+                        }
+                    }
+                }
+
+                // Remove from drive bay slots
+                try (PreparedStatement deleteStmt = conn.prepareStatement(
+                        "DELETE FROM drive_bay_slots WHERE world_name = ? AND x = ? AND y = ? AND z = ? AND disk_id = ?")) {
+                    deleteStmt.setString(1, location.getWorld().getName());
+                    deleteStmt.setInt(2, location.getBlockX());
+                    deleteStmt.setInt(3, location.getBlockY());
+                    deleteStmt.setInt(4, location.getBlockZ());
+                    deleteStmt.setString(5, diskId);
+                    deleteStmt.executeUpdate();
+                }
+            }
+
+        } catch (Exception e) {
+            plugin.getLogger().severe("Error dropping networkless drive bay contents: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Update networks after explosion damage
+     */
+    private void updateNetworksAfterExplosion(List<Block> destroyedBlocks) {
+        Set<String> affectedNetworks = new HashSet<>();
+
+        // Find all networks that might be affected
+        for (Block block : destroyedBlocks) {
+            for (Location adjacent : getAdjacentLocations(block.getLocation())) {
+                if (isCustomNetworkBlock(adjacent.getBlock())) {
+                    try {
+                        String networkId = networkManager.getNetworkId(adjacent);
+                        if (networkId != null) {
+                            affectedNetworks.add(networkId);
+                        }
+                    } catch (Exception e) {
+                        plugin.getLogger().warning("Error checking network after explosion: " + e.getMessage());
+                    }
+                }
+            }
+        }
+
+        // Update each affected network
+        for (String networkId : affectedNetworks) {
+            try {
+                // Try to re-detect the network
+                boolean networkStillValid = false;
+
+                // Find a remaining block from this network to test from
+                try (Connection conn = plugin.getDatabaseManager().getConnection();
+                     PreparedStatement stmt = conn.prepareStatement(
+                             "SELECT world_name, x, y, z FROM network_blocks WHERE network_id = ? LIMIT 1")) {
+
+                    stmt.setString(1, networkId);
+                    try (ResultSet rs = stmt.executeQuery()) {
+                        if (rs.next()) {
+                            Location testLocation = new Location(
+                                    plugin.getServer().getWorld(rs.getString("world_name")),
+                                    rs.getInt("x"),
+                                    rs.getInt("y"),
+                                    rs.getInt("z")
+                            );
+
+                            if (isCustomNetworkBlock(testLocation.getBlock())) {
+                                NetworkInfo updatedNetwork = networkManager.detectNetwork(testLocation);
+                                if (updatedNetwork != null && updatedNetwork.isValid()) {
+                                    networkManager.registerNetwork(updatedNetwork, null); // No player for explosions
+                                    networkStillValid = true;
+                                    plugin.getLogger().info("Network " + networkId + " updated after explosion");
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    plugin.getLogger().warning("Error checking network validity after explosion: " + e.getMessage());
+                }
+
+                if (!networkStillValid) {
+                    // Network is destroyed, unregister it
+                    networkManager.unregisterNetwork(networkId);
+                    plugin.getLogger().info("Network " + networkId + " dissolved due to explosion");
+                }
+
+            } catch (Exception e) {
+                plugin.getLogger().severe("Error updating network " + networkId + " after explosion: " + e.getMessage());
+            }
         }
     }
 
@@ -303,6 +603,38 @@ public class BlockListener implements Listener {
             }
         }
 
+    }
+
+    /**
+     * Check if any drive bays at the given locations have restored content
+     */
+    private boolean checkForRestoredContent(Set<Location> driveBayLocations) {
+        try (Connection conn = plugin.getDatabaseManager().getConnection()) {
+            for (Location location : driveBayLocations) {
+                // Check if this drive bay has any disks with stored items
+                try (PreparedStatement stmt = conn.prepareStatement(
+                        "SELECT COUNT(*) FROM drive_bay_slots dbs " +
+                                "JOIN storage_disks sd ON dbs.disk_id = sd.disk_id " +
+                                "JOIN storage_items si ON sd.disk_id = si.disk_id " +
+                                "WHERE dbs.world_name = ? AND dbs.x = ? AND dbs.y = ? AND dbs.z = ? " +
+                                "AND dbs.disk_id IS NOT NULL")) {
+
+                    stmt.setString(1, location.getWorld().getName());
+                    stmt.setInt(2, location.getBlockX());
+                    stmt.setInt(3, location.getBlockY());
+                    stmt.setInt(4, location.getBlockZ());
+
+                    try (ResultSet rs = stmt.executeQuery()) {
+                        if (rs.next() && rs.getInt(1) > 0) {
+                            return true; // Found stored items in this drive bay
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            plugin.getLogger().warning("Error checking for restored content: " + e.getMessage());
+        }
+        return false;
     }
 
     // Helper methods to check if blocks are OUR custom blocks
@@ -430,6 +762,13 @@ public class BlockListener implements Listener {
         if (itemManager.isStorageServer(item)) return "STORAGE_SERVER";
         if (itemManager.isDriveBay(item)) return "DRIVE_BAY";
         if (itemManager.isMSSTerminal(item)) return "MSS_TERMINAL";
+        return "UNKNOWN";
+    }
+
+    private String getBlockTypeFromBlock(Block block) {
+        if (isCustomStorageServer(block)) return "STORAGE_SERVER";
+        if (isCustomDriveBay(block)) return "DRIVE_BAY";
+        if (isCustomMSSTerminal(block)) return "MSS_TERMINAL";
         return "UNKNOWN";
     }
 

@@ -595,11 +595,13 @@ public class DriveBayGUI implements Listener {
                     stmt.executeUpdate();
                 }
 
-                // STEP 5: Update disk's network association (only if network is valid and not standalone)
+                // STEP 5: ENHANCED - Update disk's network association with proper handling
                 boolean networkValid = isNetworkValid();
                 boolean isStandaloneNetwork = networkId.startsWith("standalone_");
+                boolean isOrphanedNetwork = networkId.startsWith("orphaned_");
 
-                if (networkValid && !isStandaloneNetwork) {
+                if (networkValid && !isStandaloneNetwork && !isOrphanedNetwork) {
+                    // Valid network - associate disk with it
                     try (PreparedStatement stmt = conn.prepareStatement(
                             "UPDATE storage_disks SET network_id = ? WHERE disk_id = ?")) {
                         stmt.setString(1, networkId);
@@ -609,24 +611,34 @@ public class DriveBayGUI implements Listener {
                         if (rowsUpdated == 0) {
                             throw new SQLException("Failed to update disk network association - disk not found");
                         }
+                        plugin.getLogger().info("Associated disk " + diskId + " with valid network " + networkId);
                     }
+                } else if (isOrphanedNetwork) {
+                    // Orphaned network - preserve existing network association or set to null
+                    String originalNetworkId = networkId.replace("orphaned_", "");
+                    plugin.getLogger().info("Disk " + diskId + " placed in orphaned network, preserving data for potential restoration");
+
+                    // Don't change the disk's network association - it might be restored later
                 } else {
-                    // Network is invalid or standalone, don't associate disk with it
-                    plugin.getLogger().info("Network " + networkId + " is invalid or standalone, not associating disk " + diskId + " with it");
+                    // Standalone or invalid network - don't associate disk with it
+                    plugin.getLogger().info("Network " + networkId + " is standalone/invalid, not associating disk " + diskId + " with it");
                 }
 
                 // STEP 6: Recalculate used_cells based on actual stored items
                 try (PreparedStatement stmt = conn.prepareStatement(
-                        "UPDATE storage_disks SET used_cells = (SELECT COUNT(*) FROM storage_items WHERE disk_id = ?) WHERE disk_id = ?")) {
+                        "UPDATE storage_disks SET used_cells = (SELECT COUNT(*) FROM storage_items WHERE disk_id = ?), updated_at = CURRENT_TIMESTAMP WHERE disk_id = ?")) {
                     stmt.setString(1, diskId);
                     stmt.setString(2, diskId);
                     stmt.executeUpdate();
                 }
             });
 
-            // CRITICAL FIX: Only refresh network terminals if network is valid
+            // STEP 7: ENHANCED - Refresh GUIs based on network validity
             if (isNetworkValid()) {
                 plugin.getGUIManager().refreshNetworkTerminals(networkId);
+                plugin.getLogger().info("Refreshed terminals for valid network " + networkId + " after disk placement");
+            } else {
+                plugin.getLogger().info("Network " + networkId + " is not valid, skipping terminal refresh");
             }
 
             player.sendMessage(ChatColor.GREEN + "Storage disk inserted successfully!");

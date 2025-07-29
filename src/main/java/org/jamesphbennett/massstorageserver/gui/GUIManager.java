@@ -65,15 +65,14 @@ public class GUIManager {
     }
 
     /**
-     * Open a Drive Bay GUI for a player
+     * Open a Drive Bay GUI for a player (UPDATED to allow standalone access)
      */
     public void openDriveBayGUI(Player player, Location driveBayLocation, String networkId) {
         try {
-            // Validate network is still valid
-            if (!isNetworkValid(networkId)) {
-                player.sendMessage(ChatColor.RED + "This drive bay is no longer connected to a valid network.");
-                return;
-            }
+            // UPDATED: Don't validate network - allow access to drive bays regardless of network status
+            // The drive bay GUI will show the network status and allow disk management
+            plugin.getLogger().info("Opening drive bay GUI for player " + player.getName() +
+                    " at " + driveBayLocation + " with network ID: " + networkId);
 
             DriveBayGUI gui = new DriveBayGUI(plugin, driveBayLocation, networkId);
             gui.open(player);
@@ -82,9 +81,12 @@ public class GUIManager {
             playerGUILocation.put(player.getUniqueId(), driveBayLocation);
             playerGUINetworkId.put(player.getUniqueId(), networkId);
             playerGUIInstance.put(player.getUniqueId(), gui);
+
+            plugin.getLogger().info("Successfully opened drive bay GUI for player " + player.getName());
         } catch (Exception e) {
             player.sendMessage("§cError opening Drive Bay GUI: " + e.getMessage());
             plugin.getLogger().severe("Error opening Drive Bay GUI: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
@@ -136,6 +138,7 @@ public class GUIManager {
             plugin.getLogger().info("Cleared quantity sort setting for terminal at " + key + " (using default alphabetical)");
         }
     }
+
     public void openTerminalGUI(Player player, Location terminalLocation, String networkId) {
         try {
             // Validate network is still valid
@@ -408,12 +411,12 @@ public class GUIManager {
     }
 
     /**
-     * Refresh all drive bay GUIs for a specific network (COMPREHENSIVE VERSION)
+     * Refresh all drive bay GUIs for a specific network (UPDATED for standalone support)
      */
     public void refreshNetworkDriveBays(String networkId) {
         plugin.getLogger().info("Starting comprehensive refresh of drive bays for network: " + networkId);
         int refreshCount = 0;
-        List<Player> playersToClose = new ArrayList<>();
+        List<Player> playersToNotify = new ArrayList<>();
 
         // Check if network is still valid
         boolean networkValid = isNetworkValid(networkId);
@@ -425,17 +428,16 @@ public class GUIManager {
                     String driveBayNetworkId = playerGUINetworkId.get(entry.getKey());
 
                     if (networkId.equals(driveBayNetworkId)) {
-                        if (!networkValid) {
-                            // Network is invalid, close the drive bay
-                            playersToClose.add(player);
-                            plugin.getLogger().info("Closing drive bay for player " + player.getName() + " - network invalid");
-                        } else {
-                            // Network is valid, refresh the drive bay
-                            Object guiInstance = playerGUIInstance.get(entry.getKey());
-                            if (guiInstance instanceof DriveBayGUI driveBayGUI) {
-                                driveBayGUI.refreshDiskDisplay();
-                                refreshCount++;
-                                plugin.getLogger().info("Refreshed drive bay for player " + player.getName() + " in network " + networkId);
+                        // UPDATED: Always refresh drive bay, don't close for invalid networks
+                        Object guiInstance = playerGUIInstance.get(entry.getKey());
+                        if (guiInstance instanceof DriveBayGUI driveBayGUI) {
+                            driveBayGUI.refreshDiskDisplay();
+                            refreshCount++;
+                            plugin.getLogger().info("Refreshed drive bay for player " + player.getName() + " in network " + networkId);
+
+                            // If network became invalid, notify the player but keep the GUI open
+                            if (!networkValid) {
+                                playersToNotify.add(player);
                             }
                         }
                     }
@@ -443,13 +445,13 @@ public class GUIManager {
             }
         }
 
-        // Close invalid drive bays
-        for (Player player : playersToClose) {
-            forceCloseGUI(player, "Network connection lost - please check your storage system.");
+        // Notify players about network status change but don't close GUIs
+        for (Player player : playersToNotify) {
+            player.sendMessage(ChatColor.YELLOW + "Network connection lost - you can still manage disks in this drive bay.");
         }
 
         plugin.getLogger().info("Refreshed " + refreshCount + " drive bays for network " + networkId +
-                (playersToClose.size() > 0 ? " (closed " + playersToClose.size() + " invalid drive bays)" : ""));
+                (playersToNotify.size() > 0 ? " (notified " + playersToNotify.size() + " players about network status)" : ""));
     }
 
     /**
@@ -459,33 +461,55 @@ public class GUIManager {
     public void handleNetworkInvalidated(String networkId) {
         plugin.getLogger().info("Handling network invalidation for: " + networkId);
 
-        List<Player> playersToClose = new ArrayList<>();
+        List<Player> terminalsToClose = new ArrayList<>();
+        List<Player> driveBaysToNotify = new ArrayList<>();
 
         // Find all players with GUIs open for this network
         for (Map.Entry<UUID, String> entry : playerGUINetworkId.entrySet()) {
             if (networkId.equals(entry.getValue())) {
                 Player player = plugin.getServer().getPlayer(entry.getKey());
                 if (player != null && player.isOnline()) {
-                    playersToClose.add(player);
+                    String guiType = playerCurrentGUI.get(entry.getKey());
+
+                    if ("TERMINAL".equals(guiType)) {
+                        // Close terminals for invalid networks
+                        terminalsToClose.add(player);
+                    } else if ("DRIVE_BAY".equals(guiType)) {
+                        // Keep drive bays open but notify about network status
+                        driveBaysToNotify.add(player);
+                    }
                 }
             }
         }
 
-        // Close all GUIs for this network
-        for (Player player : playersToClose) {
+        // Close terminal GUIs for this network
+        for (Player player : terminalsToClose) {
             forceCloseGUI(player, "Storage network dissolved - blocks have been disconnected.");
+        }
+
+        // Notify drive bay users but keep their GUIs open
+        for (Player player : driveBaysToNotify) {
+            player.sendMessage(ChatColor.YELLOW + "Storage network dissolved - you can still manage disks in this drive bay.");
+            // Refresh the drive bay to show updated network status
+            refreshPlayerDriveBay(player);
         }
 
         // Clear the modified flag for this network
         clearNetworkModified(networkId);
 
-        plugin.getLogger().info("Closed " + playersToClose.size() + " GUIs for invalidated network " + networkId);
+        plugin.getLogger().info("Closed " + terminalsToClose.size() + " terminal GUIs and notified " +
+                driveBaysToNotify.size() + " drive bay users for invalidated network " + networkId);
     }
 
     /**
-     * Check if a network is still valid
+     * Check if a network is still valid (UPDATED to handle standalone networks)
      */
     private boolean isNetworkValid(String networkId) {
+        // Standalone networks are never "valid" in the traditional sense, but shouldn't cause errors
+        if (networkId != null && (networkId.startsWith("standalone_") || networkId.startsWith("orphaned_"))) {
+            return false; // Standalone/orphaned networks are not valid networks, but they're allowed for drive bay access
+        }
+
         try {
             return plugin.getNetworkManager().isNetworkValid(networkId);
         } catch (Exception e) {
@@ -495,28 +519,31 @@ public class GUIManager {
     }
 
     /**
-     * Periodic validation of open GUIs (call this from a repeating task)
+     * Periodic validation of open GUIs (UPDATED for standalone support)
      */
     public void validateOpenGUIs() {
-        List<Player> playersToClose = new ArrayList<>();
+        List<Player> terminalsToClose = new ArrayList<>();
 
         for (Map.Entry<UUID, String> entry : playerGUINetworkId.entrySet()) {
             String networkId = entry.getValue();
             Player player = plugin.getServer().getPlayer(entry.getKey());
 
             if (player != null && player.isOnline()) {
-                if (!isNetworkValid(networkId)) {
-                    playersToClose.add(player);
+                String guiType = playerCurrentGUI.get(entry.getKey());
+
+                // Only validate terminals - drive bays can stay open regardless of network status
+                if ("TERMINAL".equals(guiType) && !isNetworkValid(networkId)) {
+                    terminalsToClose.add(player);
                 }
             }
         }
 
-        for (Player player : playersToClose) {
+        for (Player player : terminalsToClose) {
             forceCloseGUI(player, "Storage network is no longer valid.");
         }
 
-        if (!playersToClose.isEmpty()) {
-            plugin.getLogger().info("Validated and closed " + playersToClose.size() + " invalid GUIs");
+        if (!terminalsToClose.isEmpty()) {
+            plugin.getLogger().info("Validated and closed " + terminalsToClose.size() + " invalid terminal GUIs");
         }
     }
 

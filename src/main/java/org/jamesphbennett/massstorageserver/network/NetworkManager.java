@@ -110,7 +110,7 @@ public class NetworkManager {
     }
 
     /**
-     * Register a network in the database
+     * Register a network in the database (ENHANCED with comprehensive drive bay restoration)
      */
     public void registerNetwork(NetworkInfo network, UUID ownerUUID) throws SQLException {
         plugin.getDatabaseManager().executeTransaction(conn -> {
@@ -145,12 +145,8 @@ public class NetworkManager {
                 stmt.executeBatch();
             }
 
-            // Try to restore any orphaned drive bay contents
-            try {
-                restoreOrphanedDriveBays(network.getNetworkId(), network.getDriveBays());
-            } catch (Exception e) {
-                plugin.getLogger().warning("Error restoring orphaned drive bays: " + e.getMessage());
-            }
+            // COMPREHENSIVE DRIVE BAY RESTORATION
+            restoreAllDriveBayContents(conn, network.getNetworkId(), network.getDriveBays());
         });
     }
 
@@ -199,11 +195,207 @@ public class NetworkManager {
         plugin.getLogger().info("Unregistered network " + networkId + " and preserved drive bay contents");
     }
 
+    /**
+     * COMPREHENSIVE restoration of ALL drive bay contents when network is reconstructed
+     */
+    private void restoreAllDriveBayContents(Connection conn, String newNetworkId, Set<Location> driveBayLocations) throws SQLException {
+        int totalRestoredSlots = 0;
+        int totalRestoredDisks = 0;
+
+        plugin.getLogger().info("Starting comprehensive drive bay restoration for network " + newNetworkId +
+                " with " + driveBayLocations.size() + " drive bay locations");
+
+        for (Location location : driveBayLocations) {
+            plugin.getLogger().info("Checking drive bay at " + location + " for restoration");
+
+            // STEP 1: Restore orphaned drive bay slots at this location
+            int restoredSlots = restoreOrphanedDriveBaySlots(conn, newNetworkId, location);
+            totalRestoredSlots += restoredSlots;
+
+            // STEP 2: Find and restore disks that should be associated with this network
+            int restoredDisks = restoreNetworkDiskAssociations(conn, newNetworkId, location);
+            totalRestoredDisks += restoredDisks;
+
+            // STEP 3: Update disk cell counts for any restored disks
+            updateDiskCellCountsForLocation(conn, location);
+        }
+
+        if (totalRestoredSlots > 0 || totalRestoredDisks > 0) {
+            plugin.getLogger().info("Network " + newNetworkId + " restoration complete: " +
+                    totalRestoredSlots + " drive bay slots restored, " +
+                    totalRestoredDisks + " disk associations restored");
+
+            // Refresh all terminals and drive bays for this network
+            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                plugin.getGUIManager().refreshNetworkTerminals(newNetworkId);
+                plugin.getGUIManager().refreshNetworkDriveBays(newNetworkId);
+            });
+        } else {
+            plugin.getLogger().info("No drive bay contents needed restoration for network " + newNetworkId);
+        }
+    }
+
+    /**
+     * Restore orphaned drive bay slots at a specific location
+     */
+    private int restoreOrphanedDriveBaySlots(Connection conn, String newNetworkId, Location location) throws SQLException {
+        int restoredCount = 0;
+
+        // Find any orphaned or standalone drive bay slots at this location
+        try (PreparedStatement findStmt = conn.prepareStatement(
+                "SELECT network_id, slot_number, disk_id FROM drive_bay_slots " +
+                        "WHERE world_name = ? AND x = ? AND y = ? AND z = ? " +
+                        "AND (network_id LIKE 'orphaned_%' OR network_id LIKE 'standalone_%' OR network_id != ?)")) {
+
+            findStmt.setString(1, location.getWorld().getName());
+            findStmt.setInt(2, location.getBlockX());
+            findStmt.setInt(3, location.getBlockY());
+            findStmt.setInt(4, location.getBlockZ());
+            findStmt.setString(5, newNetworkId);
+
+            List<DriveSlotInfo> slotsToRestore = new ArrayList<>();
+            try (ResultSet rs = findStmt.executeQuery()) {
+                while (rs.next()) {
+                    String oldNetworkId = rs.getString("network_id");
+                    int slotNumber = rs.getInt("slot_number");
+                    String diskId = rs.getString("disk_id");
+                    slotsToRestore.add(new DriveSlotInfo(oldNetworkId, slotNumber, diskId));
+
+                    plugin.getLogger().info("Found drive bay slot to restore: slot " + slotNumber +
+                            " with disk " + diskId + " from network " + oldNetworkId);
+                }
+            }
+
+            // Restore each slot to the new network
+            for (DriveSlotInfo slotInfo : slotsToRestore) {
+                try (PreparedStatement updateStmt = conn.prepareStatement(
+                        "UPDATE drive_bay_slots SET network_id = ? " +
+                                "WHERE world_name = ? AND x = ? AND y = ? AND z = ? AND slot_number = ?")) {
+                    updateStmt.setString(1, newNetworkId);
+                    updateStmt.setString(2, location.getWorld().getName());
+                    updateStmt.setInt(3, location.getBlockX());
+                    updateStmt.setInt(4, location.getBlockY());
+                    updateStmt.setInt(5, location.getBlockZ());
+                    updateStmt.setInt(6, slotInfo.slotNumber);
+
+                    int updated = updateStmt.executeUpdate();
+                    if (updated > 0) {
+                        restoredCount++;
+                        plugin.getLogger().info("Restored drive bay slot " + slotInfo.slotNumber +
+                                " at " + location + " to network " + newNetworkId);
+                    }
+                }
+            }
+        }
+
+        return restoredCount;
+    }
+
+    /**
+     * Restore network associations for disks that are in drive bay slots at this location
+     */
+    private int restoreNetworkDiskAssociations(Connection conn, String newNetworkId, Location location) throws SQLException {
+        int restoredCount = 0;
+
+        // Find all disks in drive bay slots at this location and update their network association
+        try (PreparedStatement findDisksStmt = conn.prepareStatement(
+                "SELECT DISTINCT dbs.disk_id FROM drive_bay_slots dbs " +
+                        "JOIN storage_disks sd ON dbs.disk_id = sd.disk_id " +
+                        "WHERE dbs.world_name = ? AND dbs.x = ? AND dbs.y = ? AND dbs.z = ? " +
+                        "AND dbs.network_id = ? AND dbs.disk_id IS NOT NULL " +
+                        "AND (sd.network_id IS NULL OR sd.network_id != ?)")) {
+
+            findDisksStmt.setString(1, location.getWorld().getName());
+            findDisksStmt.setInt(2, location.getBlockX());
+            findDisksStmt.setInt(3, location.getBlockY());
+            findDisksStmt.setInt(4, location.getBlockZ());
+            findDisksStmt.setString(5, newNetworkId);
+            findDisksStmt.setString(6, newNetworkId);
+
+            List<String> disksToRestore = new ArrayList<>();
+            try (ResultSet rs = findDisksStmt.executeQuery()) {
+                while (rs.next()) {
+                    String diskId = rs.getString("disk_id");
+                    if (diskId != null) {
+                        disksToRestore.add(diskId);
+                    }
+                }
+            }
+
+            // Update network association for each disk
+            for (String diskId : disksToRestore) {
+                try (PreparedStatement updateDiskStmt = conn.prepareStatement(
+                        "UPDATE storage_disks SET network_id = ? WHERE disk_id = ?")) {
+                    updateDiskStmt.setString(1, newNetworkId);
+                    updateDiskStmt.setString(2, diskId);
+
+                    int updated = updateDiskStmt.executeUpdate();
+                    if (updated > 0) {
+                        restoredCount++;
+                        plugin.getLogger().info("Restored network association for disk " + diskId +
+                                " to network " + newNetworkId);
+                    }
+                }
+            }
+        }
+
+        return restoredCount;
+    }
+
+    /**
+     * Update disk cell counts for all disks at a specific drive bay location
+     */
+    private void updateDiskCellCountsForLocation(Connection conn, Location location) throws SQLException {
+        try (PreparedStatement stmt = conn.prepareStatement(
+                "SELECT DISTINCT dbs.disk_id FROM drive_bay_slots dbs " +
+                        "WHERE dbs.world_name = ? AND dbs.x = ? AND dbs.y = ? AND dbs.z = ? " +
+                        "AND dbs.disk_id IS NOT NULL")) {
+
+            stmt.setString(1, location.getWorld().getName());
+            stmt.setInt(2, location.getBlockX());
+            stmt.setInt(3, location.getBlockY());
+            stmt.setInt(4, location.getBlockZ());
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    String diskId = rs.getString("disk_id");
+                    if (diskId != null) {
+                        try (PreparedStatement updateStmt = conn.prepareStatement(
+                                "UPDATE storage_disks SET used_cells = (SELECT COUNT(*) FROM storage_items WHERE disk_id = ?), updated_at = CURRENT_TIMESTAMP WHERE disk_id = ?")) {
+                            updateStmt.setString(1, diskId);
+                            updateStmt.setString(2, diskId);
+                            updateStmt.executeUpdate();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Helper class to store drive slot information
+     */
+    private static class DriveSlotInfo {
+        final String oldNetworkId;
+        final int slotNumber;
+        final String diskId;
+
+        DriveSlotInfo(String oldNetworkId, int slotNumber, String diskId) {
+            this.oldNetworkId = oldNetworkId;
+            this.slotNumber = slotNumber;
+            this.diskId = diskId;
+        }
+    }
 
     /**
      * Check if a network exists and is valid
      */
     public boolean isNetworkValid(String networkId) throws SQLException {
+        // Handle special network IDs
+        if (networkId != null && (networkId.startsWith("standalone_") || networkId.startsWith("orphaned_"))) {
+            return false;
+        }
+
         try (Connection conn = plugin.getDatabaseManager().getConnection();
              PreparedStatement stmt = conn.prepareStatement(
                      "SELECT COUNT(*) FROM networks WHERE network_id = ?")) {
@@ -216,43 +408,12 @@ public class NetworkManager {
 
     /**
      * Restore orphaned drive bay slots when a network is reformed at the same location
+     * (DEPRECATED - now handled by comprehensive restoration)
      */
+    @Deprecated
     public void restoreOrphanedDriveBays(String newNetworkId, Set<Location> driveBayLocations) throws SQLException {
-        plugin.getDatabaseManager().executeTransaction(conn -> {
-            for (Location location : driveBayLocations) {
-                // Find any orphaned drive bay slots at this location
-                try (PreparedStatement findStmt = conn.prepareStatement(
-                        "SELECT network_id FROM drive_bay_slots WHERE world_name = ? AND x = ? AND y = ? AND z = ? AND network_id LIKE 'orphaned_%' LIMIT 1")) {
-
-                    findStmt.setString(1, location.getWorld().getName());
-                    findStmt.setInt(2, location.getBlockX());
-                    findStmt.setInt(3, location.getBlockY());
-                    findStmt.setInt(4, location.getBlockZ());
-
-                    try (ResultSet rs = findStmt.executeQuery()) {
-                        if (rs.next()) {
-                            String orphanedNetworkId = rs.getString("network_id");
-
-                            // Restore the drive bay slots to the new network
-                            try (PreparedStatement updateStmt = conn.prepareStatement(
-                                    "UPDATE drive_bay_slots SET network_id = ? WHERE world_name = ? AND x = ? AND y = ? AND z = ? AND network_id = ?")) {
-                                updateStmt.setString(1, newNetworkId);
-                                updateStmt.setString(2, location.getWorld().getName());
-                                updateStmt.setInt(3, location.getBlockX());
-                                updateStmt.setInt(4, location.getBlockY());
-                                updateStmt.setInt(5, location.getBlockZ());
-                                updateStmt.setString(6, orphanedNetworkId);
-
-                                int restored = updateStmt.executeUpdate();
-                                if (restored > 0) {
-                                    plugin.getLogger().info("Restored " + restored + " drive bay slots at " + location + " to network " + newNetworkId);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        });
+        // This method is now deprecated - the comprehensive restoration handles everything
+        plugin.getLogger().info("restoreOrphanedDriveBays called but comprehensive restoration is now used instead");
     }
 
     /**

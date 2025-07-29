@@ -274,12 +274,27 @@ public class BlockListener implements Listener {
             try {
                 String networkId = networkManager.getNetworkId(block.getLocation());
 
+                // UPDATED: Allow Drive Bay access even without a valid network
                 if (networkId == null) {
-                    player.sendMessage(RED + "This drive bay is not connected to a valid network.");
-                    return;
+                    // Try to find any network ID associated with this location in the database
+                    networkId = findDriveBayNetworkId(block.getLocation());
+
+                    if (networkId == null) {
+                        // Generate a temporary network ID for standalone drive bay access
+                        networkId = "standalone_" + block.getLocation().getWorld().getName() + "_" +
+                                block.getLocation().getBlockX() + "_" +
+                                block.getLocation().getBlockY() + "_" +
+                                block.getLocation().getBlockZ();
+
+                        player.sendMessage(YELLOW + "Opening standalone drive bay (not connected to a network).");
+                    } else {
+                        player.sendMessage(YELLOW + "Opening drive bay (network connection lost).");
+                    }
+                } else if (!networkManager.isNetworkValid(networkId)) {
+                    player.sendMessage(YELLOW + "Opening drive bay (network is no longer valid).");
                 }
 
-                // Open drive bay GUI
+                // Open drive bay GUI regardless of network validity
                 plugin.getGUIManager().openDriveBayGUI(player, block.getLocation(), networkId);
 
             } catch (Exception e) {
@@ -287,6 +302,7 @@ public class BlockListener implements Listener {
                 plugin.getLogger().severe("Error accessing drive bay: " + e.getMessage());
             }
         }
+
     }
 
     // Helper methods to check if blocks are OUR custom blocks
@@ -362,6 +378,52 @@ public class BlockListener implements Listener {
         } catch (Exception e) {
             plugin.getLogger().severe("Error removing custom block marker: " + e.getMessage());
         }
+    }
+
+    /**
+     * Helper method to find network ID associated with a drive bay location from database
+     */
+    private String findDriveBayNetworkId(Location location) {
+        try (Connection conn = plugin.getDatabaseManager().getConnection()) {
+
+            // First try to find an active network ID
+            try (PreparedStatement stmt = conn.prepareStatement(
+                    "SELECT DISTINCT network_id FROM drive_bay_slots WHERE world_name = ? AND x = ? AND y = ? AND z = ? AND network_id NOT LIKE 'orphaned_%' LIMIT 1")) {
+
+                stmt.setString(1, location.getWorld().getName());
+                stmt.setInt(2, location.getBlockX());
+                stmt.setInt(3, location.getBlockY());
+                stmt.setInt(4, location.getBlockZ());
+
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                        return rs.getString("network_id");
+                    }
+                }
+            }
+
+            // If no active network found, look for orphaned drive bay slots
+            try (PreparedStatement stmt = conn.prepareStatement(
+                    "SELECT DISTINCT network_id FROM drive_bay_slots WHERE world_name = ? AND x = ? AND y = ? AND z = ? AND network_id LIKE 'orphaned_%' LIMIT 1")) {
+
+                stmt.setString(1, location.getWorld().getName());
+                stmt.setInt(2, location.getBlockX());
+                stmt.setInt(3, location.getBlockY());
+                stmt.setInt(4, location.getBlockZ());
+
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                        String orphanedNetworkId = rs.getString("network_id");
+                        plugin.getLogger().info("Found orphaned drive bay slots with network ID: " + orphanedNetworkId);
+                        return orphanedNetworkId;
+                    }
+                }
+            }
+
+        } catch (Exception e) {
+            plugin.getLogger().warning("Error finding drive bay network ID: " + e.getMessage());
+        }
+        return null;
     }
 
     private String getBlockTypeFromItem(ItemStack item) {

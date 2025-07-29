@@ -65,16 +65,47 @@ public class DriveBayGUI implements Listener {
             inventory.setItem(slot, null);
         }
 
-        // Add title item
+        // Add title item with network status
+        updateTitleItem();
+    }
+
+    /**
+     * Update the title item to show network status
+     */
+    private void updateTitleItem() {
         ItemStack title = new ItemStack(Material.CHISELED_TUFF_BRICKS);
         ItemMeta titleMeta = title.getItemMeta();
         titleMeta.setDisplayName(ChatColor.AQUA + "Drive Bay");
+
         List<String> titleLore = new ArrayList<>();
         titleLore.add(ChatColor.GRAY + "Insert storage disks to expand capacity");
-        titleLore.add(ChatColor.GRAY + "Slots: " + maxSlots);
+
+        // Check network status
+        boolean networkValid = isNetworkValid();
+        if (networkValid) {
+            titleLore.add(ChatColor.GREEN + "Network Status: Connected");
+            titleLore.add(ChatColor.GRAY + "Slots: " + plugin.getConfigManager().getMaxDriveBaySlots());
+        } else {
+            titleLore.add(ChatColor.RED + "Network Status: Disconnected");
+            titleLore.add(ChatColor.YELLOW + "You can still manage disks");
+            titleLore.add(ChatColor.GRAY + "Slots: " + plugin.getConfigManager().getMaxDriveBaySlots());
+        }
+
         titleMeta.setLore(titleLore);
         title.setItemMeta(titleMeta);
         inventory.setItem(4, title); // Top center
+    }
+
+    /**
+     * Check if the network is still valid
+     */
+    private boolean isNetworkValid() {
+        try {
+            return plugin.getNetworkManager().isNetworkValid(networkId);
+        } catch (Exception e) {
+            plugin.getLogger().warning("Error checking network validity: " + e.getMessage());
+            return false;
+        }
     }
 
     private int[] getDriveSlots(int maxSlots) {
@@ -85,14 +116,18 @@ public class DriveBayGUI implements Listener {
     }
 
     private void loadDrives() {
-        try (Connection conn = plugin.getDatabaseManager().getConnection();
-             PreparedStatement stmt = conn.prepareStatement(
-                     "SELECT slot_number, disk_id FROM drive_bay_slots WHERE world_name = ? AND x = ? AND y = ? AND z = ? ORDER BY slot_number")) {
+        try (Connection conn = plugin.getDatabaseManager().getConnection()) {
+
+            // First try to load drives using the exact network ID and location
+            PreparedStatement stmt = conn.prepareStatement(
+                    "SELECT slot_number, disk_id FROM drive_bay_slots WHERE world_name = ? AND x = ? AND y = ? AND z = ? ORDER BY slot_number");
 
             stmt.setString(1, driveBayLocation.getWorld().getName());
             stmt.setInt(2, driveBayLocation.getBlockX());
             stmt.setInt(3, driveBayLocation.getBlockY());
             stmt.setInt(4, driveBayLocation.getBlockZ());
+
+            boolean foundAnyDisks = false;
 
             try (ResultSet rs = stmt.executeQuery()) {
                 while (rs.next()) {
@@ -106,13 +141,60 @@ public class DriveBayGUI implements Listener {
                             int[] driveSlots = getDriveSlots(plugin.getConfigManager().getMaxDriveBaySlots());
                             if (slotNumber < driveSlots.length) {
                                 inventory.setItem(driveSlots[slotNumber], disk);
+                                foundAnyDisks = true;
                             }
                         }
                     }
                 }
             }
+
+            // If no disks found and this is a standalone network ID,
+            // try to find any drive bay slots at this location regardless of network ID
+            if (!foundAnyDisks && networkId.startsWith("standalone_")) {
+                plugin.getLogger().info("No disks found for standalone network, searching by location only");
+
+                PreparedStatement anyNetworkStmt = conn.prepareStatement(
+                        "SELECT slot_number, disk_id, network_id FROM drive_bay_slots WHERE world_name = ? AND x = ? AND y = ? AND z = ? ORDER BY slot_number");
+
+                anyNetworkStmt.setString(1, driveBayLocation.getWorld().getName());
+                anyNetworkStmt.setInt(2, driveBayLocation.getBlockX());
+                anyNetworkStmt.setInt(3, driveBayLocation.getBlockY());
+                anyNetworkStmt.setInt(4, driveBayLocation.getBlockZ());
+
+                try (ResultSet rs = anyNetworkStmt.executeQuery()) {
+                    while (rs.next()) {
+                        int slotNumber = rs.getInt("slot_number");
+                        String diskId = rs.getString("disk_id");
+                        String originalNetworkId = rs.getString("network_id");
+
+                        if (diskId != null) {
+                            plugin.getLogger().info("Found disk " + diskId + " in slot " + slotNumber + " from network " + originalNetworkId);
+
+                            // Load the storage disk item with current stats
+                            ItemStack disk = loadStorageDiskWithCurrentStats(diskId);
+                            if (disk != null) {
+                                int[] driveSlots = getDriveSlots(plugin.getConfigManager().getMaxDriveBaySlots());
+                                if (slotNumber < driveSlots.length) {
+                                    inventory.setItem(driveSlots[slotNumber], disk);
+                                    foundAnyDisks = true;
+                                }
+                            }
+                        }
+                    }
+                }
+                anyNetworkStmt.close();
+            }
+
+            if (foundAnyDisks) {
+                plugin.getLogger().info("Loaded drives for drive bay at " + driveBayLocation + " (network: " + networkId + ")");
+            } else {
+                plugin.getLogger().info("No drives found for drive bay at " + driveBayLocation + " (network: " + networkId + ")");
+            }
+
+            stmt.close();
         } catch (Exception e) {
             plugin.getLogger().severe("Error loading drives: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
@@ -274,6 +356,7 @@ public class DriveBayGUI implements Listener {
                                 // Refresh the GUI to show the placed disk
                                 plugin.getServer().getScheduler().runTask(plugin, () -> {
                                     loadDrives();
+                                    updateTitleItem(); // Update network status
                                 });
                             }
                             return;
@@ -321,6 +404,7 @@ public class DriveBayGUI implements Listener {
                             // Refresh GUI to show the disk removal
                             plugin.getServer().getScheduler().runTask(plugin, () -> {
                                 loadDrives();
+                                updateTitleItem(); // Update network status
                             });
                         }
                     }
@@ -370,6 +454,7 @@ public class DriveBayGUI implements Listener {
                         event.setCursor(null);
                         plugin.getServer().getScheduler().runTask(plugin, () -> {
                             loadDrives();
+                            updateTitleItem(); // Update network status
                         });
                     } else {
                         // Database failed - don't update GUI, disk stays on cursor
@@ -383,6 +468,7 @@ public class DriveBayGUI implements Listener {
                             // Refresh GUI to show the swapped disk
                             plugin.getServer().getScheduler().runTask(plugin, () -> {
                                 loadDrives();
+                                updateTitleItem(); // Update network status
                             });
                         }
                     }
@@ -410,6 +496,7 @@ public class DriveBayGUI implements Listener {
                         // Refresh GUI to show the removed disk
                         plugin.getServer().getScheduler().runTask(plugin, () -> {
                             loadDrives();
+                            updateTitleItem(); // Update network status
                         });
                     }
                 }
@@ -508,16 +595,24 @@ public class DriveBayGUI implements Listener {
                     stmt.executeUpdate();
                 }
 
-                // STEP 5: Update disk's network association
-                try (PreparedStatement stmt = conn.prepareStatement(
-                        "UPDATE storage_disks SET network_id = ? WHERE disk_id = ?")) {
-                    stmt.setString(1, networkId);
-                    stmt.setString(2, diskId);
-                    int rowsUpdated = stmt.executeUpdate();
+                // STEP 5: Update disk's network association (only if network is valid and not standalone)
+                boolean networkValid = isNetworkValid();
+                boolean isStandaloneNetwork = networkId.startsWith("standalone_");
 
-                    if (rowsUpdated == 0) {
-                        throw new SQLException("Failed to update disk network association - disk not found");
+                if (networkValid && !isStandaloneNetwork) {
+                    try (PreparedStatement stmt = conn.prepareStatement(
+                            "UPDATE storage_disks SET network_id = ? WHERE disk_id = ?")) {
+                        stmt.setString(1, networkId);
+                        stmt.setString(2, diskId);
+                        int rowsUpdated = stmt.executeUpdate();
+
+                        if (rowsUpdated == 0) {
+                            throw new SQLException("Failed to update disk network association - disk not found");
+                        }
                     }
+                } else {
+                    // Network is invalid or standalone, don't associate disk with it
+                    plugin.getLogger().info("Network " + networkId + " is invalid or standalone, not associating disk " + diskId + " with it");
                 }
 
                 // STEP 6: Recalculate used_cells based on actual stored items
@@ -529,8 +624,10 @@ public class DriveBayGUI implements Listener {
                 }
             });
 
-            // CRITICAL FIX: Refresh all terminals in this network after disk insertion
-            plugin.getGUIManager().refreshNetworkTerminals(networkId);
+            // CRITICAL FIX: Only refresh network terminals if network is valid
+            if (isNetworkValid()) {
+                plugin.getGUIManager().refreshNetworkTerminals(networkId);
+            }
 
             player.sendMessage(ChatColor.GREEN + "Storage disk inserted successfully!");
             plugin.getLogger().info("Successfully placed disk " + diskId + " in slot " + slotIndex);
@@ -578,8 +675,10 @@ public class DriveBayGUI implements Listener {
                 // The disk keeps its data and network association for when it's re-inserted
             });
 
-            // CRITICAL FIX: Refresh all terminals in this network after disk removal
-            plugin.getGUIManager().refreshNetworkTerminals(networkId);
+            // CRITICAL FIX: Only refresh network terminals if network is valid
+            if (isNetworkValid()) {
+                plugin.getGUIManager().refreshNetworkTerminals(networkId);
+            }
 
             player.sendMessage(ChatColor.YELLOW + "Storage disk removed successfully!");
             return true;
@@ -594,7 +693,7 @@ public class DriveBayGUI implements Listener {
         // Remove old disk first, then place new disk
         if (removeDiskFromSlot(player, slotIndex)) {
             boolean success = placeDiskInSlot(player, slotIndex, newDisk);
-            // Note: Both removeDiskFromSlot and placeDiskInSlot already call refreshNetworkTerminals
+            // Note: Both removeDiskFromSlot and placeDiskInSlot already call refreshNetworkTerminals if network is valid
             // so terminals will be refreshed twice, but this ensures consistency
             return success;
         }
@@ -654,5 +753,6 @@ public class DriveBayGUI implements Listener {
      */
     public void refreshDiskDisplay() {
         loadDrives();
+        updateTitleItem(); // Update network status
     }
 }

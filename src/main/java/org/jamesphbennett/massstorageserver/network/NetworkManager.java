@@ -144,11 +144,18 @@ public class NetworkManager {
                 }
                 stmt.executeBatch();
             }
+
+            // Try to restore any orphaned drive bay contents
+            try {
+                restoreOrphanedDriveBays(network.getNetworkId(), network.getDriveBays());
+            } catch (Exception e) {
+                plugin.getLogger().warning("Error restoring orphaned drive bays: " + e.getMessage());
+            }
         });
     }
 
     /**
-     * Remove a network from the database (ENHANCED with GUI handling)
+     * Remove a network from the database (ENHANCED with drive bay preservation)
      */
     public void unregisterNetwork(String networkId) throws SQLException {
         plugin.getDatabaseManager().executeTransaction(conn -> {
@@ -159,14 +166,16 @@ public class NetworkManager {
                 stmt.executeUpdate();
             }
 
-            // Delete drive bay slots
+            // UPDATED: Don't delete drive bay slots - preserve them for recovery
+            // Instead, mark them as orphaned by setting network_id to a special value
             try (PreparedStatement stmt = conn.prepareStatement(
-                    "DELETE FROM drive_bay_slots WHERE network_id = ?")) {
-                stmt.setString(1, networkId);
+                    "UPDATE drive_bay_slots SET network_id = ? WHERE network_id = ?")) {
+                stmt.setString(1, "orphaned_" + networkId);
+                stmt.setString(2, networkId);
                 stmt.executeUpdate();
             }
 
-            // Update storage disks to remove network association
+            // Update storage disks to remove network association but keep disk data
             try (PreparedStatement stmt = conn.prepareStatement(
                     "UPDATE storage_disks SET network_id = NULL WHERE network_id = ?")) {
                 stmt.setString(1, networkId);
@@ -187,8 +196,9 @@ public class NetworkManager {
         // Remove network lock
         networkLocks.remove(networkId);
 
-        plugin.getLogger().info("Unregistered network " + networkId + " and closed associated GUIs");
+        plugin.getLogger().info("Unregistered network " + networkId + " and preserved drive bay contents");
     }
+
 
     /**
      * Check if a network exists and is valid
@@ -202,6 +212,47 @@ public class NetworkManager {
                 return rs.next() && rs.getInt(1) > 0;
             }
         }
+    }
+
+    /**
+     * Restore orphaned drive bay slots when a network is reformed at the same location
+     */
+    public void restoreOrphanedDriveBays(String newNetworkId, Set<Location> driveBayLocations) throws SQLException {
+        plugin.getDatabaseManager().executeTransaction(conn -> {
+            for (Location location : driveBayLocations) {
+                // Find any orphaned drive bay slots at this location
+                try (PreparedStatement findStmt = conn.prepareStatement(
+                        "SELECT network_id FROM drive_bay_slots WHERE world_name = ? AND x = ? AND y = ? AND z = ? AND network_id LIKE 'orphaned_%' LIMIT 1")) {
+
+                    findStmt.setString(1, location.getWorld().getName());
+                    findStmt.setInt(2, location.getBlockX());
+                    findStmt.setInt(3, location.getBlockY());
+                    findStmt.setInt(4, location.getBlockZ());
+
+                    try (ResultSet rs = findStmt.executeQuery()) {
+                        if (rs.next()) {
+                            String orphanedNetworkId = rs.getString("network_id");
+
+                            // Restore the drive bay slots to the new network
+                            try (PreparedStatement updateStmt = conn.prepareStatement(
+                                    "UPDATE drive_bay_slots SET network_id = ? WHERE world_name = ? AND x = ? AND y = ? AND z = ? AND network_id = ?")) {
+                                updateStmt.setString(1, newNetworkId);
+                                updateStmt.setString(2, location.getWorld().getName());
+                                updateStmt.setInt(3, location.getBlockX());
+                                updateStmt.setInt(4, location.getBlockY());
+                                updateStmt.setInt(5, location.getBlockZ());
+                                updateStmt.setString(6, orphanedNetworkId);
+
+                                int restored = updateStmt.executeUpdate();
+                                if (restored > 0) {
+                                    plugin.getLogger().info("Restored " + restored + " drive bay slots at " + location + " to network " + newNetworkId);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
     }
 
     /**

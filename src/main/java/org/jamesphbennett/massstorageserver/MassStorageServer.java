@@ -5,9 +5,11 @@ import org.jamesphbennett.massstorageserver.commands.MSSCommand;
 import org.jamesphbennett.massstorageserver.database.DatabaseManager;
 import org.jamesphbennett.massstorageserver.listeners.BlockListener;
 import org.jamesphbennett.massstorageserver.listeners.PlayerListener;
+import org.jamesphbennett.massstorageserver.listeners.PistonListener;
 import org.jamesphbennett.massstorageserver.managers.*;
 import org.jamesphbennett.massstorageserver.storage.StorageManager;
 import org.jamesphbennett.massstorageserver.network.NetworkManager;
+import org.jamesphbennett.massstorageserver.network.DisksManager;
 import org.jamesphbennett.massstorageserver.gui.GUIManager;
 
 import java.util.logging.Level;
@@ -19,11 +21,13 @@ public final class MassStorageServer extends JavaPlugin {
     private ConfigManager configManager;
     private DatabaseManager databaseManager;
     private NetworkManager networkManager;
+    private DisksManager disksManager;
     private ItemManager itemManager;
     private RecipeManager recipeManager;
     private CooldownManager cooldownManager;
     private StorageManager storageManager;
     private GUIManager guiManager;
+    private ExplosionManager explosionManager;
 
     public MassStorageServer() {
         // Constructor
@@ -45,11 +49,13 @@ public final class MassStorageServer extends JavaPlugin {
 
             // Initialize other managers
             networkManager = new NetworkManager(this);
+            disksManager = new DisksManager(this);
             itemManager = new ItemManager(this);
             recipeManager = new RecipeManager(this);
             cooldownManager = new CooldownManager(configManager.getOperationCooldown());
             storageManager = new StorageManager(this);
             guiManager = new GUIManager(this);
+            explosionManager = new ExplosionManager(this);
 
             // Start periodic GUI validation task (every 30 seconds)
             getServer().getScheduler().runTaskTimer(this, () -> {
@@ -61,6 +67,7 @@ public final class MassStorageServer extends JavaPlugin {
             // Register listeners
             getServer().getPluginManager().registerEvents(new BlockListener(this), this);
             getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
+            getServer().getPluginManager().registerEvents(new PistonListener(this), this);
 
             // Register commands
             getCommand("mss").setExecutor(new MSSCommand(this));
@@ -107,6 +114,10 @@ public final class MassStorageServer extends JavaPlugin {
         return networkManager;
     }
 
+    public DisksManager getDisksManager() {
+        return disksManager;
+    }
+
     public ItemManager getItemManager() {
         return itemManager;
     }
@@ -125,5 +136,9 @@ public final class MassStorageServer extends JavaPlugin {
 
     public GUIManager getGUIManager() {
         return guiManager;
+    }
+
+    public ExplosionManager getExplosionManager() {
+        return explosionManager;
     }
 }

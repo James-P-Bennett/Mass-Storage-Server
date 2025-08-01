@@ -1,10 +1,9 @@
 package org.jamesphbennett.massstorageserver.listeners;
-import net.kyori.adventure.text.minimessage.MiniMessage;
+
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.Particle;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -12,8 +11,6 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
-import org.bukkit.event.block.BlockPistonExtendEvent;
-import org.bukkit.event.block.BlockPistonRetractEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -27,128 +24,18 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Set;
 
 public class BlockListener implements Listener {
 
     private final MassStorageServer plugin;
     private final ItemManager itemManager;
     private final NetworkManager networkManager;
-    private final MiniMessage miniMessage;
 
     public BlockListener(MassStorageServer plugin) {
         this.plugin = plugin;
         this.itemManager = plugin.getItemManager();
         this.networkManager = plugin.getNetworkManager();
-        this.miniMessage = MiniMessage.miniMessage();
-    }
-
-    /**
-     * Prevent pistons from extending if they would push any custom MSS blocks
-     */
-    @EventHandler(priority = EventPriority.HIGH)
-    public void onPistonExtend(BlockPistonExtendEvent event) {
-        if (event.isCancelled()) return;
-
-        // Check all blocks that would be moved by this piston
-        List<Block> blocksToMove = event.getBlocks();
-
-        for (Block block : blocksToMove) {
-            if (isCustomNetworkBlockOrCable(block)) {
-                // Found a custom MSS block in the path - cancel the entire piston event
-                event.setCancelled(true);
-                plugin.getLogger().info("Cancelled piston extend at " + event.getBlock().getLocation() +
-                        " - would move custom MSS block at " + block.getLocation());
-                return;
-            }
-        }
-
-        // Also check if the piston would push blocks into the space where custom blocks exist
-        // This handles cases where pistons push other blocks into our custom blocks
-        Block pistonBlock = event.getBlock();
-        org.bukkit.block.data.type.Piston pistonData = (org.bukkit.block.data.type.Piston) pistonBlock.getBlockData();
-        org.bukkit.block.BlockFace direction = pistonData.getFacing();
-
-        // Check each position where blocks would end up
-        for (Block sourceBlock : blocksToMove) {
-            // Calculate where this block would end up after being pushed
-            Location targetLocation = sourceBlock.getLocation().clone().add(
-                    direction.getModX(),
-                    direction.getModY(),
-                    direction.getModZ()
-            );
-
-            if (isCustomNetworkBlock(targetLocation.getBlock())) {
-                // A block would be pushed into a custom MSS block - cancel
-                event.setCancelled(true);
-                plugin.getLogger().info("Cancelled piston extend at " + event.getBlock().getLocation() +
-                        " - would push block into custom MSS block at " + targetLocation);
-                return;
-            }
-        }
-
-        // Also check the front of the piston head (where a single block would be pushed to)
-        if (!blocksToMove.isEmpty()) {
-            Block frontBlock = blocksToMove.getLast();
-            Location frontTarget = frontBlock.getLocation().clone().add(
-                    direction.getModX(),
-                    direction.getModY(),
-                    direction.getModZ()
-            );
-
-            if (isCustomNetworkBlock(frontTarget.getBlock())) {
-                event.setCancelled(true);
-                plugin.getLogger().info("Cancelled piston extend at " + event.getBlock().getLocation() +
-                        " - would push into custom MSS block at " + frontTarget);
-            }
-        }
-    }
-
-    /**
-     * Prevent pistons from retracting if they would pull any custom MSS blocks
-     */
-    @EventHandler(priority = EventPriority.HIGH)
-    public void onPistonRetract(BlockPistonRetractEvent event) {
-        if (event.isCancelled()) return;
-
-        // Check all blocks that would be moved by this piston retraction
-        List<Block> blocksToMove = event.getBlocks();
-
-        for (Block block : blocksToMove) {
-            if (isCustomNetworkBlockOrCable(block)) {
-                // Found a custom MSS block in the path - cancel the entire piston event
-                event.setCancelled(true);
-                plugin.getLogger().info("Cancelled piston retract at " + event.getBlock().getLocation() +
-                        " - would move custom MSS block at " + block.getLocation());
-                return;
-            }
-        }
-
-        // For sticky pistons, also check if they would pull blocks into custom block spaces
-        Block pistonBlock = event.getBlock();
-        org.bukkit.block.data.type.Piston pistonData = (org.bukkit.block.data.type.Piston) pistonBlock.getBlockData();
-        org.bukkit.block.BlockFace direction = pistonData.getFacing();
-
-        // Check each position where blocks would end up after retraction
-        for (Block sourceBlock : blocksToMove) {
-            // Calculate where this block would end up after being pulled
-            Location targetLocation = sourceBlock.getLocation().clone().subtract(
-                    direction.getModX(),
-                    direction.getModY(),
-                    direction.getModZ()
-            );
-
-            if (isCustomNetworkBlock(targetLocation.getBlock())) {
-                // A block would be pulled into a custom MSS block - cancel
-                event.setCancelled(true);
-                plugin.getLogger().info("Cancelled piston retract at " + event.getBlock().getLocation() +
-                        " - would pull block into custom MSS block at " + targetLocation);
-                return;
-            }
-        }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -172,30 +59,19 @@ public class BlockListener implements Listener {
         // Validate placement permissions
         if (plugin.getConfigManager().isRequireUsePermission() && !player.hasPermission("massstorageserver.use")) {
             event.setCancelled(true);
-            player.sendMessage(miniMessage.deserialize("<red>You don't have permission to place Mass Storage blocks."));
+            player.sendMessage(Component.text("You don't have permission to place Mass Storage blocks.", NamedTextColor.RED));
             return;
         }
 
-// Mark this location as containing our custom block in the database (SYNCHRONOUSLY)
+        // Mark this location as containing our custom block in the database (SYNCHRONOUSLY)
         try {
             markLocationAsCustomBlock(location, getBlockTypeFromItem(item));
         } catch (Exception e) {
             plugin.getLogger().severe("Error marking custom block location: " + e.getMessage());
             // If we can't mark the block, cancel the placement
             event.setCancelled(true);
-            player.sendMessage(miniMessage.deserialize("<red>Error placing block: " + e.getMessage()));
+            player.sendMessage(Component.text("Error placing block: " + e.getMessage(), NamedTextColor.RED));
             return;
-        }
-
-// SPECIAL HANDLING FOR NETWORK CABLES
-        if (itemManager.isNetworkCable(item)) {
-            // Check if placing this cable would connect separate networks
-            if (networkManager.wouldConnectToAnotherNetwork(location)) {
-                event.setCancelled(true);
-                player.sendMessage(miniMessage.deserialize("<red>Cannot place Network Cable - would connect separate networks!"));
-                player.sendMessage(miniMessage.deserialize("<yellow>Network Cables can only extend existing networks, not merge them."));
-                return;
-            }
         }
 
         // Schedule network detection for next tick (after block is placed)
@@ -219,15 +95,15 @@ public class BlockListener implements Listener {
                     networkManager.registerNetwork(network, player.getUniqueId());
 
                     // ENHANCED: Check if any drive bay contents were restored
-                    boolean hasRestoredContent = checkForRestoredContent(network.getDriveBays());
+                    boolean hasRestoredContent = plugin.getDisksManager().checkForRestoredContent(network.getDriveBays());
 
-                    player.sendMessage(miniMessage.deserialize("<green>Mass Storage Network formed successfully!"));
-                    player.sendMessage(miniMessage.deserialize("<gray>Network ID: " + network.getNetworkId()));
-                    player.sendMessage(miniMessage.deserialize("<gray>Network Size: " + network.getAllBlocks().size() + "/" + maxBlocks + " blocks"));
+                    player.sendMessage(Component.text("Mass Storage Network formed successfully!", NamedTextColor.GREEN));
+                    player.sendMessage(Component.text("Network ID: " + network.getNetworkId(), NamedTextColor.GRAY));
+                    player.sendMessage(Component.text("Network Size: " + network.getAllBlocks().size() + "/" + maxBlocks + " blocks", NamedTextColor.GRAY));
 
                     if (hasRestoredContent) {
-                        player.sendMessage(miniMessage.deserialize("<aqua>Restored drive bay contents from previous network!"));
-                        player.sendMessage(miniMessage.deserialize("<yellow>Check your terminals to see restored items."));
+                        player.sendMessage(Component.text("Restored drive bay contents from previous network!", NamedTextColor.AQUA));
+                        player.sendMessage(Component.text("Check your terminals to see restored items.", NamedTextColor.YELLOW));
                     }
                 } else {
                     // Check if this block connects to an existing network
@@ -252,14 +128,14 @@ public class BlockListener implements Listener {
                                 networkManager.registerNetwork(expandedNetwork, player.getUniqueId());
 
                                 // ENHANCED: Check if any drive bay contents were restored
-                                boolean hasRestoredContent = checkForRestoredContent(expandedNetwork.getDriveBays());
+                                boolean hasRestoredContent = plugin.getDisksManager().checkForRestoredContent(expandedNetwork.getDriveBays());
 
-                                player.sendMessage(miniMessage.deserialize("<green>Block added to existing network!"));
-                                player.sendMessage(miniMessage.deserialize("<gray>Network Size: " + expandedNetwork.getAllBlocks().size() + "/" + maxBlocks + " blocks"));
+                                player.sendMessage(Component.text("Block added to existing network!", NamedTextColor.GREEN));
+                                player.sendMessage(Component.text("Network Size: " + expandedNetwork.getAllBlocks().size() + "/" + maxBlocks + " blocks", NamedTextColor.GRAY));
 
                                 if (hasRestoredContent) {
-                                    player.sendMessage(miniMessage.deserialize("<aqua>Restored drive bay contents!"));
-                                    player.sendMessage(miniMessage.deserialize("<yellow>Check your terminals to see restored items."));
+                                    player.sendMessage(Component.text("Restored drive bay contents!", NamedTextColor.AQUA));
+                                    player.sendMessage(Component.text("Check your terminals to see restored items.", NamedTextColor.YELLOW));
                                 }
                                 return;
                             }
@@ -267,14 +143,14 @@ public class BlockListener implements Listener {
                     }
 
                     if (itemManager.isStorageServer(item)) {
-                        player.sendMessage(miniMessage.deserialize("<yellow>Storage Server requires Drive Bays and Terminals to form a network."));
+                        player.sendMessage(Component.text("Storage Server requires Drive Bays and Terminals to form a network.", NamedTextColor.YELLOW));
                     } else {
-                        player.sendMessage(miniMessage.deserialize("<yellow>This block needs to be connected to a Storage Server to function."));
+                        player.sendMessage(Component.text("This block needs to be connected to a Storage Server to function.", NamedTextColor.YELLOW));
                     }
                 }
 
             } catch (Exception e) {
-                player.sendMessage(miniMessage.deserialize("<red>Error setting up network: " + e.getMessage()));
+                player.sendMessage(Component.text("Error setting up network: " + e.getMessage(), NamedTextColor.RED));
                 plugin.getLogger().severe("Error setting up network: " + e.getMessage());
             }
         });
@@ -287,7 +163,7 @@ public class BlockListener implements Listener {
         Location location = block.getLocation();
 
         // Check if it's one of our CUSTOM network blocks (not just vanilla blocks)
-        if (!isCustomNetworkBlockOrCable(block)) {
+        if (!isCustomNetworkBlock(block)) {
             return;
         }
 
@@ -298,11 +174,11 @@ public class BlockListener implements Listener {
             if (isCustomDriveBay(block)) {
                 if (networkId != null) {
                     // Drive bay is part of a network - use network-aware dropping
-                    dropDriveBayContents(location, networkId);
+                    plugin.getDisksManager().dropDriveBayContents(location, networkId);
                 } else {
                     // Drive bay is not part of a network - check for orphaned/standalone contents
                     plugin.getLogger().info("Drive bay at " + location + " is not part of a network, checking for standalone contents");
-                    dropDriveBayContentsWithoutNetwork(location);
+                    plugin.getDisksManager().dropDriveBayContentsWithoutNetwork(location);
                 }
             }
 
@@ -329,9 +205,9 @@ public class BlockListener implements Listener {
                                 if (updatedNetwork != null && updatedNetwork.isValid()) {
                                     networkManager.registerNetwork(updatedNetwork, player.getUniqueId());
                                     networkStillValid = true;
-                                    player.sendMessage(miniMessage.deserialize("<yellow>Network updated after block removal."));
+                                    player.sendMessage(Component.text("Network updated after block removal.", NamedTextColor.YELLOW));
                                     int maxBlocks = plugin.getConfigManager().getMaxNetworkBlocks();
-                                    player.sendMessage(miniMessage.deserialize("<gray>Network Size: " + updatedNetwork.getAllBlocks().size() + "/" + maxBlocks + " blocks"));
+                                    player.sendMessage(Component.text("Network Size: " + updatedNetwork.getAllBlocks().size() + "/" + maxBlocks + " blocks", NamedTextColor.GRAY));
                                     break;
                                 }
                             }
@@ -340,11 +216,11 @@ public class BlockListener implements Listener {
                         if (!networkStillValid) {
                             // Network is no longer valid, unregister it
                             networkManager.unregisterNetwork(networkId);
-                            player.sendMessage(miniMessage.deserialize("<red>Mass Storage Network dissolved."));
+                            player.sendMessage(Component.text("Mass Storage Network dissolved.", NamedTextColor.RED));
                         }
 
                     } catch (Exception e) {
-                        player.sendMessage(miniMessage.deserialize("<red>Error updating network: " + e.getMessage()));
+                        player.sendMessage(Component.text("Error updating network: " + e.getMessage(), NamedTextColor.RED));
                         plugin.getLogger().severe("Error updating network: " + e.getMessage());
                     }
                 });
@@ -357,13 +233,119 @@ public class BlockListener implements Listener {
     }
 
     /**
+     * Display storage server status information to a player
+     */
+    private void displayStorageServerStatus(Player player, String networkId) {
+        try (Connection conn = plugin.getDatabaseManager().getConnection()) {
+            // Get network information
+            String ownerUUID = null;
+            String lastAccessed = null;
+
+            try (PreparedStatement stmt = conn.prepareStatement(
+                    "SELECT owner_uuid, last_accessed FROM networks WHERE network_id = ?")) {
+                stmt.setString(1, networkId);
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                        ownerUUID = rs.getString("owner_uuid");
+                        lastAccessed = rs.getString("last_accessed");
+                    }
+                }
+            }
+
+            // Get network block count
+            int blockCount = 0;
+            try (PreparedStatement stmt = conn.prepareStatement(
+                    "SELECT COUNT(*) FROM network_blocks WHERE network_id = ?")) {
+                stmt.setString(1, networkId);
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                        blockCount = rs.getInt(1);
+                    }
+                }
+            }
+
+            // Get drive bay and terminal counts
+            int driveBayCount = 0;
+            int terminalCount = 0;
+            try (PreparedStatement stmt = conn.prepareStatement(
+                    "SELECT block_type, COUNT(*) as count FROM network_blocks WHERE network_id = ? AND block_type IN ('DRIVE_BAY', 'MSS_TERMINAL') GROUP BY block_type")) {
+                stmt.setString(1, networkId);
+                try (ResultSet rs = stmt.executeQuery()) {
+                    while (rs.next()) {
+                        String blockType = rs.getString("block_type");
+                        int count = rs.getInt("count");
+                        if ("DRIVE_BAY".equals(blockType)) {
+                            driveBayCount = count;
+                        } else if ("MSS_TERMINAL".equals(blockType)) {
+                            terminalCount = count;
+                        }
+                    }
+                }
+            }
+
+            // Get storage disk count and total capacity
+            int diskCount = 0;
+            long totalItems = 0;
+            int totalCells = 0;
+            int usedCells = 0;
+
+            try (PreparedStatement stmt = conn.prepareStatement(
+                    "SELECT COUNT(DISTINCT sd.disk_id) as disk_count, " +
+                            "SUM(sd.max_cells) as total_cells, " +
+                            "SUM(sd.used_cells) as used_cells, " +
+                            "COALESCE(SUM(si.quantity), 0) as total_items " +
+                            "FROM storage_disks sd " +
+                            "LEFT JOIN storage_items si ON sd.disk_id = si.disk_id " +
+                            "WHERE sd.network_id = ?")) {
+                stmt.setString(1, networkId);
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                        diskCount = rs.getInt("disk_count");
+                        totalCells = rs.getInt("total_cells");
+                        usedCells = rs.getInt("used_cells");
+                        totalItems = rs.getLong("total_items");
+                    }
+                }
+            }
+
+            // Display the information
+            player.sendMessage(Component.text("=== Storage Server Status ===", NamedTextColor.GOLD));
+            player.sendMessage(Component.text("Network ID: " + networkId, NamedTextColor.GRAY));
+
+            if (ownerUUID != null) {
+                String ownerName = plugin.getServer().getOfflinePlayer(java.util.UUID.fromString(ownerUUID)).getName();
+                player.sendMessage(Component.text("Owner: " + (ownerName != null ? ownerName : "Unknown"), NamedTextColor.GRAY));
+            }
+
+            player.sendMessage(Component.text("Network Size: " + blockCount + "/" + plugin.getConfigManager().getMaxNetworkBlocks() + " blocks", NamedTextColor.AQUA));
+            player.sendMessage(Component.text("Drive Bays: " + driveBayCount, NamedTextColor.YELLOW));
+            player.sendMessage(Component.text("Terminals: " + terminalCount, NamedTextColor.GREEN));
+            player.sendMessage(Component.text("Storage Disks: " + diskCount, NamedTextColor.LIGHT_PURPLE));
+
+            if (diskCount > 0) {
+                player.sendMessage(Component.text("Storage Cells: " + usedCells + "/" + totalCells + " used",
+                        usedCells >= totalCells * 0.9 ? NamedTextColor.RED :
+                                usedCells >= totalCells * 0.7 ? NamedTextColor.YELLOW : NamedTextColor.GREEN));
+                player.sendMessage(Component.text("Total Items: " + String.format("%,d", totalItems), NamedTextColor.AQUA));
+            }
+
+            if (lastAccessed != null) {
+                player.sendMessage(Component.text("Last Accessed: " + lastAccessed, NamedTextColor.DARK_GRAY));
+            }
+
+        } catch (Exception e) {
+            player.sendMessage(Component.text("Error retrieving storage server status: " + e.getMessage(), NamedTextColor.RED));
+            plugin.getLogger().severe("Error retrieving storage server status: " + e.getMessage());
+        }
+    }
+
+    /**
      * Handle entity explosions (creepers, TNT, etc.) that destroy MSS blocks
      */
     @EventHandler(priority = EventPriority.HIGH)
     public void onEntityExplode(EntityExplodeEvent event) {
         if (event.isCancelled()) return;
-
-        handleExplosion(event.blockList(), event.getLocation());
+        plugin.getExplosionManager().handleExplosion(event.blockList(), event.getLocation());
     }
 
     /**
@@ -372,256 +354,7 @@ public class BlockListener implements Listener {
     @EventHandler(priority = EventPriority.HIGH)
     public void onBlockExplode(BlockExplodeEvent event) {
         if (event.isCancelled()) return;
-
-        handleExplosion(event.blockList(), event.getBlock().getLocation());
-    }
-
-    /**
-     * Common explosion handling for both entity and block explosions
-     */
-    private void handleExplosion(List<Block> blockList, Location explosionLocation) {
-        List<Block> customBlocksToHandle = new ArrayList<>();
-        List<Location> driveBayLocations = new ArrayList<>();
-
-        // First pass: identify our custom blocks in the explosion
-        for (Block block : blockList) {
-            if (isCustomNetworkBlockOrCable(block)) {
-                customBlocksToHandle.add(block);
-
-                if (isCustomDriveBay(block)) {
-                    driveBayLocations.add(block.getLocation());
-                }
-            }
-        }
-
-        if (customBlocksToHandle.isEmpty()) {
-            return; // No MSS blocks affected
-        }
-
-        plugin.getLogger().info("Explosion at " + explosionLocation + " affecting " + customBlocksToHandle.size() +
-                " MSS blocks (" + driveBayLocations.size() + " drive bays)");
-
-        // Handle drive bay contents BEFORE blocks are destroyed
-        for (Location driveBayLoc : driveBayLocations) {
-            try {
-                // Find network ID for this drive bay (if any)
-                String networkId = findNetworkIdForLocation(driveBayLoc);
-                if (networkId == null) {
-                    // Try to find from drive bay slots table directly
-                    networkId = findDriveBayNetworkIdFromDatabase(driveBayLoc);
-                }
-
-                if (networkId != null) {
-                    plugin.getLogger().info("Dropping drive bay contents at " + driveBayLoc + " (network: " + networkId + ") due to explosion");
-                    dropDriveBayContents(driveBayLoc, networkId);
-                } else {
-                    plugin.getLogger().info("Drive bay at " + driveBayLoc + " has no network association, checking for orphaned contents");
-                    dropDriveBayContentsWithoutNetwork(driveBayLoc);
-                }
-            } catch (Exception e) {
-                plugin.getLogger().severe("Error handling drive bay explosion at " + driveBayLoc + ": " + e.getMessage());
-                e.printStackTrace();
-            }
-        }
-
-        // Remove custom block markers and drop custom items
-        Iterator<Block> iterator = blockList.iterator();
-        while (iterator.hasNext()) {
-            Block block = iterator.next();
-
-            if (isCustomNetworkBlockOrCable(block)) {
-                try {
-                    // Remove from explosion list so vanilla block isn't dropped
-                    iterator.remove();
-
-                    // Drop our custom item instead
-                    ItemStack customItem = getCustomItemForBlock(block);
-                    if (customItem != null) {
-                        block.getWorld().dropItemNaturally(block.getLocation(), customItem);
-                        plugin.getLogger().info("Dropped custom item for " + getBlockTypeFromBlock(block) + " at " + block.getLocation());
-                    }
-
-                    // Remove custom block marker
-                    removeCustomBlockMarker(block.getLocation());
-
-                } catch (Exception e) {
-                    plugin.getLogger().severe("Error handling custom block explosion: " + e.getMessage());
-                }
-            }
-        }
-
-        // Schedule network updates after explosion
-        plugin.getServer().getScheduler().runTask(plugin, () -> updateNetworksAfterExplosion(customBlocksToHandle));
-    }
-
-    /**
-     * Find network ID for a location by checking adjacent blocks
-     */
-    private String findNetworkIdForLocation(Location location) {
-        try {
-            return networkManager.getNetworkId(location);
-        } catch (Exception e) {
-            plugin.getLogger().warning("Error finding network ID for location " + location + ": " + e.getMessage());
-            return null;
-        }
-    }
-
-    /**
-     * Find network ID for a drive bay from the database
-     */
-    private String findDriveBayNetworkIdFromDatabase(Location location) {
-        try (Connection conn = plugin.getDatabaseManager().getConnection();
-             PreparedStatement stmt = conn.prepareStatement(
-                     "SELECT DISTINCT network_id FROM drive_bay_slots WHERE world_name = ? AND x = ? AND y = ? AND z = ? LIMIT 1")) {
-
-            stmt.setString(1, location.getWorld().getName());
-            stmt.setInt(2, location.getBlockX());
-            stmt.setInt(3, location.getBlockY());
-            stmt.setInt(4, location.getBlockZ());
-
-            try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    return rs.getString("network_id");
-                }
-            }
-        } catch (Exception e) {
-            plugin.getLogger().warning("Error finding drive bay network ID from database: " + e.getMessage());
-        }
-        return null;
-    }
-
-    /**
-     * Drop drive bay contents when network association is unknown
-     */
-    private void dropDriveBayContentsWithoutNetwork(Location location) {
-        try (Connection conn = plugin.getDatabaseManager().getConnection();
-             PreparedStatement stmt = conn.prepareStatement(
-                     "SELECT disk_id FROM drive_bay_slots WHERE world_name = ? AND x = ? AND y = ? AND z = ? AND disk_id IS NOT NULL")) {
-
-            stmt.setString(1, location.getWorld().getName());
-            stmt.setInt(2, location.getBlockX());
-            stmt.setInt(3, location.getBlockY());
-            stmt.setInt(4, location.getBlockZ());
-
-            List<String> diskIds = new ArrayList<>();
-            try (ResultSet rs = stmt.executeQuery()) {
-                while (rs.next()) {
-                    diskIds.add(rs.getString("disk_id"));
-                }
-            }
-
-            plugin.getLogger().info("Found " + diskIds.size() + " disks to drop from networkless drive bay");
-
-            // Drop each disk and remove from database
-            for (String diskId : diskIds) {
-                // Get disk info for recreation
-                try (PreparedStatement diskStmt = conn.prepareStatement(
-                        "SELECT crafter_uuid, crafter_name, used_cells, max_cells FROM storage_disks WHERE disk_id = ?")) {
-                    diskStmt.setString(1, diskId);
-
-                    try (ResultSet diskRs = diskStmt.executeQuery()) {
-                        if (diskRs.next()) {
-                            String crafterUUID = diskRs.getString("crafter_uuid");
-                            String crafterName = diskRs.getString("crafter_name");
-                            int usedCells = diskRs.getInt("used_cells");
-                            int maxCells = diskRs.getInt("max_cells");
-
-                            // Create disk item with correct ID
-                            ItemStack disk = itemManager.createStorageDiskWithId(diskId, crafterUUID, crafterName);
-                            disk = itemManager.updateStorageDiskLore(disk, usedCells, maxCells);
-
-                            // Drop the disk
-                            location.getWorld().dropItemNaturally(location, disk);
-                            plugin.getLogger().info("Dropped disk " + diskId + " with " + usedCells + "/" + maxCells + " cells used");
-                        }
-                    }
-                }
-
-                // Remove from drive bay slots
-                try (PreparedStatement deleteStmt = conn.prepareStatement(
-                        "DELETE FROM drive_bay_slots WHERE world_name = ? AND x = ? AND y = ? AND z = ? AND disk_id = ?")) {
-                    deleteStmt.setString(1, location.getWorld().getName());
-                    deleteStmt.setInt(2, location.getBlockX());
-                    deleteStmt.setInt(3, location.getBlockY());
-                    deleteStmt.setInt(4, location.getBlockZ());
-                    deleteStmt.setString(5, diskId);
-                    deleteStmt.executeUpdate();
-                }
-            }
-
-        } catch (Exception e) {
-            plugin.getLogger().severe("Error dropping networkless drive bay contents: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    /**
-     * Update networks after explosion damage
-     */
-    private void updateNetworksAfterExplosion(List<Block> destroyedBlocks) {
-        Set<String> affectedNetworks = new HashSet<>();
-
-        // Find all networks that might be affected
-        for (Block block : destroyedBlocks) {
-            for (Location adjacent : getAdjacentLocations(block.getLocation())) {
-                if (isCustomNetworkBlock(adjacent.getBlock())) {
-                    try {
-                        String networkId = networkManager.getNetworkId(adjacent);
-                        if (networkId != null) {
-                            affectedNetworks.add(networkId);
-                        }
-                    } catch (Exception e) {
-                        plugin.getLogger().warning("Error checking network after explosion: " + e.getMessage());
-                    }
-                }
-            }
-        }
-
-        // Update each affected network
-        for (String networkId : affectedNetworks) {
-            try {
-                // Try to re-detect the network
-                boolean networkStillValid = false;
-
-                // Find a remaining block from this network to test from
-                try (Connection conn = plugin.getDatabaseManager().getConnection();
-                     PreparedStatement stmt = conn.prepareStatement(
-                             "SELECT world_name, x, y, z FROM network_blocks WHERE network_id = ? LIMIT 1")) {
-
-                    stmt.setString(1, networkId);
-                    try (ResultSet rs = stmt.executeQuery()) {
-                        if (rs.next()) {
-                            Location testLocation = new Location(
-                                    plugin.getServer().getWorld(rs.getString("world_name")),
-                                    rs.getInt("x"),
-                                    rs.getInt("y"),
-                                    rs.getInt("z")
-                            );
-
-                            if (isCustomNetworkBlock(testLocation.getBlock())) {
-                                NetworkInfo updatedNetwork = networkManager.detectNetwork(testLocation);
-                                if (updatedNetwork != null && updatedNetwork.isValid()) {
-                                    networkManager.registerNetwork(updatedNetwork, null); // No player for explosions
-                                    networkStillValid = true;
-                                    plugin.getLogger().info("Network " + networkId + " updated after explosion");
-                                }
-                            }
-                        }
-                    }
-                } catch (Exception e) {
-                    plugin.getLogger().warning("Error checking network validity after explosion: " + e.getMessage());
-                }
-
-                if (!networkStillValid) {
-                    // Network is destroyed, unregister it
-                    networkManager.unregisterNetwork(networkId);
-                    plugin.getLogger().info("Network " + networkId + " dissolved due to explosion");
-                }
-
-            } catch (Exception e) {
-                plugin.getLogger().severe("Error updating network " + networkId + " after explosion: " + e.getMessage());
-            }
-        }
+        plugin.getExplosionManager().handleExplosion(event.blockList(), event.getBlock().getLocation());
     }
 
     @EventHandler
@@ -641,33 +374,17 @@ public class BlockListener implements Listener {
             // Player is in search mode - cancel the search and the interaction
             event.setCancelled(true);
             plugin.getGUIManager().cancelSearchInput(player);
-            player.sendMessage(miniMessage.deserialize("<yellow>Search cancelled."));
+            player.sendMessage(Component.text("Search cancelled.", NamedTextColor.YELLOW));
             plugin.getLogger().info("Cancelled search input for player " + player.getName() + " due to block interaction");
             return;
         }
 
-        // Handle Storage Server interactions (NEW FEATURE)
-        if (isCustomStorageServer(block)) {
-            event.setCancelled(true);
-
-            if (plugin.getConfigManager().isRequireUsePermission() && !player.hasPermission("massstorageserver.use")) {
-                player.sendMessage(miniMessage.deserialize("<red>You don't have permission to use Storage Servers."));
-                return;
-            }
-
-            try {
-                showNetworkInfo(player, block.getLocation());
-            } catch (Exception e) {
-                player.sendMessage(miniMessage.deserialize("<red>Error retrieving network information: " + e.getMessage()));
-                plugin.getLogger().severe("Error retrieving network information: " + e.getMessage());
-            }
-        }
         // Handle MSS Terminal interactions (only custom ones)
-        else if (isCustomMSSTerminal(block)) {
+        if (isCustomMSSTerminal(block)) {
             event.setCancelled(true);
 
             if (plugin.getConfigManager().isRequireUsePermission() && !player.hasPermission("massstorageserver.use")) {
-                player.sendMessage(miniMessage.deserialize("<red>You don't have permission to use Mass Storage terminals."));
+                player.sendMessage(Component.text("You don't have permission to use Mass Storage terminals.", NamedTextColor.RED));
                 return;
             }
 
@@ -675,14 +392,14 @@ public class BlockListener implements Listener {
                 String networkId = networkManager.getNetworkId(block.getLocation());
 
                 if (networkId == null) {
-                    player.sendMessage(miniMessage.deserialize("<red>This terminal is not connected to a valid network."));
+                    player.sendMessage(Component.text("This terminal is not connected to a valid network.", NamedTextColor.RED));
                     return;
                 }
 
                 // Check cooldown
                 if (!plugin.getCooldownManager().canOperate(player.getUniqueId(), networkId)) {
                     long remaining = plugin.getCooldownManager().getRemainingCooldown(player.getUniqueId(), networkId);
-                    player.sendMessage(miniMessage.deserialize("<yellow>Please wait " + remaining + "ms before using the network again."));
+                    player.sendMessage(Component.text("Please wait " + remaining + "ms before using the network again.", NamedTextColor.YELLOW));
                     return;
                 }
 
@@ -693,8 +410,34 @@ public class BlockListener implements Listener {
                 plugin.getCooldownManager().recordOperation(player.getUniqueId(), networkId);
 
             } catch (Exception e) {
-                player.sendMessage(miniMessage.deserialize("<red>Error accessing terminal: " + e.getMessage()));
+                player.sendMessage(Component.text("Error accessing terminal: " + e.getMessage(), NamedTextColor.RED));
                 plugin.getLogger().severe("Error accessing terminal: " + e.getMessage());
+            }
+        }
+
+        // Handle Storage Server interactions (only custom ones)
+        else if (isCustomStorageServer(block)) {
+            event.setCancelled(true);
+
+            if (plugin.getConfigManager().isRequireUsePermission() && !player.hasPermission("massstorageserver.use")) {
+                player.sendMessage(Component.text("You don't have permission to view Storage Server information.", NamedTextColor.RED));
+                return;
+            }
+
+            try {
+                String networkId = networkManager.getNetworkId(block.getLocation());
+
+                if (networkId == null) {
+                    player.sendMessage(Component.text("This Storage Server is not part of a valid network.", NamedTextColor.RED));
+                    return;
+                }
+
+                // Display network status information
+                displayStorageServerStatus(player, networkId);
+
+            } catch (Exception e) {
+                player.sendMessage(Component.text("Error accessing Storage Server: " + e.getMessage(), NamedTextColor.RED));
+                plugin.getLogger().severe("Error accessing Storage Server: " + e.getMessage());
             }
         }
 
@@ -703,7 +446,7 @@ public class BlockListener implements Listener {
             event.setCancelled(true);
 
             if (plugin.getConfigManager().isRequireUsePermission() && !player.hasPermission("massstorageserver.use")) {
-                player.sendMessage(miniMessage.deserialize("<red>You don't have permission to use Drive Bays."));
+                player.sendMessage(Component.text("You don't have permission to use Drive Bays.", NamedTextColor.RED));
                 return;
             }
 
@@ -713,225 +456,28 @@ public class BlockListener implements Listener {
                 // UPDATED: Allow Drive Bay access even without a valid network
                 if (networkId == null) {
                     // Try to find any network ID associated with this location in the database
-                    networkId = findDriveBayNetworkId(block.getLocation());
+                    networkId = plugin.getDisksManager().findDriveBayNetworkId(block.getLocation());
 
                     if (networkId == null) {
                         // Generate a temporary network ID for standalone drive bay access
-                        networkId = "standalone_" + block.getLocation().getWorld().getName() + "_" +
-                                block.getLocation().getBlockX() + "_" +
-                                block.getLocation().getBlockY() + "_" +
-                                block.getLocation().getBlockZ();
+                        networkId = plugin.getDisksManager().generateStandaloneNetworkId(block.getLocation());
 
-                        player.sendMessage(miniMessage.deserialize("<yellow>Opening standalone drive bay (not connected to a network)."));
+                        player.sendMessage(Component.text("Opening standalone drive bay (not connected to a network).", NamedTextColor.YELLOW));
                     } else {
-                        player.sendMessage(miniMessage.deserialize("<yellow>Opening drive bay (network connection lost)."));
+                        player.sendMessage(Component.text("Opening drive bay (network connection lost).", NamedTextColor.YELLOW));
                     }
                 } else if (!networkManager.isNetworkValid(networkId)) {
-                    player.sendMessage(miniMessage.deserialize("<yellow>Opening drive bay (network is no longer valid)."));
+                    player.sendMessage(Component.text("Opening drive bay (network is no longer valid).", NamedTextColor.YELLOW));
                 }
 
                 // Open drive bay GUI regardless of network validity
                 plugin.getGUIManager().openDriveBayGUI(player, block.getLocation(), networkId);
 
             } catch (Exception e) {
-                player.sendMessage(miniMessage.deserialize("<red>Error accessing drive bay: " + e.getMessage()));
+                player.sendMessage(Component.text("Error accessing drive bay: " + e.getMessage(), NamedTextColor.RED));
                 plugin.getLogger().severe("Error accessing drive bay: " + e.getMessage());
             }
         }
-
-        // Handle Network Cable interactions (just show particle effect)
-        else if (isCustomNetworkCable(block)) {
-            event.setCancelled(true);
-
-            // Show a brief particle effect to indicate the cable is functional
-            spawnCableParticles(block.getLocation());
-
-            // Show network information if connected
-            try {
-                String networkId = networkManager.getNetworkId(block.getLocation());
-                if (networkId != null) {
-                    player.sendMessage(miniMessage.deserialize("<blue>Network Cable connected to network: " + networkId));
-                } else {
-                    player.sendMessage(miniMessage.deserialize("<gray>Network Cable not connected to any network."));
-                }
-            } catch (Exception e) {
-                player.sendMessage(miniMessage.deserialize("<gray>Network Cable (connection status unknown)."));
-            }
-        }
-
-    }
-
-    /**
-     * Show comprehensive network information to the player
-     */
-    private void showNetworkInfo(Player player, Location storageServerLocation) throws Exception {
-        plugin.getLogger().info("Showing network info for storage server at " + storageServerLocation + " to player " + player.getName());
-
-        // Detect the network from this storage server
-        NetworkInfo network = networkManager.detectNetwork(storageServerLocation);
-        String networkId = network != null ? network.getNetworkId() : null;
-        boolean isValid = network != null && network.isValid();
-
-        // Header
-        player.sendMessage(miniMessage.deserialize("<gold><bold>=== MSS Network Information ==="));
-
-        // Network Status
-        if (isValid) {
-            player.sendMessage(miniMessage.deserialize("<gray>Network Status: <green><bold>Valid"));
-        } else {
-            player.sendMessage(miniMessage.deserialize("<gray>Network Status: <red><bold>Invalid"));
-        }
-
-        // Network Blocks
-        int networkBlocks = isValid ? network.getAllBlocks().size() : 0;
-        int maxBlocks = plugin.getConfigManager().getMaxNetworkBlocks();
-        player.sendMessage(miniMessage.deserialize("<gray>Network Blocks: <yellow>" + networkBlocks + "/" + maxBlocks));
-
-        if (isValid && networkId != null) {
-            // Get network statistics from database
-            NetworkStats stats = getNetworkStats(networkId);
-
-            // Total Loaded Disks
-            player.sendMessage(miniMessage.deserialize("<gray>Total Loaded Disks: <aqua>" + stats.totalDisks));
-
-            // Total Item Types
-            player.sendMessage(miniMessage.deserialize("<gray>Total Item Types: <light_purple>" + stats.totalItemTypes));
-
-            // Total Items
-            player.sendMessage(miniMessage.deserialize("<gray>Total Items: <green>" + String.format("%,d", stats.totalItems)));
-
-            // Additional useful info
-            if (stats.totalDisks > 0) {
-                player.sendMessage(miniMessage.deserialize(""));
-
-                // Average items per disk
-                long avgItemsPerDisk = stats.totalItems / stats.totalDisks;
-                player.sendMessage(miniMessage.deserialize("<gray>Avg Items/Disk: <white>" + String.format("%,d", avgItemsPerDisk)));
-
-                // Network ID (for debugging)
-                player.sendMessage(miniMessage.deserialize("<dark_gray>Network ID: " + networkId));
-            }
-        } else {
-            // Invalid network - show zeros
-            player.sendMessage(miniMessage.deserialize("<gray>Total Loaded Disks: <dark_gray>0"));
-            player.sendMessage(miniMessage.deserialize("<gray>Total Item Types: <dark_gray>0"));
-            player.sendMessage(miniMessage.deserialize("<gray>Total Items: <dark_gray>0"));
-
-            // Show reason why network is invalid
-            player.sendMessage(miniMessage.deserialize(""));
-
-            if (network != null) {
-                // Network detected but invalid - give specific feedback
-                if (network.getDriveBays().isEmpty()) {
-                    player.sendMessage(miniMessage.deserialize("<gray>Reason: <red>No Drive Bays connected"));
-                } else if (network.getTerminals().isEmpty()) {
-                    player.sendMessage(miniMessage.deserialize("<gray>Reason: <red>No Terminals connected"));
-                } else {
-                    player.sendMessage(miniMessage.deserialize("<gray>Reason: <red>Network structure incomplete"));
-                }
-            } else {
-                // No network detected at all
-                player.sendMessage(miniMessage.deserialize("<gray>Reason: <red>No connected network blocks found"));
-            }
-        }
-
-        plugin.getLogger().info("Displayed network info to player " + player.getName() +
-                " - Network valid: " + isValid + ", ID: " + networkId);
-    }
-
-    /**
-     * Spawn particle effects for network cable placement
-     */
-    private void spawnCableParticles(Location location) {
-        plugin.getServer().getScheduler().runTaskLater(plugin, () -> location.getWorld().spawnParticle(
-                Particle.ELECTRIC_SPARK,
-                location.clone().add(0.5, 0.5, 0.5),
-                10,
-                0.3, 0.3, 0.3,
-                0.1
-        ), 5L);
-    }
-
-    /**
-         * Network statistics data class
-         */
-        private record NetworkStats(int totalDisks, int totalItemTypes, long totalItems) {
-    }
-
-    /**
-     * Get comprehensive network statistics from the database
-     */
-    private NetworkStats getNetworkStats(String networkId) throws Exception {
-        int totalDisks = 0;
-        int totalItemTypes = 0;
-        long totalItems = 0;
-
-        try (Connection conn = plugin.getDatabaseManager().getConnection()) {
-            // Count total disks in drive bays for this network
-            try (PreparedStatement stmt = conn.prepareStatement(
-                    "SELECT COUNT(DISTINCT dbs.disk_id) FROM drive_bay_slots dbs " +
-                            "WHERE dbs.network_id = ? AND dbs.disk_id IS NOT NULL")) {
-                stmt.setString(1, networkId);
-                try (ResultSet rs = stmt.executeQuery()) {
-                    if (rs.next()) {
-                        totalDisks = rs.getInt(1);
-                    }
-                }
-            }
-
-            // Count total item types and total items in the network
-            try (PreparedStatement stmt = conn.prepareStatement(
-                    "SELECT COUNT(DISTINCT si.item_hash) as item_types, SUM(si.quantity) as total_items " +
-                            "FROM storage_items si " +
-                            "JOIN storage_disks sd ON si.disk_id = sd.disk_id " +
-                            "JOIN drive_bay_slots dbs ON sd.disk_id = dbs.disk_id " +
-                            "WHERE dbs.network_id = ? AND dbs.disk_id IS NOT NULL")) {
-                stmt.setString(1, networkId);
-                try (ResultSet rs = stmt.executeQuery()) {
-                    if (rs.next()) {
-                        totalItemTypes = rs.getInt("item_types");
-                        totalItems = rs.getLong("total_items");
-                    }
-                }
-            }
-        }
-
-        plugin.getLogger().info("Network " + networkId + " stats: " + totalDisks + " disks, " +
-                totalItemTypes + " item types, " + totalItems + " total items");
-
-        return new NetworkStats(totalDisks, totalItemTypes, totalItems);
-    }
-
-    /**
-     * Check if any drive bays at the given locations have restored content
-     */
-    private boolean checkForRestoredContent(Set<Location> driveBayLocations) {
-        try (Connection conn = plugin.getDatabaseManager().getConnection()) {
-            for (Location location : driveBayLocations) {
-                // Check if this drive bay has any disks with stored items
-                try (PreparedStatement stmt = conn.prepareStatement(
-                        "SELECT COUNT(*) FROM drive_bay_slots dbs " +
-                                "JOIN storage_disks sd ON dbs.disk_id = sd.disk_id " +
-                                "JOIN storage_items si ON sd.disk_id = si.disk_id " +
-                                "WHERE dbs.world_name = ? AND dbs.x = ? AND dbs.y = ? AND dbs.z = ? " +
-                                "AND dbs.disk_id IS NOT NULL")) {
-
-                    stmt.setString(1, location.getWorld().getName());
-                    stmt.setInt(2, location.getBlockX());
-                    stmt.setInt(3, location.getBlockY());
-                    stmt.setInt(4, location.getBlockZ());
-
-                    try (ResultSet rs = stmt.executeQuery()) {
-                        if (rs.next() && rs.getInt(1) > 0) {
-                            return true; // Found stored items in this drive bay
-                        }
-                    }
-                }
-            }
-        } catch (Exception e) {
-            plugin.getLogger().warning("Error checking for restored content: " + e.getMessage());
-        }
-        return false;
     }
 
     // Helper methods to check if blocks are OUR custom blocks
@@ -1009,136 +555,11 @@ public class BlockListener implements Listener {
         }
     }
 
-    /**
-     * Helper method to find network ID associated with a drive bay location from database
-     */
-    private String findDriveBayNetworkId(Location location) {
-        try (Connection conn = plugin.getDatabaseManager().getConnection()) {
-
-            // First try to find an active network ID
-            try (PreparedStatement stmt = conn.prepareStatement(
-                    "SELECT DISTINCT network_id FROM drive_bay_slots WHERE world_name = ? AND x = ? AND y = ? AND z = ? AND network_id NOT LIKE 'orphaned_%' LIMIT 1")) {
-
-                stmt.setString(1, location.getWorld().getName());
-                stmt.setInt(2, location.getBlockX());
-                stmt.setInt(3, location.getBlockY());
-                stmt.setInt(4, location.getBlockZ());
-
-                try (ResultSet rs = stmt.executeQuery()) {
-                    if (rs.next()) {
-                        return rs.getString("network_id");
-                    }
-                }
-            }
-
-            // If no active network found, look for orphaned drive bay slots
-            try (PreparedStatement stmt = conn.prepareStatement(
-                    "SELECT DISTINCT network_id FROM drive_bay_slots WHERE world_name = ? AND x = ? AND y = ? AND z = ? AND network_id LIKE 'orphaned_%' LIMIT 1")) {
-
-                stmt.setString(1, location.getWorld().getName());
-                stmt.setInt(2, location.getBlockX());
-                stmt.setInt(3, location.getBlockY());
-                stmt.setInt(4, location.getBlockZ());
-
-                try (ResultSet rs = stmt.executeQuery()) {
-                    if (rs.next()) {
-                        String orphanedNetworkId = rs.getString("network_id");
-                        plugin.getLogger().info("Found orphaned drive bay slots with network ID: " + orphanedNetworkId);
-                        return orphanedNetworkId;
-                    }
-                }
-            }
-
-        } catch (Exception e) {
-            plugin.getLogger().warning("Error finding drive bay network ID: " + e.getMessage());
-        }
-        return null;
-    }
-
     private String getBlockTypeFromItem(ItemStack item) {
         if (itemManager.isStorageServer(item)) return "STORAGE_SERVER";
         if (itemManager.isDriveBay(item)) return "DRIVE_BAY";
         if (itemManager.isMSSTerminal(item)) return "MSS_TERMINAL";
-        if (itemManager.isNetworkCable(item)) return "NETWORK_CABLE";
         return "UNKNOWN";
-    }
-
-    private String getBlockTypeFromBlock(Block block) {
-        if (isCustomStorageServer(block)) return "STORAGE_SERVER";
-        if (isCustomDriveBay(block)) return "DRIVE_BAY";
-        if (isCustomMSSTerminal(block)) return "MSS_TERMINAL";
-        if (isCustomNetworkCable(block)) return "NETWORK_CABLE";
-        return "UNKNOWN";
-    }
-
-    private void dropDriveBayContents(Location location, String networkId) {
-        plugin.getLogger().info("Dropping drive bay contents at " + location + " for network " + networkId);
-
-        try (Connection conn = plugin.getDatabaseManager().getConnection();
-             PreparedStatement stmt = conn.prepareStatement(
-                     "SELECT disk_id FROM drive_bay_slots WHERE world_name = ? AND x = ? AND y = ? AND z = ? AND disk_id IS NOT NULL")) {
-
-            stmt.setString(1, location.getWorld().getName());
-            stmt.setInt(2, location.getBlockX());
-            stmt.setInt(3, location.getBlockY());
-            stmt.setInt(4, location.getBlockZ());
-
-            List<String> diskIds = new ArrayList<>();
-            try (ResultSet rs = stmt.executeQuery()) {
-                while (rs.next()) {
-                    diskIds.add(rs.getString("disk_id"));
-                }
-            }
-
-            plugin.getLogger().info("Found " + diskIds.size() + " disks to drop from drive bay");
-
-            // Drop each disk and remove from database
-            for (String diskId : diskIds) {
-                // Get disk info for recreation
-                try (PreparedStatement diskStmt = conn.prepareStatement(
-                        "SELECT crafter_uuid, crafter_name, used_cells, max_cells FROM storage_disks WHERE disk_id = ?")) {
-                    diskStmt.setString(1, diskId);
-
-                    try (ResultSet diskRs = diskStmt.executeQuery()) {
-                        if (diskRs.next()) {
-                            String crafterUUID = diskRs.getString("crafter_uuid");
-                            String crafterName = diskRs.getString("crafter_name");
-                            int usedCells = diskRs.getInt("used_cells");
-                            int maxCells = diskRs.getInt("max_cells");
-
-                            // Create disk item with correct ID
-                            ItemStack disk = itemManager.createStorageDiskWithId(diskId, crafterUUID, crafterName);
-                            disk = itemManager.updateStorageDiskLore(disk, usedCells, maxCells);
-
-                            // Drop the disk
-                            location.getWorld().dropItemNaturally(location, disk);
-                            plugin.getLogger().info("Dropped disk " + diskId + " with " + usedCells + "/" + maxCells + " cells used");
-                        }
-                    }
-                }
-
-                // Remove from drive bay slots (but keep disk data in storage_disks and storage_items)
-                try (PreparedStatement deleteStmt = conn.prepareStatement(
-                        "DELETE FROM drive_bay_slots WHERE world_name = ? AND x = ? AND y = ? AND z = ? AND disk_id = ?")) {
-                    deleteStmt.setString(1, location.getWorld().getName());
-                    deleteStmt.setInt(2, location.getBlockX());
-                    deleteStmt.setInt(3, location.getBlockY());
-                    deleteStmt.setInt(4, location.getBlockZ());
-                    deleteStmt.setString(5, diskId);
-                    deleteStmt.executeUpdate();
-                }
-            }
-
-            // CRITICAL: Refresh all terminals in the network after drive bay destruction
-            if (!diskIds.isEmpty()) {
-                plugin.getGUIManager().refreshNetworkTerminals(networkId);
-                plugin.getLogger().info("Refreshed terminals after drive bay destruction containing " + diskIds.size() + " disks");
-            }
-
-        } catch (Exception e) {
-            plugin.getLogger().severe("Error dropping drive bay contents: " + e.getMessage());
-            e.printStackTrace();
-        }
     }
 
     private List<Location> getAdjacentLocations(Location center) {
@@ -1169,18 +590,7 @@ public class BlockListener implements Listener {
             return itemManager.createDriveBay();
         } else if (isCustomMSSTerminal(block)) {
             return itemManager.createMSSTerminal();
-        } else if (isCustomNetworkCable(block)) {
-            return itemManager.createNetworkCable();
         }
         return null;
-    }
-
-    private boolean isCustomNetworkCable(Block block) {
-        if (block.getType() != Material.HEAVY_CORE) return false;
-        return isMarkedAsCustomBlock(block.getLocation(), "NETWORK_CABLE");
-    }
-
-    private boolean isCustomNetworkBlockOrCable(Block block) {
-        return isCustomNetworkBlock(block) || isCustomNetworkCable(block);
     }
 }

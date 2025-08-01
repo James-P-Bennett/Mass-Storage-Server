@@ -6,6 +6,9 @@ network:
   # Maximum number of blocks allowed in a single network
   max_blocks: 128
 
+  # Maximum number of network cables allowed in a single network
+  max_cables: 800
+
   # Cooldown between operations in milliseconds (prevents spam)
   operation_cooldown: 100
 

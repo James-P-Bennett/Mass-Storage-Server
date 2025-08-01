@@ -1,6 +1,6 @@
 package org.jamesphbennett.massstorageserver.managers;
 
-import org.bukkit.ChatColor;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.inventory.ItemStack;
@@ -21,11 +21,13 @@ import java.util.UUID;
 public class ItemManager {
 
     private final MassStorageServer plugin;
+    private final MiniMessage miniMessage;
 
     // Namespace keys for identifying custom items
     private final NamespacedKey STORAGE_SERVER_KEY;
     private final NamespacedKey DRIVE_BAY_KEY;
     private final NamespacedKey MSS_TERMINAL_KEY;
+    private final NamespacedKey NETWORK_CABLE_KEY;
     private final NamespacedKey STORAGE_DISK_KEY;
     private final NamespacedKey DISK_ID_KEY;
     private final NamespacedKey DISK_CRAFTER_UUID_KEY;
@@ -36,10 +38,12 @@ public class ItemManager {
 
     public ItemManager(MassStorageServer plugin) {
         this.plugin = plugin;
+        this.miniMessage = MiniMessage.miniMessage();
 
         STORAGE_SERVER_KEY = new NamespacedKey(plugin, "storage_server");
         DRIVE_BAY_KEY = new NamespacedKey(plugin, "drive_bay");
         MSS_TERMINAL_KEY = new NamespacedKey(plugin, "mss_terminal");
+        NETWORK_CABLE_KEY = new NamespacedKey(plugin, "network_cable");
         STORAGE_DISK_KEY = new NamespacedKey(plugin, "storage_disk");
         DISK_ID_KEY = new NamespacedKey(plugin, "disk_id");
         DISK_CRAFTER_UUID_KEY = new NamespacedKey(plugin, "disk_crafter_uuid");
@@ -53,11 +57,11 @@ public class ItemManager {
         ItemStack item = new ItemStack(Material.CHISELED_TUFF);
         ItemMeta meta = item.getItemMeta();
 
-        meta.setDisplayName(ChatColor.GOLD + "Storage Server");
+        meta.setDisplayName(miniMessage.serialize(miniMessage.deserialize("<gold>Storage Server")));
 
         List<String> lore = new ArrayList<>();
-        lore.add(ChatColor.GRAY + "The core of the Mass Storage Network");
-        lore.add(ChatColor.GRAY + "Place adjacent to Drive Bays and Terminals");
+        lore.add(miniMessage.serialize(miniMessage.deserialize("<gray>The core of the Mass Storage Network")));
+        lore.add(miniMessage.serialize(miniMessage.deserialize("<gray>Place adjacent to Drive Bays and Terminals")));
         meta.setLore(lore);
 
         meta.setCustomModelData(1001);
@@ -71,11 +75,11 @@ public class ItemManager {
         ItemStack item = new ItemStack(Material.CHISELED_TUFF_BRICKS);
         ItemMeta meta = item.getItemMeta();
 
-        meta.setDisplayName(ChatColor.AQUA + "Drive Bay");
+        meta.setDisplayName(miniMessage.serialize(miniMessage.deserialize("<aqua>Drive Bay")));
 
         List<String> lore = new ArrayList<>();
-        lore.add(ChatColor.GRAY + "Holds up to 7 storage disks");
-        lore.add(ChatColor.GRAY + "Must be connected to a Storage Server");
+        lore.add(miniMessage.serialize(miniMessage.deserialize("<gray>Holds up to 7 storage disks")));
+        lore.add(miniMessage.serialize(miniMessage.deserialize("<gray>Must be connected to a Storage Server")));
         meta.setLore(lore);
 
         meta.setCustomModelData(1002);
@@ -89,15 +93,34 @@ public class ItemManager {
         ItemStack item = new ItemStack(Material.CRAFTER);
         ItemMeta meta = item.getItemMeta();
 
-        meta.setDisplayName(ChatColor.GREEN + "MSS Terminal");
+        meta.setDisplayName(miniMessage.serialize(miniMessage.deserialize("<green>MSS Terminal")));
 
         List<String> lore = new ArrayList<>();
-        lore.add(ChatColor.GRAY + "Access items stored in the network");
-        lore.add(ChatColor.GRAY + "Right-click to open storage interface");
+        lore.add(miniMessage.serialize(miniMessage.deserialize("<gray>Access items stored in the network")));
+        lore.add(miniMessage.serialize(miniMessage.deserialize("<gray>Right-click to open storage interface")));
         meta.setLore(lore);
 
         meta.setCustomModelData(1003);
         meta.getPersistentDataContainer().set(MSS_TERMINAL_KEY, PersistentDataType.BOOLEAN, true);
+
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    public ItemStack createNetworkCable() {
+        ItemStack item = new ItemStack(Material.HEAVY_CORE);
+        ItemMeta meta = item.getItemMeta();
+
+        meta.setDisplayName(miniMessage.serialize(miniMessage.deserialize("<blue>Network Cable")));
+
+        List<String> lore = new ArrayList<>();
+        lore.add(miniMessage.serialize(miniMessage.deserialize("<gray>Connects network components over distance")));
+        lore.add(miniMessage.serialize(miniMessage.deserialize("<gray>Place to extend your network reach")));
+        lore.add(miniMessage.serialize(miniMessage.deserialize("<yellow>Does not count toward block limit")));
+        meta.setLore(lore);
+
+        meta.setCustomModelData(1005);
+        meta.getPersistentDataContainer().set(NETWORK_CABLE_KEY, PersistentDataType.BOOLEAN, true);
 
         item.setItemMeta(meta);
         return item;
@@ -166,11 +189,11 @@ public class ItemManager {
 
         // Set display name with tier color
         String displayName = switch (tier) {
-            case "1k" -> ChatColor.WHITE + "Storage Disk [1K]";
-            case "4k" -> ChatColor.YELLOW + "Storage Disk [4K]";
-            case "16k" -> ChatColor.AQUA + "Storage Disk [16K]";
-            case "64k" -> ChatColor.LIGHT_PURPLE + "Storage Disk [64K]";
-            default -> ChatColor.WHITE + "Storage Disk [1K]";
+            case "1k" -> miniMessage.serialize(miniMessage.deserialize("<white>Storage Disk [1K]"));
+            case "4k" -> miniMessage.serialize(miniMessage.deserialize("<yellow>Storage Disk [4K]"));
+            case "16k" -> miniMessage.serialize(miniMessage.deserialize("<aqua>Storage Disk [16K]"));
+            case "64k" -> miniMessage.serialize(miniMessage.deserialize("<light_purple>Storage Disk [64K]"));
+            default -> miniMessage.serialize(miniMessage.deserialize("<white>Storage Disk [1K]"));
         };
         meta.setDisplayName(displayName);
 
@@ -179,14 +202,14 @@ public class ItemManager {
         int totalCapacity = defaultCells * itemsPerCell;
 
         List<String> lore = new ArrayList<>();
-        lore.add(ChatColor.GRAY + "Capacity: " + String.format("%,d", itemsPerCell) + " items per cell");
-        lore.add(ChatColor.YELLOW + "Cells Used: 0/" + defaultCells);
-        lore.add(ChatColor.AQUA + "Total Capacity: " + String.format("%,d", totalCapacity) + " items");
+        lore.add(miniMessage.serialize(miniMessage.deserialize("<gray>Capacity: " + String.format("%,d", itemsPerCell) + " items per cell")));
+        lore.add(miniMessage.serialize(miniMessage.deserialize("<yellow>Cells Used: 0/" + defaultCells)));
+        lore.add(miniMessage.serialize(miniMessage.deserialize("<aqua>Total Capacity: " + String.format("%,d", totalCapacity) + " items")));
         lore.add("");
-        lore.add(ChatColor.GRAY + "Tier: " + getTierDisplayName(tier));
+        lore.add(miniMessage.serialize(miniMessage.deserialize("<gray>Tier: " + getTierDisplayName(tier))));
         lore.add("");
-        lore.add(ChatColor.DARK_GRAY + "Crafted by: " + crafterName);
-        lore.add(ChatColor.DARK_GRAY + "ID: " + diskId);
+        lore.add(miniMessage.serialize(miniMessage.deserialize("<dark_gray>Crafted by: " + crafterName)));
+        lore.add(miniMessage.serialize(miniMessage.deserialize("<dark_gray>ID: " + diskId)));
         meta.setLore(lore);
 
         meta.setCustomModelData(1004 + getTierModelOffset(tier));
@@ -222,18 +245,18 @@ public class ItemManager {
         int totalCapacity = maxCells * itemsPerCell;
 
         // Color coding based on usage
-        ChatColor usageColor = (usedCells >= maxCells) ? ChatColor.RED :
-                (usedCells >= maxCells * 0.8) ? ChatColor.YELLOW : ChatColor.GREEN;
+        String usageColor = (usedCells >= maxCells) ? "<red>" :
+                (usedCells >= maxCells * 0.8) ? "<yellow>" : "<green>";
 
         List<String> lore = new ArrayList<>();
-        lore.add(ChatColor.GRAY + "Capacity: " + String.format("%,d", itemsPerCell) + " items per cell");
-        lore.add(usageColor + "Cells Used: " + usedCells + "/" + maxCells);
-        lore.add(ChatColor.AQUA + "Total Capacity: " + String.format("%,d", totalCapacity) + " items");
+        lore.add(miniMessage.serialize(miniMessage.deserialize("<gray>Capacity: " + String.format("%,d", itemsPerCell) + " items per cell")));
+        lore.add(miniMessage.serialize(miniMessage.deserialize(usageColor + "Cells Used: " + usedCells + "/" + maxCells)));
+        lore.add(miniMessage.serialize(miniMessage.deserialize("<aqua>Total Capacity: " + String.format("%,d", totalCapacity) + " items")));
         lore.add("");
-        lore.add(ChatColor.GRAY + "Tier: " + getTierDisplayName(tier));
+        lore.add(miniMessage.serialize(miniMessage.deserialize("<gray>Tier: " + getTierDisplayName(tier))));
         lore.add("");
-        lore.add(ChatColor.DARK_GRAY + "Crafted by: " + crafterName);
-        lore.add(ChatColor.DARK_GRAY + "ID: " + diskId);
+        lore.add(miniMessage.serialize(miniMessage.deserialize("<dark_gray>Crafted by: " + crafterName)));
+        lore.add(miniMessage.serialize(miniMessage.deserialize("<dark_gray>ID: " + diskId)));
         meta.setLore(lore);
 
         // Update persistent data
@@ -292,11 +315,11 @@ public class ItemManager {
      */
     public String getTierDisplayName(String tier) {
         return switch (tier.toLowerCase()) {
-            case "1k" -> ChatColor.WHITE + "1K";
-            case "4k" -> ChatColor.YELLOW + "4K";
-            case "16k" -> ChatColor.AQUA + "16K";
-            case "64k" -> ChatColor.LIGHT_PURPLE + "64K";
-            default -> ChatColor.WHITE + "1K";
+            case "1k" -> miniMessage.serialize(miniMessage.deserialize("<white>1K"));
+            case "4k" -> miniMessage.serialize(miniMessage.deserialize("<yellow>4K"));
+            case "16k" -> miniMessage.serialize(miniMessage.deserialize("<aqua>16K"));
+            case "64k" -> miniMessage.serialize(miniMessage.deserialize("<light_purple>64K"));
+            default -> miniMessage.serialize(miniMessage.deserialize("<white>1K"));
         };
     }
 
@@ -397,13 +420,18 @@ public class ItemManager {
         return item.getItemMeta().getPersistentDataContainer().has(MSS_TERMINAL_KEY, PersistentDataType.BOOLEAN);
     }
 
+    public boolean isNetworkCable(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) return false;
+        return item.getItemMeta().getPersistentDataContainer().has(NETWORK_CABLE_KEY, PersistentDataType.BOOLEAN);
+    }
+
     public boolean isStorageDisk(ItemStack item) {
         if (item == null || !item.hasItemMeta()) return false;
         return item.getItemMeta().getPersistentDataContainer().has(STORAGE_DISK_KEY, PersistentDataType.BOOLEAN);
     }
 
     public boolean isNetworkBlock(ItemStack item) {
-        return isStorageServer(item) || isDriveBay(item) || isMSSTerminal(item);
+        return isStorageServer(item) || isDriveBay(item) || isMSSTerminal(item) || isNetworkCable(item);
     }
 
     public String getStorageDiskId(ItemStack disk) {

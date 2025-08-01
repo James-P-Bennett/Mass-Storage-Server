@@ -20,12 +20,13 @@ public class RecipeManager {
         registerStorageServerRecipe();
         registerDriveBayRecipe();
         registerMSSTerminalRecipe();
+        registerNetworkCableRecipe();
         registerStorageDiskRecipe(); // 1k disk
         registerStorageDisk4kRecipe();
         registerStorageDisk16kRecipe();
         registerStorageDisk64kRecipe();
 
-        plugin.getLogger().info("Registered " + 7 + " custom recipes (including 4 disk tiers)");
+        plugin.getLogger().info("Registered " + 8 + " custom recipes (including Network Cable and 4 disk tiers)");
     }
 
     private void registerStorageServerRecipe() {
@@ -78,6 +79,25 @@ public class RecipeManager {
         recipe.setIngredient('S', Material.STONE);
         recipe.setIngredient('R', Material.REDSTONE);
         recipe.setIngredient('G', Material.GLASS_PANE);
+
+        plugin.getServer().addRecipe(recipe);
+    }
+
+    private void registerNetworkCableRecipe() {
+        NamespacedKey key = new NamespacedKey(plugin, "network_cable");
+        ItemStack result = itemManager.createNetworkCable();
+        result.setAmount(4); // Recipe yields 4 cables
+
+        ShapedRecipe recipe = new ShapedRecipe(key, result);
+        recipe.shape(
+                "GCG",
+                "CRC",
+                "GCG"
+        );
+
+        recipe.setIngredient('G', Material.GLASS_PANE);
+        recipe.setIngredient('C', Material.COPPER_INGOT);
+        recipe.setIngredient('R', Material.REDSTONE);
 
         plugin.getServer().addRecipe(recipe);
     }

@@ -15,6 +15,7 @@ public class ConfigManager {
 
     // Cached configuration values
     private int maxNetworkBlocks;
+    private int maxNetworkCables;
     private long operationCooldown;
     private int maxDriveBaySlots;
     private Set<Material> blacklistedItems;
@@ -57,10 +58,12 @@ public class ConfigManager {
         plugin.getLogger().info("Configuration loaded successfully!");
         plugin.getLogger().info("All storage disks hardcoded to " + HARDCODED_CELLS_PER_DISK + " cells");
         plugin.getLogger().info("Items per cell are tier-specific: 1K=127, 4K=508, 16K=2032, 64K=8128");
+        plugin.getLogger().info("Maximum network cables per network: " + maxNetworkCables);
     }
 
     private void loadNetworkSettings() {
         maxNetworkBlocks = config.getInt("network.max_blocks", 128);
+        maxNetworkCables = config.getInt("network.max_cables", 800);
         operationCooldown = config.getLong("network.operation_cooldown", 100);
     }
 
@@ -115,6 +118,10 @@ public class ConfigManager {
     // Getter methods for configuration values
     public int getMaxNetworkBlocks() {
         return maxNetworkBlocks;
+    }
+
+    public int getMaxNetworkCables() {
+        return maxNetworkCables;
     }
 
     public long getOperationCooldown() {

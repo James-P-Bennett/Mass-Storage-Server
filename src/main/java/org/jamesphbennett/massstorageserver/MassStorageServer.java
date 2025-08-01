@@ -12,11 +12,10 @@ import org.jamesphbennett.massstorageserver.network.NetworkManager;
 import org.jamesphbennett.massstorageserver.network.DisksManager;
 import org.jamesphbennett.massstorageserver.gui.GUIManager;
 
+import java.util.Objects;
 import java.util.logging.Level;
 
 public final class MassStorageServer extends JavaPlugin {
-
-    private static MassStorageServer instance;
 
     private ConfigManager configManager;
     private DatabaseManager databaseManager;
@@ -35,7 +34,6 @@ public final class MassStorageServer extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        instance = this;
 
         getLogger().info("Starting Mass Storage Server Plugin...");
 
@@ -51,7 +49,10 @@ public final class MassStorageServer extends JavaPlugin {
             networkManager = new NetworkManager(this);
             disksManager = new DisksManager(this);
             itemManager = new ItemManager(this);
+
+            // Initialize recipe manager AFTER config and item managers are ready
             recipeManager = new RecipeManager(this);
+
             cooldownManager = new CooldownManager(configManager.getOperationCooldown());
             storageManager = new StorageManager(this);
             guiManager = new GUIManager(this);
@@ -70,12 +71,13 @@ public final class MassStorageServer extends JavaPlugin {
             getServer().getPluginManager().registerEvents(new PistonListener(this), this);
 
             // Register commands
-            getCommand("mss").setExecutor(new MSSCommand(this));
+            Objects.requireNonNull(getCommand("mss")).setExecutor(new MSSCommand(this));
 
-            // Register recipes
+            // Register recipes AFTER everything else is initialized
             recipeManager.registerRecipes();
 
             getLogger().info("Mass Storage Server Plugin enabled successfully!");
+            getLogger().info("Registered " + recipeManager.getRegisteredRecipeCount() + " recipes");
 
         } catch (Exception e) {
             getLogger().log(Level.SEVERE, "Failed to enable Mass Storage Server Plugin!", e);
@@ -96,10 +98,6 @@ public final class MassStorageServer extends JavaPlugin {
         }
 
         getLogger().info("Mass Storage Server Plugin disabled successfully!");
-    }
-
-    public static MassStorageServer getInstance() {
-        return instance;
     }
 
     public ConfigManager getConfigManager() {

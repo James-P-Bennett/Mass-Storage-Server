@@ -1,0 +1,141 @@
+# Mass Storage Server - Recipe Configuration
+# This file defines all craftable recipes for the plugin
+# Edit this file to customize recipes or disable them entirely
+
+# Global recipe settings
+settings:
+  # Whether recipes should be registered at all
+  enabled: true
+  
+  # Whether to show recipe unlock messages to players
+  show_unlock_messages: false
+
+# Recipe definitions
+# Each recipe has:
+# - enabled: whether this specific recipe is active
+# - result: the item that will be crafted
+# - shape: the 3x3 crafting pattern (use spaces for empty slots)
+# - ingredients: mapping of letters to materials
+
+recipes:
+  storage_server:
+    enabled: true
+    result:
+      item: "storage_server"
+      amount: 1
+    shape:
+      - "NRN"
+      - "RAR"
+      - "NRN"
+    ingredients:
+      N: "NETHERITE_INGOT"
+      R: "REDSTONE"
+      A: "AMETHYST_SHARD"
+    description: "The core of the Mass Storage Network"
+
+  drive_bay:
+    enabled: true
+    result:
+      item: "drive_bay"
+      amount: 1
+    shape:
+      - "BOB"
+      - "CCC"
+      - "BOB"
+    ingredients:
+      B: "COPPER_BLOCK"
+      C: "CHEST"
+      O: "CRYING_OBSIDIAN"
+    description: "Holds up to 7 storage disks"
+
+  mss_terminal:
+    enabled: true
+    result:
+      item: "mss_terminal"
+      amount: 1
+    shape:
+      - "TTT"
+      - "QEQ"
+      - "DRD"
+    ingredients:
+      T: "TINTED_GLASS"
+      Q: "QUARTZ"
+      E: "EMERALD"
+      D: "DIAMOND"
+      R: "REDSTONE"
+    description: "Access items stored in the network"
+
+  network_cable:
+    enabled: true
+    result:
+      item: "network_cable"
+      amount: 4
+    shape:
+      - "GGG"
+      - "CRC"
+      - "GGG"
+    ingredients:
+      G: "GLASS_PANE"
+      C: "COPPER_INGOT"
+      R: "REDSTONE"
+    description: "Connects network components over distance"
+
+  storage_disk_1k:
+    enabled: true
+    result:
+      item: "storage_disk_1k"
+      amount: 1
+    shape:
+      - "IGI"
+      - "GDG"
+      - "IGI"
+    ingredients:
+      I: "IRON_INGOT"
+      G: "GLASS"
+      D: "DIAMOND"
+    description: "Basic storage disk - 1K tier"
+
+  storage_disk_4k:
+    enabled: true
+    result:
+      item: "storage_disk_4k"
+      amount: 1
+    shape:
+      - "GEG"
+      - "E1E"
+      - "GEG"
+    ingredients:
+      G: "GOLD_INGOT"
+      E: "EMERALD"
+      "1": "ACACIA_PRESSURE_PLATE"  # 1k disk item
+    description: "Advanced storage disk - 4K tier"
+
+  storage_disk_16k:
+    enabled: true
+    result:
+      item: "storage_disk_16k"
+      amount: 1
+    shape:
+      - "DND"
+      - "N4N"
+      - "DND"
+    ingredients:
+      D: "DIAMOND"
+      N: "NETHERITE_INGOT"
+      "4": "HEAVY_WEIGHTED_PRESSURE_PLATE"  # 4k disk item
+    description: "High-capacity storage disk - 16K tier"
+
+  storage_disk_64k:
+    enabled: true
+    result:
+      item: "storage_disk_64k"
+      amount: 1
+    shape:
+      - "ESE"
+      - "S6S"
+      - "ESE"
+    ingredients:
+      E: "ENDER_PEARL"
+      S: "NETHER_STAR"
+      "6": "LIGHT_WEIGHTED_PRESSURE_PLATE"  # 16k disk item
+    description: "Maximum-capacity storage disk - 64K tier"

@@ -1,6 +1,8 @@
 package org.jamesphbennett.massstorageserver.managers;
 
+import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.inventory.ItemStack;
@@ -22,6 +24,7 @@ public class ItemManager {
 
     private final MassStorageServer plugin;
     private final MiniMessage miniMessage;
+    private final LegacyComponentSerializer legacySerializer;
 
     // Namespace keys for identifying custom items
     private final NamespacedKey STORAGE_SERVER_KEY;
@@ -39,6 +42,7 @@ public class ItemManager {
     public ItemManager(MassStorageServer plugin) {
         this.plugin = plugin;
         this.miniMessage = MiniMessage.miniMessage();
+        this.legacySerializer = LegacyComponentSerializer.legacySection();
 
         STORAGE_SERVER_KEY = new NamespacedKey(plugin, "storage_server");
         DRIVE_BAY_KEY = new NamespacedKey(plugin, "drive_bay");
@@ -57,11 +61,12 @@ public class ItemManager {
         ItemStack item = new ItemStack(Material.CHISELED_TUFF);
         ItemMeta meta = item.getItemMeta();
 
-        meta.setDisplayName(miniMessage.serialize(miniMessage.deserialize("<gold>Storage Server")));
+        Component displayName = miniMessage.deserialize("<gold>Storage Server");
+        meta.setDisplayName(legacySerializer.serialize(displayName));
 
         List<String> lore = new ArrayList<>();
-        lore.add(miniMessage.serialize(miniMessage.deserialize("<gray>The core of the Mass Storage Network")));
-        lore.add(miniMessage.serialize(miniMessage.deserialize("<gray>Place adjacent to Drive Bays and Terminals")));
+        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>The core of the Mass Storage Network")));
+        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Place adjacent to Drive Bays and Terminals")));
         meta.setLore(lore);
 
         meta.setCustomModelData(1001);
@@ -75,11 +80,12 @@ public class ItemManager {
         ItemStack item = new ItemStack(Material.CHISELED_TUFF_BRICKS);
         ItemMeta meta = item.getItemMeta();
 
-        meta.setDisplayName(miniMessage.serialize(miniMessage.deserialize("<aqua>Drive Bay")));
+        Component displayName = miniMessage.deserialize("<aqua>Drive Bay");
+        meta.setDisplayName(legacySerializer.serialize(displayName));
 
         List<String> lore = new ArrayList<>();
-        lore.add(miniMessage.serialize(miniMessage.deserialize("<gray>Holds up to 7 storage disks")));
-        lore.add(miniMessage.serialize(miniMessage.deserialize("<gray>Must be connected to a Storage Server")));
+        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Holds up to 7 storage disks")));
+        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Must be connected to a Storage Server")));
         meta.setLore(lore);
 
         meta.setCustomModelData(1002);
@@ -93,11 +99,12 @@ public class ItemManager {
         ItemStack item = new ItemStack(Material.CRAFTER);
         ItemMeta meta = item.getItemMeta();
 
-        meta.setDisplayName(miniMessage.serialize(miniMessage.deserialize("<green>MSS Terminal")));
+        Component displayName = miniMessage.deserialize("<green>MSS Terminal");
+        meta.setDisplayName(legacySerializer.serialize(displayName));
 
         List<String> lore = new ArrayList<>();
-        lore.add(miniMessage.serialize(miniMessage.deserialize("<gray>Access items stored in the network")));
-        lore.add(miniMessage.serialize(miniMessage.deserialize("<gray>Right-click to open storage interface")));
+        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Access items stored in the network")));
+        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Right-click to open storage interface")));
         meta.setLore(lore);
 
         meta.setCustomModelData(1003);
@@ -111,12 +118,13 @@ public class ItemManager {
         ItemStack item = new ItemStack(Material.HEAVY_CORE);
         ItemMeta meta = item.getItemMeta();
 
-        meta.setDisplayName(miniMessage.serialize(miniMessage.deserialize("<blue>Network Cable")));
+        Component displayName = miniMessage.deserialize("<blue>Network Cable");
+        meta.setDisplayName(legacySerializer.serialize(displayName));
 
         List<String> lore = new ArrayList<>();
-        lore.add(miniMessage.serialize(miniMessage.deserialize("<gray>Connects network components over distance")));
-        lore.add(miniMessage.serialize(miniMessage.deserialize("<gray>Place to extend your network reach")));
-        lore.add(miniMessage.serialize(miniMessage.deserialize("<yellow>Does not count toward block limit")));
+        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Connects network components over distance")));
+        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Place to extend your network reach")));
+        lore.add(legacySerializer.serialize(miniMessage.deserialize("<yellow>Does not count toward block limit")));
         meta.setLore(lore);
 
         meta.setCustomModelData(1005);
@@ -188,28 +196,28 @@ public class ItemManager {
         int defaultCells = 64;
 
         // Set display name with tier color
-        String displayName = switch (tier) {
-            case "1k" -> miniMessage.serialize(miniMessage.deserialize("<white>Storage Disk [1K]"));
-            case "4k" -> miniMessage.serialize(miniMessage.deserialize("<yellow>Storage Disk [4K]"));
-            case "16k" -> miniMessage.serialize(miniMessage.deserialize("<aqua>Storage Disk [16K]"));
-            case "64k" -> miniMessage.serialize(miniMessage.deserialize("<light_purple>Storage Disk [64K]"));
-            default -> miniMessage.serialize(miniMessage.deserialize("<white>Storage Disk [1K]"));
+        Component displayName = switch (tier) {
+            case "1k" -> miniMessage.deserialize("<white>Storage Disk [1K]");
+            case "4k" -> miniMessage.deserialize("<yellow>Storage Disk [4K]");
+            case "16k" -> miniMessage.deserialize("<aqua>Storage Disk [16K]");
+            case "64k" -> miniMessage.deserialize("<light_purple>Storage Disk [64K]");
+            default -> miniMessage.deserialize("<white>Storage Disk [1K]");
         };
-        meta.setDisplayName(displayName);
+        meta.setDisplayName(legacySerializer.serialize(displayName));
 
         // Calculate capacity info
         int itemsPerCell = getItemsPerCellForTier(tier);
         int totalCapacity = defaultCells * itemsPerCell;
 
         List<String> lore = new ArrayList<>();
-        lore.add(miniMessage.serialize(miniMessage.deserialize("<gray>Capacity: " + String.format("%,d", itemsPerCell) + " items per cell")));
-        lore.add(miniMessage.serialize(miniMessage.deserialize("<yellow>Cells Used: 0/" + defaultCells)));
-        lore.add(miniMessage.serialize(miniMessage.deserialize("<aqua>Total Capacity: " + String.format("%,d", totalCapacity) + " items")));
+        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Capacity: " + String.format("%,d", itemsPerCell) + " items per cell")));
+        lore.add(legacySerializer.serialize(miniMessage.deserialize("<yellow>Cells Used: 0/" + defaultCells)));
+        lore.add(legacySerializer.serialize(miniMessage.deserialize("<aqua>Total Capacity: " + String.format("%,d", totalCapacity) + " items")));
         lore.add("");
-        lore.add(miniMessage.serialize(miniMessage.deserialize("<gray>Tier: " + getTierDisplayName(tier))));
+        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Tier: " + getTierDisplayName(tier))));
         lore.add("");
-        lore.add(miniMessage.serialize(miniMessage.deserialize("<dark_gray>Crafted by: " + crafterName)));
-        lore.add(miniMessage.serialize(miniMessage.deserialize("<dark_gray>ID: " + diskId)));
+        lore.add(legacySerializer.serialize(miniMessage.deserialize("<dark_gray>Crafted by: " + crafterName)));
+        lore.add(legacySerializer.serialize(miniMessage.deserialize("<dark_gray>ID: " + diskId)));
         meta.setLore(lore);
 
         meta.setCustomModelData(1004 + getTierModelOffset(tier));
@@ -249,14 +257,14 @@ public class ItemManager {
                 (usedCells >= maxCells * 0.8) ? "<yellow>" : "<green>";
 
         List<String> lore = new ArrayList<>();
-        lore.add(miniMessage.serialize(miniMessage.deserialize("<gray>Capacity: " + String.format("%,d", itemsPerCell) + " items per cell")));
-        lore.add(miniMessage.serialize(miniMessage.deserialize(usageColor + "Cells Used: " + usedCells + "/" + maxCells)));
-        lore.add(miniMessage.serialize(miniMessage.deserialize("<aqua>Total Capacity: " + String.format("%,d", totalCapacity) + " items")));
+        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Capacity: " + String.format("%,d", itemsPerCell) + " items per cell")));
+        lore.add(legacySerializer.serialize(miniMessage.deserialize(usageColor + "Cells Used: " + usedCells + "/" + maxCells)));
+        lore.add(legacySerializer.serialize(miniMessage.deserialize("<aqua>Total Capacity: " + String.format("%,d", totalCapacity) + " items")));
         lore.add("");
-        lore.add(miniMessage.serialize(miniMessage.deserialize("<gray>Tier: " + getTierDisplayName(tier))));
+        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Tier: " + getTierDisplayName(tier))));
         lore.add("");
-        lore.add(miniMessage.serialize(miniMessage.deserialize("<dark_gray>Crafted by: " + crafterName)));
-        lore.add(miniMessage.serialize(miniMessage.deserialize("<dark_gray>ID: " + diskId)));
+        lore.add(legacySerializer.serialize(miniMessage.deserialize("<dark_gray>Crafted by: " + crafterName)));
+        lore.add(legacySerializer.serialize(miniMessage.deserialize("<dark_gray>ID: " + diskId)));
         meta.setLore(lore);
 
         // Update persistent data
@@ -311,15 +319,15 @@ public class ItemManager {
     }
 
     /**
-     * Get tier display name with color
+     * Get tier display name with color - returns MiniMessage string for embedding
      */
     public String getTierDisplayName(String tier) {
         return switch (tier.toLowerCase()) {
-            case "1k" -> miniMessage.serialize(miniMessage.deserialize("<white>1K"));
-            case "4k" -> miniMessage.serialize(miniMessage.deserialize("<yellow>4K"));
-            case "16k" -> miniMessage.serialize(miniMessage.deserialize("<aqua>16K"));
-            case "64k" -> miniMessage.serialize(miniMessage.deserialize("<light_purple>64K"));
-            default -> miniMessage.serialize(miniMessage.deserialize("<white>1K"));
+            case "1k" -> "<white>1K";
+            case "4k" -> "<yellow>4K";
+            case "16k" -> "<aqua>16K";
+            case "64k" -> "<light_purple>64K";
+            default -> "<white>1K";
         };
     }
 

@@ -12,6 +12,8 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.block.BlockPistonExtendEvent;
+import org.bukkit.event.block.BlockPistonRetractEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -40,6 +42,111 @@ public class BlockListener implements Listener {
         this.plugin = plugin;
         this.itemManager = plugin.getItemManager();
         this.networkManager = plugin.getNetworkManager();
+    }
+
+    /**
+     * Prevent pistons from extending if they would push any custom MSS blocks
+     */
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onPistonExtend(BlockPistonExtendEvent event) {
+        if (event.isCancelled()) return;
+
+        // Check all blocks that would be moved by this piston
+        List<Block> blocksToMove = event.getBlocks();
+
+        for (Block block : blocksToMove) {
+            if (isCustomNetworkBlock(block)) {
+                // Found a custom MSS block in the path - cancel the entire piston event
+                event.setCancelled(true);
+                plugin.getLogger().info("Cancelled piston extend at " + event.getBlock().getLocation() +
+                        " - would move custom MSS block at " + block.getLocation());
+                return;
+            }
+        }
+
+        // Also check if the piston would push blocks into the space where custom blocks exist
+        // This handles cases where pistons push other blocks into our custom blocks
+        Block pistonBlock = event.getBlock();
+        org.bukkit.block.data.type.Piston pistonData = (org.bukkit.block.data.type.Piston) pistonBlock.getBlockData();
+        org.bukkit.block.BlockFace direction = pistonData.getFacing();
+
+        // Check each position where blocks would end up
+        for (Block sourceBlock : blocksToMove) {
+            // Calculate where this block would end up after being pushed
+            Location targetLocation = sourceBlock.getLocation().clone().add(
+                    direction.getModX(),
+                    direction.getModY(),
+                    direction.getModZ()
+            );
+
+            if (isCustomNetworkBlock(targetLocation.getBlock())) {
+                // A block would be pushed into a custom MSS block - cancel
+                event.setCancelled(true);
+                plugin.getLogger().info("Cancelled piston extend at " + event.getBlock().getLocation() +
+                        " - would push block into custom MSS block at " + targetLocation);
+                return;
+            }
+        }
+
+        // Also check the front of the piston head (where a single block would be pushed to)
+        if (!blocksToMove.isEmpty()) {
+            Block frontBlock = blocksToMove.getLast();
+            Location frontTarget = frontBlock.getLocation().clone().add(
+                    direction.getModX(),
+                    direction.getModY(),
+                    direction.getModZ()
+            );
+
+            if (isCustomNetworkBlock(frontTarget.getBlock())) {
+                event.setCancelled(true);
+                plugin.getLogger().info("Cancelled piston extend at " + event.getBlock().getLocation() +
+                        " - would push into custom MSS block at " + frontTarget);
+            }
+        }
+    }
+
+    /**
+     * Prevent pistons from retracting if they would pull any custom MSS blocks
+     */
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onPistonRetract(BlockPistonRetractEvent event) {
+        if (event.isCancelled()) return;
+
+        // Check all blocks that would be moved by this piston retraction
+        List<Block> blocksToMove = event.getBlocks();
+
+        for (Block block : blocksToMove) {
+            if (isCustomNetworkBlock(block)) {
+                // Found a custom MSS block in the path - cancel the entire piston event
+                event.setCancelled(true);
+                plugin.getLogger().info("Cancelled piston retract at " + event.getBlock().getLocation() +
+                        " - would move custom MSS block at " + block.getLocation());
+                return;
+            }
+        }
+
+        // For sticky pistons, also check if they would pull blocks into custom block spaces
+        Block pistonBlock = event.getBlock();
+        org.bukkit.block.data.type.Piston pistonData = (org.bukkit.block.data.type.Piston) pistonBlock.getBlockData();
+        org.bukkit.block.BlockFace direction = pistonData.getFacing();
+
+        // Check each position where blocks would end up after retraction
+        for (Block sourceBlock : blocksToMove) {
+            // Calculate where this block would end up after being pulled
+            Location targetLocation = sourceBlock.getLocation().clone().subtract(
+                    direction.getModX(),
+                    direction.getModY(),
+                    direction.getModZ()
+            );
+
+            if (isCustomNetworkBlock(targetLocation.getBlock())) {
+                // A block would be pulled into a custom MSS block - cancel
+                event.setCancelled(true);
+                plugin.getLogger().info("Cancelled piston retract at " + event.getBlock().getLocation() +
+                        " - would pull block into custom MSS block at " + targetLocation);
+                return;
+            }
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -331,11 +438,7 @@ public class BlockListener implements Listener {
         }
 
         // Schedule network updates after explosion
-        if (!customBlocksToHandle.isEmpty()) {
-            plugin.getServer().getScheduler().runTask(plugin, () -> {
-                updateNetworksAfterExplosion(customBlocksToHandle);
-            });
-        }
+        plugin.getServer().getScheduler().runTask(plugin, () -> updateNetworksAfterExplosion(customBlocksToHandle));
     }
 
     /**
@@ -710,9 +813,9 @@ public class BlockListener implements Listener {
             Component separator = Component.text("", NamedTextColor.GRAY);
             player.sendMessage(separator);
 
+            Component reasonLabel = Component.text("Reason: ", NamedTextColor.GRAY);
             if (network != null) {
                 // Network detected but invalid - give specific feedback
-                Component reasonLabel = Component.text("Reason: ", NamedTextColor.GRAY);
                 Component reasonValue;
 
                 if (network.getDriveBays().isEmpty()) {
@@ -726,7 +829,6 @@ public class BlockListener implements Listener {
                 player.sendMessage(reasonLabel.append(reasonValue));
             } else {
                 // No network detected at all
-                Component reasonLabel = Component.text("Reason: ", NamedTextColor.GRAY);
                 Component reasonValue = Component.text("No connected network blocks found", NamedTextColor.RED);
                 player.sendMessage(reasonLabel.append(reasonValue));
             }
@@ -737,18 +839,9 @@ public class BlockListener implements Listener {
     }
 
     /**
-     * Network statistics data class
-     */
-    private static class NetworkStats {
-        final int totalDisks;
-        final int totalItemTypes;
-        final long totalItems;
-
-        NetworkStats(int totalDisks, int totalItemTypes, long totalItems) {
-            this.totalDisks = totalDisks;
-            this.totalItemTypes = totalItemTypes;
-            this.totalItems = totalItems;
-        }
+         * Network statistics data class
+         */
+        private record NetworkStats(int totalDisks, int totalItemTypes, long totalItems) {
     }
 
     /**

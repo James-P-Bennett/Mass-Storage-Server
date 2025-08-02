@@ -244,6 +244,9 @@ public class BlockListener implements Listener {
      * Display storage server status information to a player
      */
     private void displayStorageServerStatus(Player player, String networkId) {
+        // Add debug logging
+        plugin.getLogger().info("Displaying storage server status for " + player.getName() + " with network ID: " + networkId);
+
         try (Connection conn = plugin.getDatabaseManager().getConnection()) {
             // Get network information
             String ownerUUID = null;
@@ -365,12 +368,17 @@ public class BlockListener implements Listener {
         plugin.getExplosionManager().handleExplosion(event.blockList(), event.getBlock().getLocation());
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.NORMAL)
     public void onPlayerInteract(PlayerInteractEvent event) {
         if (event.getClickedBlock() == null) return;
 
         // Only handle RIGHT CLICK events
         if (event.getAction() != org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK) {
+            return;
+        }
+
+        // CRITICAL: Only handle main hand interactions to prevent duplicate events
+        if (event.getHand() != org.bukkit.inventory.EquipmentSlot.HAND) {
             return;
         }
 
@@ -421,16 +429,20 @@ public class BlockListener implements Listener {
                 player.sendMessage(Component.text("Error accessing terminal: " + e.getMessage(), NamedTextColor.RED));
                 plugin.getLogger().severe("Error accessing terminal: " + e.getMessage());
             }
+            return; // FIXED: Add return to prevent fall-through
         }
 
         // Handle Storage Server interactions (only custom ones)
-        else if (isCustomStorageServer(block)) {
+        if (isCustomStorageServer(block)) {
             event.setCancelled(true);
 
             if (plugin.getConfigManager().isRequireUsePermission() && !player.hasPermission("massstorageserver.use")) {
                 player.sendMessage(Component.text("You don't have permission to view Storage Server information.", NamedTextColor.RED));
                 return;
             }
+
+            // Add debug logging
+            plugin.getLogger().info("Storage Server interaction by " + player.getName() + " at " + block.getLocation());
 
             try {
                 String networkId = networkManager.getNetworkId(block.getLocation());
@@ -447,10 +459,11 @@ public class BlockListener implements Listener {
                 player.sendMessage(Component.text("Error accessing Storage Server: " + e.getMessage(), NamedTextColor.RED));
                 plugin.getLogger().severe("Error accessing Storage Server: " + e.getMessage());
             }
+            return; // FIXED: Add return to prevent fall-through
         }
 
         // Handle Drive Bay interactions (only custom ones)
-        else if (isCustomDriveBay(block)) {
+        if (isCustomDriveBay(block)) {
             event.setCancelled(true);
 
             if (plugin.getConfigManager().isRequireUsePermission() && !player.hasPermission("massstorageserver.use")) {
@@ -485,6 +498,7 @@ public class BlockListener implements Listener {
                 player.sendMessage(Component.text("Error accessing drive bay: " + e.getMessage(), NamedTextColor.RED));
                 plugin.getLogger().severe("Error accessing drive bay: " + e.getMessage());
             }
+            return; // FIXED: Add return to prevent fall-through
         }
     }
 

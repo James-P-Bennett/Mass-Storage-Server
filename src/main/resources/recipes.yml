@@ -2,11 +2,18 @@
 # This file defines all craftable recipes for the plugin
 # Edit this file to customize recipes or disable them entirely
 
+# CUSTOM INGREDIENT NOTATION:
+# For MSS custom components, use the format: "mss:component_type:tier"
+# Examples:
+# - "mss:disk_platter:1k" = 1K Disk Platter component
+# - "mss:disk_platter:4k" = 4K Disk Platter component
+# - "mss:storage_disk_housing" = Storage Disk Housing component
+
 # Global recipe settings
 settings:
   # Whether recipes should be registered at all
   enabled: true
-  
+
   # Whether to show recipe unlock messages to players
   show_unlock_messages: false
 
@@ -15,7 +22,7 @@ settings:
 # - enabled: whether this specific recipe is active
 # - result: the item that will be crafted
 # - shape: the 3x3 crafting pattern (use spaces for empty slots)
-# - ingredients: mapping of letters to materials
+# - ingredients: mapping of letters to materials (vanilla) or custom components (mss:type:tier)
 
 recipes:
   storage_server:
@@ -108,7 +115,7 @@ recipes:
     ingredients:
       B: "BLAZE_ROD"
       G: "GOLD_INGOT"
-      "1": "STONE_BUTTON"  # 1k disk platter
+      "1": "mss:disk_platter:1k"  # CUSTOM: 1K disk platter component
       E: "ENDER_PEARL"
       R: "RESIN_BRICK"
     description: "4K tier disk platter component"
@@ -125,7 +132,7 @@ recipes:
     ingredients:
       B: "BREEZE_ROD"
       D: "DIAMOND"
-      "4": "GOLD_NUGGET"  # 4k disk platter
+      "4": "mss:disk_platter:4k"  # CUSTOM: 4K disk platter component
       P: "ENDER_PEARL"
       R: "RESIN_BRICK"
     description: "16K tier disk platter component"
@@ -142,7 +149,7 @@ recipes:
     ingredients:
       S: "SHULKER_SHELL"
       E: "ENDER_EYE"
-      "6": "CONDUIT"  # 16k disk platter
+      "6": "mss:disk_platter:16k"  # CUSTOM: 16K disk platter component
       P: "ENDER_PEARL"
       R: "RESIN_BRICK"
     description: "64K tier disk platter component"
@@ -176,7 +183,7 @@ recipes:
     ingredients:
       T: "TINTED_GLASS"
       I: "IRON_INGOT"
-      "1": "STONE_BUTTON"  # 1k disk platter
+      "1": "mss:disk_platter:1k"  # CUSTOM: 1K disk platter component
       W: "WIND_CHARGE"
     description: "Basic storage disk - 1K tier"
 
@@ -192,7 +199,7 @@ recipes:
     ingredients:
       T: "TINTED_GLASS"
       I: "IRON_INGOT"
-      "4": "GOLD_NUGGET"  # 4k disk platter
+      "4": "mss:disk_platter:4k"  # CUSTOM: 4K disk platter component
       W: "WIND_CHARGE"
     description: "Advanced storage disk - 4K tier"
 
@@ -208,7 +215,7 @@ recipes:
     ingredients:
       T: "TINTED_GLASS"
       I: "IRON_INGOT"
-      "6": "CONDUIT"  # 16k disk platter
+      "6": "mss:disk_platter:16k"  # CUSTOM: 16K disk platter component
       W: "WIND_CHARGE"
     description: "High-capacity storage disk - 16K tier"
 
@@ -224,6 +231,6 @@ recipes:
     ingredients:
       T: "TINTED_GLASS"
       I: "IRON_INGOT"
-      "6": "HEART_OF_THE_SEA"  # 64k disk platter
+      "6": "mss:disk_platter:64k"  # CUSTOM: 64K disk platter component
       W: "WIND_CHARGE"
     description: "Maximum-capacity storage disk - 64K tier"

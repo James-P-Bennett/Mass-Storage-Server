@@ -1,6 +1,7 @@
 package org.jamesphbennett.massstorageserver.managers;
 
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.inventory.ItemStack;
 import org.jamesphbennett.massstorageserver.MassStorageServer;
@@ -69,25 +70,28 @@ public class ExplosionManager {
             }
         }
 
-        // Remove custom block markers and drop custom items
-        Iterator<Block> iterator = blockList.iterator();
-        while (iterator.hasNext()) {
-            Block block = iterator.next();
-
+        // Handle custom blocks - let vanilla explosion destroy them but drop custom items
+        for (Block block : blockList) {
             if (isCustomNetworkBlock(block)) {
                 try {
-                    // Remove from explosion list so vanilla block isn't dropped
-                    iterator.remove();
+                    // CRITICAL FIX: Don't remove from explosion list - let vanilla mechanics destroy the block
+                    // But prevent vanilla drops by setting the block to air first, then drop our custom item
 
-                    // Drop our custom item instead
+                    // Get our custom item first
                     ItemStack customItem = getCustomItemForBlock(block);
+
+                    // Remove custom block marker from database
+                    removeCustomBlockMarker(block.getLocation());
+
+                    // Set block to air to prevent vanilla drops, but keep it in explosion list
+                    // The explosion system will still "destroy" it (no-op since it's already air)
+                    block.setType(Material.AIR);
+
+                    // Drop our custom item
                     if (customItem != null) {
                         block.getWorld().dropItemNaturally(block.getLocation(), customItem);
                         plugin.getLogger().info("Dropped custom item for " + getBlockTypeFromBlock(block) + " at " + block.getLocation());
                     }
-
-                    // Remove custom block marker
-                    removeCustomBlockMarker(block.getLocation());
 
                 } catch (Exception e) {
                     plugin.getLogger().severe("Error handling custom block explosion: " + e.getMessage());
@@ -117,6 +121,7 @@ public class ExplosionManager {
     private String findDriveBayNetworkIdFromDatabase(Location location) {
         return plugin.getDisksManager().findDriveBayNetworkId(location);
     }
+
     private void updateNetworksAfterExplosion(List<Block> destroyedBlocks) {
         Set<String> affectedNetworks = new HashSet<>();
 
@@ -184,7 +189,7 @@ public class ExplosionManager {
     }
 
     /**
-     * Update networks after explosion damage
+     * Remove a network from the database (ENHANCED with drive bay preservation)
      */
     private void removeCustomBlockMarker(Location location) {
         try {

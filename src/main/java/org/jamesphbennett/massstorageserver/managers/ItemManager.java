@@ -39,6 +39,11 @@ public class ItemManager {
     private final NamespacedKey DISK_MAX_CELLS_KEY;
     private final NamespacedKey DISK_TIER_KEY;
 
+    // Component namespace keys
+    private final NamespacedKey DISK_PLATTER_KEY;
+    private final NamespacedKey DISK_PLATTER_TIER_KEY;
+    private final NamespacedKey STORAGE_DISK_HOUSING_KEY;
+
     public ItemManager(MassStorageServer plugin) {
         this.plugin = plugin;
         this.miniMessage = MiniMessage.miniMessage();
@@ -55,6 +60,11 @@ public class ItemManager {
         DISK_USED_CELLS_KEY = new NamespacedKey(plugin, "disk_used_cells");
         DISK_MAX_CELLS_KEY = new NamespacedKey(plugin, "disk_max_cells");
         DISK_TIER_KEY = new NamespacedKey(plugin, "disk_tier");
+
+        // Component keys
+        DISK_PLATTER_KEY = new NamespacedKey(plugin, "disk_platter");
+        DISK_PLATTER_TIER_KEY = new NamespacedKey(plugin, "disk_platter_tier");
+        STORAGE_DISK_HOUSING_KEY = new NamespacedKey(plugin, "storage_disk_housing");
     }
 
     public ItemStack createStorageServer() {
@@ -132,6 +142,135 @@ public class ItemManager {
 
         item.setItemMeta(meta);
         return item;
+    }
+
+    // ==================== COMPONENT CREATION METHODS ====================
+
+    /**
+     * Create a Disk Platter for the specified tier
+     */
+    public ItemStack createDiskPlatter(String tier) {
+        Material material = getDiskPlatterMaterial(tier);
+        ItemStack item = new ItemStack(material);
+        ItemMeta meta = item.getItemMeta();
+
+        // Set display name with tier color
+        Component displayName = switch (tier.toLowerCase()) {
+            case "1k" -> miniMessage.deserialize("<white>Disk Platter [1K]");
+            case "4k" -> miniMessage.deserialize("<yellow>Disk Platter [4K]");
+            case "16k" -> miniMessage.deserialize("<aqua>Disk Platter [16K]");
+            case "64k" -> miniMessage.deserialize("<light_purple>Disk Platter [64K]");
+            default -> miniMessage.deserialize("<white>Disk Platter [1K]");
+        };
+        meta.setDisplayName(legacySerializer.serialize(displayName));
+
+        List<String> lore = new ArrayList<>();
+        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Component for crafting storage disks")));
+        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Tier: " + getTierDisplayName(tier))));
+        lore.add("");
+        lore.add(legacySerializer.serialize(miniMessage.deserialize("<dark_gray>Mass Storage Component")));
+        meta.setLore(lore);
+
+        meta.setCustomModelData(1006 + getDiskPlatterModelOffset(tier));
+
+        PersistentDataContainer pdc = meta.getPersistentDataContainer();
+        pdc.set(DISK_PLATTER_KEY, PersistentDataType.BOOLEAN, true);
+        pdc.set(DISK_PLATTER_TIER_KEY, PersistentDataType.STRING, tier);
+
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    /**
+     * Create a Storage Disk Housing
+     */
+    public ItemStack createStorageDiskHousing() {
+        ItemStack item = new ItemStack(Material.BAMBOO_PRESSURE_PLATE);
+        ItemMeta meta = item.getItemMeta();
+
+        Component displayName = miniMessage.deserialize("<gray>Storage Disk Housing");
+        meta.setDisplayName(legacySerializer.serialize(displayName));
+
+        List<String> lore = new ArrayList<>();
+        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Component for crafting storage disks")));
+        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Houses the disk platter and circuitry")));
+        lore.add("");
+        lore.add(legacySerializer.serialize(miniMessage.deserialize("<dark_gray>Mass Storage Component")));
+        meta.setLore(lore);
+
+        meta.setCustomModelData(1010);
+        meta.getPersistentDataContainer().set(STORAGE_DISK_HOUSING_KEY, PersistentDataType.BOOLEAN, true);
+
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    /**
+     * Get material for disk platter based on tier
+     */
+    private Material getDiskPlatterMaterial(String tier) {
+        return switch (tier.toLowerCase()) {
+            case "1k" -> Material.STONE_BUTTON;
+            case "4k" -> Material.GOLD_NUGGET;
+            case "16k" -> Material.CONDUIT;
+            case "64k" -> Material.HEART_OF_THE_SEA;
+            default -> Material.STONE_BUTTON;
+        };
+    }
+
+    /**
+     * Get model data offset for disk platter based on tier
+     */
+    private int getDiskPlatterModelOffset(String tier) {
+        return switch (tier.toLowerCase()) {
+            case "1k" -> 0;
+            case "4k" -> 1;
+            case "16k" -> 2;
+            case "64k" -> 3;
+            default -> 0;
+        };
+    }
+
+    // ==================== COMPONENT IDENTIFICATION METHODS ====================
+
+    /**
+     * Check if an item is a disk platter component
+     */
+    public boolean isDiskPlatter(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) return false;
+        return item.getItemMeta().getPersistentDataContainer().has(DISK_PLATTER_KEY, PersistentDataType.BOOLEAN);
+    }
+
+    /**
+     * Check if an item is a storage disk housing component
+     */
+    public boolean isStorageDiskHousing(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) return false;
+        return item.getItemMeta().getPersistentDataContainer().has(STORAGE_DISK_HOUSING_KEY, PersistentDataType.BOOLEAN);
+    }
+
+    /**
+     * Check if an item is any MSS component
+     */
+    public boolean isMSSComponent(ItemStack item) {
+        return isDiskPlatter(item) || isStorageDiskHousing(item);
+    }
+
+    /**
+     * Get the tier of a disk platter
+     */
+    public String getDiskPlatterTier(ItemStack item) {
+        if (!isDiskPlatter(item)) return null;
+        return item.getItemMeta().getPersistentDataContainer().get(DISK_PLATTER_TIER_KEY, PersistentDataType.STRING);
+    }
+
+    /**
+     * Check if an item is a specific tier disk platter
+     */
+    public boolean isDiskPlatterOfTier(ItemStack item, String tier) {
+        if (!isDiskPlatter(item)) return false;
+        String itemTier = getDiskPlatterTier(item);
+        return tier.equalsIgnoreCase(itemTier);
     }
 
     // ==================== TIERED DISK CREATION METHODS ====================
@@ -442,6 +581,13 @@ public class ItemManager {
         return isStorageServer(item) || isDriveBay(item) || isMSSTerminal(item) || isNetworkCable(item);
     }
 
+    /**
+     * Check if an item is any MSS item (blocks, disks, or components)
+     */
+    public boolean isMSSItem(ItemStack item) {
+        return isNetworkBlock(item) || isStorageDisk(item) || isMSSComponent(item);
+    }
+
     public String getStorageDiskId(ItemStack disk) {
         if (!isStorageDisk(disk)) return null;
         return disk.getItemMeta().getPersistentDataContainer().get(DISK_ID_KEY, PersistentDataType.STRING);
@@ -563,8 +709,8 @@ public class ItemManager {
      * Check if an item is allowed to be stored in the network
      */
     public boolean isItemAllowed(ItemStack item) {
-        // Block storage disks (hardcoded - always blocked)
-        if (isStorageDisk(item)) {
+        // Block all MSS items (disks, blocks, and components)
+        if (isMSSItem(item)) {
             return false;
         }
 

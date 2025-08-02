@@ -80,19 +80,104 @@ recipes:
       R: "REDSTONE"
     description: "Connects network components over distance"
 
+  # ==================== COMPONENT RECIPES ====================
+
+  disk_platter_1k:
+    enabled: true
+    result:
+      item: "disk_platter_1k"
+      amount: 1
+    shape:
+      - "RGR"
+      - "GRG"
+      - "RGR"
+    ingredients:
+      R: "REDSTONE"
+      G: "GOLD_INGOT"
+    description: "1K tier disk platter component"
+
+  disk_platter_4k:
+    enabled: true
+    result:
+      item: "disk_platter_4k"
+      amount: 1
+    shape:
+      - "BGB"
+      - "111"
+      - "ERE"
+    ingredients:
+      B: "BLAZE_ROD"
+      G: "GOLD_INGOT"
+      "1": "STONE_BUTTON"  # 1k disk platter
+      E: "ENDER_PEARL"
+      R: "RESIN_BRICK"
+    description: "4K tier disk platter component"
+
+  disk_platter_16k:
+    enabled: true
+    result:
+      item: "disk_platter_16k"
+      amount: 1
+    shape:
+      - "BDB"
+      - "444"
+      - "PRP"
+    ingredients:
+      B: "BREEZE_ROD"
+      D: "DIAMOND"
+      "4": "GOLD_NUGGET"  # 4k disk platter
+      P: "ENDER_PEARL"
+      R: "RESIN_BRICK"
+    description: "16K tier disk platter component"
+
+  disk_platter_64k:
+    enabled: true
+    result:
+      item: "disk_platter_64k"
+      amount: 1
+    shape:
+      - "SES"
+      - "666"
+      - "PRP"
+    ingredients:
+      S: "SHULKER_SHELL"
+      E: "ENDER_EYE"
+      "6": "CONDUIT"  # 16k disk platter
+      P: "ENDER_PEARL"
+      R: "RESIN_BRICK"
+    description: "64K tier disk platter component"
+
+  storage_disk_housing:
+    enabled: true
+    result:
+      item: "storage_disk_housing"
+      amount: 1
+    shape:
+      - "TTT"
+      - "I I"
+      - "IWI"
+    ingredients:
+      T: "TINTED_GLASS"
+      I: "IRON_INGOT"
+      W: "WIND_CHARGE"
+    description: "Housing component for storage disks"
+
+  # ==================== STORAGE DISK RECIPES ====================
+
   storage_disk_1k:
     enabled: true
     result:
       item: "storage_disk_1k"
       amount: 1
     shape:
-      - "IGI"
-      - "GDG"
-      - "IGI"
+      - "TTT"
+      - "I1I"
+      - "IWI"
     ingredients:
+      T: "TINTED_GLASS"
       I: "IRON_INGOT"
-      G: "GLASS"
-      D: "DIAMOND"
+      "1": "STONE_BUTTON"  # 1k disk platter
+      W: "WIND_CHARGE"
     description: "Basic storage disk - 1K tier"
 
   storage_disk_4k:
@@ -101,13 +186,14 @@ recipes:
       item: "storage_disk_4k"
       amount: 1
     shape:
-      - "GEG"
-      - "E1E"
-      - "GEG"
+      - "TTT"
+      - "I4I"
+      - "IWI"
     ingredients:
-      G: "GOLD_INGOT"
-      E: "EMERALD"
-      "1": "ACACIA_PRESSURE_PLATE"  # 1k disk item
+      T: "TINTED_GLASS"
+      I: "IRON_INGOT"
+      "4": "GOLD_NUGGET"  # 4k disk platter
+      W: "WIND_CHARGE"
     description: "Advanced storage disk - 4K tier"
 
   storage_disk_16k:
@@ -116,13 +202,14 @@ recipes:
       item: "storage_disk_16k"
       amount: 1
     shape:
-      - "DND"
-      - "N4N"
-      - "DND"
+      - "TTT"
+      - "I6I"
+      - "IWI"
     ingredients:
-      D: "DIAMOND"
-      N: "NETHERITE_INGOT"
-      "4": "HEAVY_WEIGHTED_PRESSURE_PLATE"  # 4k disk item
+      T: "TINTED_GLASS"
+      I: "IRON_INGOT"
+      "6": "CONDUIT"  # 16k disk platter
+      W: "WIND_CHARGE"
     description: "High-capacity storage disk - 16K tier"
 
   storage_disk_64k:
@@ -131,11 +218,12 @@ recipes:
       item: "storage_disk_64k"
       amount: 1
     shape:
-      - "ESE"
-      - "S6S"
-      - "ESE"
+      - "TTT"
+      - "I6I"
+      - "IWI"
     ingredients:
-      E: "ENDER_PEARL"
-      S: "NETHER_STAR"
-      "6": "LIGHT_WEIGHTED_PRESSURE_PLATE"  # 16k disk item
+      T: "TINTED_GLASS"
+      I: "IRON_INGOT"
+      "6": "HEART_OF_THE_SEA"  # 64k disk platter
+      W: "WIND_CHARGE"
     description: "Maximum-capacity storage disk - 64K tier"

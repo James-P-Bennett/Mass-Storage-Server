@@ -178,10 +178,13 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
         }
 
         ItemStack item = switch (args[1].toLowerCase()) {
+            // Network blocks
             case "server", "storage_server" -> plugin.getItemManager().createStorageServer();
             case "bay", "drive_bay" -> plugin.getItemManager().createDriveBay();
             case "terminal", "mss_terminal" -> plugin.getItemManager().createMSSTerminal();
             case "cable", "network_cable" -> plugin.getItemManager().createNetworkCable();
+
+            // Storage disks
             case "disk", "storage_disk", "disk1k" -> plugin.getItemManager().createStorageDisk(
                     target.getUniqueId().toString(), target.getName());
             case "disk4k" -> plugin.getItemManager().createStorageDisk4k(
@@ -190,6 +193,14 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
                     target.getUniqueId().toString(), target.getName());
             case "disk64k" -> plugin.getItemManager().createStorageDisk64k(
                     target.getUniqueId().toString(), target.getName());
+
+            // Components
+            case "housing", "disk_housing" -> plugin.getItemManager().createStorageDiskHousing();
+            case "platter1k", "platter_1k" -> plugin.getItemManager().createDiskPlatter("1k");
+            case "platter4k", "platter_4k" -> plugin.getItemManager().createDiskPlatter("4k");
+            case "platter16k", "platter_16k" -> plugin.getItemManager().createDiskPlatter("16k");
+            case "platter64k", "platter_64k" -> plugin.getItemManager().createDiskPlatter("64k");
+
             default -> null;
         };
 
@@ -197,6 +208,7 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Component.text("Invalid item type. Available:", NamedTextColor.RED));
             sender.sendMessage(Component.text("Blocks: server, bay, terminal, cable", NamedTextColor.YELLOW));
             sender.sendMessage(Component.text("Disks: disk1k, disk4k, disk16k, disk64k", NamedTextColor.YELLOW));
+            sender.sendMessage(Component.text("Components: housing, platter1k, platter4k, platter16k, platter64k", NamedTextColor.YELLOW));
             return;
         }
 
@@ -393,7 +405,14 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
         } else if (args.length == 2) {
             switch (args[0].toLowerCase()) {
                 case "give":
-                    List<String> items = Arrays.asList("server", "bay", "terminal", "cable", "disk1k", "disk4k", "disk16k", "disk64k");
+                    List<String> items = Arrays.asList(
+                            // Network blocks
+                            "server", "bay", "terminal", "cable",
+                            // Storage disks
+                            "disk1k", "disk4k", "disk16k", "disk64k",
+                            // Components
+                            "housing", "platter1k", "platter4k", "platter16k", "platter64k"
+                    );
                     for (String item : items) {
                         if (item.toLowerCase().startsWith(args[1].toLowerCase())) {
                             completions.add(item);

@@ -1,7 +1,7 @@
 package org.jamesphbennett.massstorageserver.listeners;
 
-import org.bukkit.ChatColor;
-import org.bukkit.Material;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -46,7 +46,7 @@ public class PlayerListener implements Listener {
             plugin.getServer().getScheduler().runTask(plugin, () -> {
                 boolean handled = plugin.getGUIManager().handleSearchInput(player, message);
                 if (!handled) {
-                    player.sendMessage(ChatColor.RED + "Search input expired. Please try again.");
+                    player.sendMessage(Component.text("Search input expired. Please try again.", NamedTextColor.RED));
                 }
             });
         }
@@ -66,7 +66,7 @@ public class PlayerListener implements Listener {
         plugin.getGUIManager().closeGUI(player);
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.HIGHEST)
     public void onCraftItem(CraftItemEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) {
             return;
@@ -77,60 +77,129 @@ public class PlayerListener implements Listener {
             return;
         }
 
-        // Check if this is any of our storage disk recipes
         String recipeKey = shapedRecipe.getKey().getKey();
+        String namespace = shapedRecipe.getKey().getNamespace();
 
-        if (isStorageDiskRecipe(shapedRecipe)) {
-            if (plugin.getConfigManager().isRequireCraftPermission() && !player.hasPermission("massstorageserver.craft")) {
+        // CRITICAL: Check if any MSS items are being used in non-MSS recipes
+        if (!namespace.equals(plugin.getName().toLowerCase())) {
+            // This is not an MSS recipe - check if any MSS items are being used
+            if (containsMSSItems(event)) {
                 event.setCancelled(true);
-                player.sendMessage(ChatColor.RED + "You don't have permission to craft Mass Storage items.");
+                player.sendMessage(Component.text("Mass Storage components cannot be used in vanilla recipes!", NamedTextColor.RED));
+                plugin.getLogger().info("Prevented player " + player.getName() + " from using MSS items in vanilla recipe: " + recipeKey);
                 return;
-            }
-
-            ItemStack storageDisk = null;
-            String diskType = "1k"; // Default
-
-            // Determine which tier is being crafted based on recipe key
-            switch (recipeKey) {
-                case "storage_disk" -> {
-                    storageDisk = itemManager.createStorageDisk(player.getUniqueId().toString(), player.getName());
-                    diskType = "1k";
-                }
-                case "storage_disk_4k" -> {
-                    storageDisk = itemManager.createStorageDisk4k(player.getUniqueId().toString(), player.getName());
-                    diskType = "4k";
-                }
-                case "storage_disk_16k" -> {
-                    storageDisk = itemManager.createStorageDisk16k(player.getUniqueId().toString(), player.getName());
-                    diskType = "16k";
-                }
-                case "storage_disk_64k" -> {
-                    storageDisk = itemManager.createStorageDisk64k(player.getUniqueId().toString(), player.getName());
-                    diskType = "64k";
-                }
-            }
-
-            if (storageDisk != null) {
-                // Replace the result with our custom item
-                event.setCurrentItem(storageDisk);
-
-                // Register the disk in the database
-                try {
-                    registerStorageDisk(storageDisk, player, diskType);
-                    player.sendMessage(ChatColor.GREEN + "Storage Disk [" + diskType.toUpperCase() + "] crafted successfully!");
-                } catch (SQLException e) {
-                    player.sendMessage(ChatColor.RED + "Error registering storage disk: " + e.getMessage());
-                    plugin.getLogger().severe("Error registering storage disk: " + e.getMessage());
-                }
             }
         }
-        // Check other MSS recipes and validate permissions
-        else if (isMSSRecipe(shapedRecipe)) {
+
+        // Check if this is any of our MSS recipes
+        if (isMSSRecipe(shapedRecipe)) {
+            // Check crafting permission
             if (plugin.getConfigManager().isRequireCraftPermission() && !player.hasPermission("massstorageserver.craft")) {
                 event.setCancelled(true);
-                player.sendMessage(ChatColor.RED + "You don't have permission to craft Mass Storage items.");
+                player.sendMessage(Component.text("You don't have permission to craft Mass Storage items.", NamedTextColor.RED));
                 return;
             }
+
+            // Handle storage disk recipes
+            if (isStorageDiskRecipe(shapedRecipe)) {
+                handleStorageDiskCrafting(event, player, recipeKey);
+            }
+            // Handle component recipes
+            else if (isComponentRecipe(shapedRecipe)) {
+                handleComponentCrafting(event, player, recipeKey);
+            }
+            // Other MSS recipes (blocks, cables, etc.) are handled normally by the recipe system
+        }
+    }
+
+    /**
+     * Check if the crafting matrix contains any MSS items
+     */
+    private boolean containsMSSItems(CraftItemEvent event) {
+        ItemStack[] matrix = event.getInventory().getMatrix();
+        for (ItemStack item : matrix) {
+            if (item != null && itemManager.isMSSItem(item)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Handle storage disk crafting with updated recipes
+     */
+    private void handleStorageDiskCrafting(CraftItemEvent event, Player player, String recipeKey) {
+        ItemStack storageDisk = null;
+        String diskType = "1k"; // Default
+
+        // Determine which tier is being crafted based on recipe key
+        switch (recipeKey) {
+            case "storage_disk_1k" -> {
+                storageDisk = itemManager.createStorageDisk(player.getUniqueId().toString(), player.getName());
+                diskType = "1k";
+            }
+            case "storage_disk_4k" -> {
+                storageDisk = itemManager.createStorageDisk4k(player.getUniqueId().toString(), player.getName());
+                diskType = "4k";
+            }
+            case "storage_disk_16k" -> {
+                storageDisk = itemManager.createStorageDisk16k(player.getUniqueId().toString(), player.getName());
+                diskType = "16k";
+            }
+            case "storage_disk_64k" -> {
+                storageDisk = itemManager.createStorageDisk64k(player.getUniqueId().toString(), player.getName());
+                diskType = "64k";
+            }
+        }
+
+        if (storageDisk != null) {
+            // Replace the result with our custom item
+            event.setCurrentItem(storageDisk);
+
+            // Register the disk in the database
+            try {
+                registerStorageDisk(storageDisk, player, diskType);
+                player.sendMessage(Component.text("Storage Disk [" + diskType.toUpperCase() + "] crafted successfully!", NamedTextColor.GREEN));
+            } catch (SQLException e) {
+                player.sendMessage(Component.text("Error registering storage disk: " + e.getMessage(), NamedTextColor.RED));
+                plugin.getLogger().severe("Error registering storage disk: " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Handle component crafting (disk platters, housing, etc.)
+     */
+    private void handleComponentCrafting(CraftItemEvent event, Player player, String recipeKey) {
+        ItemStack component = null;
+
+        switch (recipeKey) {
+            case "disk_platter_1k" -> {
+                component = itemManager.createDiskPlatter("1k");
+                player.sendMessage(Component.text("Disk Platter [1K] crafted successfully!", NamedTextColor.GREEN));
+            }
+            case "disk_platter_4k" -> {
+                component = itemManager.createDiskPlatter("4k");
+                player.sendMessage(Component.text("Disk Platter [4K] crafted successfully!", NamedTextColor.GREEN));
+            }
+            case "disk_platter_16k" -> {
+                component = itemManager.createDiskPlatter("16k");
+                player.sendMessage(Component.text("Disk Platter [16K] crafted successfully!", NamedTextColor.GREEN));
+            }
+            case "disk_platter_64k" -> {
+                component = itemManager.createDiskPlatter("64k");
+                player.sendMessage(Component.text("Disk Platter [64K] crafted successfully!", NamedTextColor.GREEN));
+            }
+            case "storage_disk_housing" -> {
+                component = itemManager.createStorageDiskHousing();
+                player.sendMessage(Component.text("Storage Disk Housing crafted successfully!", NamedTextColor.GREEN));
+            }
+        }
+
+        if (component != null) {
+            // Replace the result with our custom component
+            event.setCurrentItem(component);
+            plugin.getLogger().info("Player " + player.getName() + " crafted component: " + recipeKey);
         }
     }
 
@@ -139,8 +208,18 @@ public class PlayerListener implements Listener {
         String key = recipe.getKey().getKey();
 
         return namespace.equals(plugin.getName().toLowerCase()) &&
-                (key.equals("storage_disk") || key.equals("storage_disk_4k") ||
+                (key.equals("storage_disk_1k") || key.equals("storage_disk_4k") ||
                         key.equals("storage_disk_16k") || key.equals("storage_disk_64k"));
+    }
+
+    private boolean isComponentRecipe(ShapedRecipe recipe) {
+        String namespace = recipe.getKey().getNamespace();
+        String key = recipe.getKey().getKey();
+
+        return namespace.equals(plugin.getName().toLowerCase()) &&
+                (key.equals("disk_platter_1k") || key.equals("disk_platter_4k") ||
+                        key.equals("disk_platter_16k") || key.equals("disk_platter_64k") ||
+                        key.equals("storage_disk_housing"));
     }
 
     private void registerStorageDisk(ItemStack disk, Player player, String diskType) throws SQLException {

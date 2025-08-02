@@ -48,6 +48,14 @@ public class BlockListener implements Listener {
         // Prevent storage disks from being placed as blocks
         if (itemManager.isStorageDisk(item)) {
             event.setCancelled(true);
+            player.sendMessage(Component.text("Storage disks cannot be placed as blocks!", NamedTextColor.RED));
+            return;
+        }
+
+        // Prevent MSS components from being placed as blocks
+        if (itemManager.isMSSComponent(item)) {
+            event.setCancelled(true);
+            player.sendMessage(Component.text("Mass Storage components cannot be placed as blocks!", NamedTextColor.RED));
             return;
         }
 

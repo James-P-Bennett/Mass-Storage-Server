@@ -117,19 +117,27 @@ public class RecipeManager {
     }
 
     private Material parseMaterial(String materialName, String recipeName, String ingredientKey) throws Exception {
-        // Handle special cases for MSS items
+        // Handle special cases for MSS component items in recipes
         switch (materialName) {
-            case "ACACIA_PRESSURE_PLATE" -> {
-                // This might be referring to a 1K disk in disk upgrade recipes
-                return Material.ACACIA_PRESSURE_PLATE;
+            case "STONE_BUTTON" -> {
+                // This represents a 1K disk platter in upgrade recipes
+                return Material.STONE_BUTTON;
             }
-            case "HEAVY_WEIGHTED_PRESSURE_PLATE" -> {
-                // This might be referring to a 4K disk in disk upgrade recipes
-                return Material.HEAVY_WEIGHTED_PRESSURE_PLATE;
+            case "GOLD_NUGGET" -> {
+                // This represents a 4K disk platter in upgrade recipes
+                return Material.GOLD_NUGGET;
             }
-            case "LIGHT_WEIGHTED_PRESSURE_PLATE" -> {
-                // This might be referring to a 16K disk in disk upgrade recipes
-                return Material.LIGHT_WEIGHTED_PRESSURE_PLATE;
+            case "CONDUIT" -> {
+                // This represents a 16K disk platter in upgrade recipes
+                return Material.CONDUIT;
+            }
+            case "HEART_OF_THE_SEA" -> {
+                // This represents a 64K disk platter in upgrade recipes
+                return Material.HEART_OF_THE_SEA;
+            }
+            case "BAMBOO_PRESSURE_PLATE" -> {
+                // This represents a storage disk housing component
+                return Material.BAMBOO_PRESSURE_PLATE;
             }
         }
 
@@ -145,6 +153,7 @@ public class RecipeManager {
         ItemStack result;
 
         switch (itemType.toLowerCase()) {
+            // Network blocks
             case "storage_server":
                 result = itemManager.createStorageServer();
                 break;
@@ -157,6 +166,8 @@ public class RecipeManager {
             case "network_cable":
                 result = itemManager.createNetworkCable();
                 break;
+
+            // Storage disks
             case "storage_disk", "storage_disk_1k":
                 // Use generic crafter info for recipe preview
                 result = itemManager.createStorageDisk("00000000-0000-0000-0000-000000000000", "Unknown");
@@ -170,6 +181,24 @@ public class RecipeManager {
             case "storage_disk_64k":
                 result = itemManager.createStorageDisk64k("00000000-0000-0000-0000-000000000000", "Unknown");
                 break;
+
+            // Components
+            case "disk_platter_1k":
+                result = itemManager.createDiskPlatter("1k");
+                break;
+            case "disk_platter_4k":
+                result = itemManager.createDiskPlatter("4k");
+                break;
+            case "disk_platter_16k":
+                result = itemManager.createDiskPlatter("16k");
+                break;
+            case "disk_platter_64k":
+                result = itemManager.createDiskPlatter("64k");
+                break;
+            case "storage_disk_housing":
+                result = itemManager.createStorageDiskHousing();
+                break;
+
             default:
                 plugin.getLogger().warning("Unknown item type '" + itemType + "' for recipe '" + recipeName + "'");
                 return null;

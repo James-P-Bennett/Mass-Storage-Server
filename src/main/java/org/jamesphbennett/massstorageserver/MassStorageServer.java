@@ -10,6 +10,7 @@ import org.jamesphbennett.massstorageserver.managers.*;
 import org.jamesphbennett.massstorageserver.storage.StorageManager;
 import org.jamesphbennett.massstorageserver.network.NetworkManager;
 import org.jamesphbennett.massstorageserver.network.DisksManager;
+import org.jamesphbennett.massstorageserver.network.CableManager;
 import org.jamesphbennett.massstorageserver.gui.GUIManager;
 
 import java.util.Objects;
@@ -21,6 +22,7 @@ public final class MassStorageServer extends JavaPlugin {
     private DatabaseManager databaseManager;
     private NetworkManager networkManager;
     private DisksManager disksManager;
+    private CableManager cableManager;
     private ItemManager itemManager;
     private RecipeManager recipeManager;
     private CooldownManager cooldownManager;
@@ -48,6 +50,7 @@ public final class MassStorageServer extends JavaPlugin {
             // Initialize other managers
             networkManager = new NetworkManager(this);
             disksManager = new DisksManager(this);
+            cableManager = new CableManager(this);
             itemManager = new ItemManager(this);
 
             // Initialize recipe manager AFTER config and item managers are ready
@@ -114,6 +117,10 @@ public final class MassStorageServer extends JavaPlugin {
 
     public DisksManager getDisksManager() {
         return disksManager;
+    }
+
+    public CableManager getCableManager() {
+        return cableManager;
     }
 
     public ItemManager getItemManager() {

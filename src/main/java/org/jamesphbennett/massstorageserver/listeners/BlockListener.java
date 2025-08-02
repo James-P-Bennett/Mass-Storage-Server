@@ -19,6 +19,7 @@ import org.jamesphbennett.massstorageserver.MassStorageServer;
 import org.jamesphbennett.massstorageserver.managers.ItemManager;
 import org.jamesphbennett.massstorageserver.network.NetworkManager;
 import org.jamesphbennett.massstorageserver.network.NetworkInfo;
+import org.jamesphbennett.massstorageserver.network.CableManager;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -31,11 +32,13 @@ public class BlockListener implements Listener {
     private final MassStorageServer plugin;
     private final ItemManager itemManager;
     private final NetworkManager networkManager;
+    private final CableManager cableManager;
 
     public BlockListener(MassStorageServer plugin) {
         this.plugin = plugin;
         this.itemManager = plugin.getItemManager();
         this.networkManager = plugin.getNetworkManager();
+        this.cableManager = plugin.getCableManager();
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -59,8 +62,8 @@ public class BlockListener implements Listener {
             return;
         }
 
-        // Check if it's one of our CUSTOM network blocks (not just vanilla blocks)
-        if (!itemManager.isNetworkBlock(item)) {
+        // Check if it's one of our CUSTOM network blocks or cables
+        if (!itemManager.isNetworkBlock(item) && !itemManager.isNetworkCable(item)) {
             return;
         }
 
@@ -71,15 +74,43 @@ public class BlockListener implements Listener {
             return;
         }
 
-        // Mark this location as containing our custom block in the database (SYNCHRONOUSLY)
-        try {
-            markLocationAsCustomBlock(location, getBlockTypeFromItem(item));
-        } catch (Exception e) {
-            plugin.getLogger().severe("Error marking custom block location: " + e.getMessage());
-            // If we can't mark the block, cancel the placement
-            event.setCancelled(true);
-            player.sendMessage(Component.text("Error placing block: " + e.getMessage(), NamedTextColor.RED));
-            return;
+        // Handle network cable placement
+        if (itemManager.isNetworkCable(item)) {
+            if (!cableManager.handleCablePlacement(player, location)) {
+                event.setCancelled(true);
+                return;
+            }
+            // Cable placement successful, continue to network detection
+        } else {
+            // Handle network block placement with linking prevention
+            String blockType = getBlockTypeFromItem(item);
+
+            // Check for network linking conflicts
+            String linkingConflict = cableManager.checkNetworkLinkingConflict(location);
+            if (linkingConflict != null) {
+                event.setCancelled(true);
+                player.sendMessage(Component.text(linkingConflict, NamedTextColor.RED));
+                return;
+            }
+
+            // Check for storage server conflicts
+            String serverConflict = cableManager.checkStorageServerConflict(location, blockType);
+            if (serverConflict != null) {
+                event.setCancelled(true);
+                player.sendMessage(Component.text(serverConflict, NamedTextColor.RED));
+                return;
+            }
+
+            // Mark this location as containing our custom block in the database (SYNCHRONOUSLY)
+            try {
+                markLocationAsCustomBlock(location, blockType);
+            } catch (Exception e) {
+                plugin.getLogger().severe("Error marking custom block location: " + e.getMessage());
+                // If we can't mark the block, cancel the placement
+                event.setCancelled(true);
+                player.sendMessage(Component.text("Error placing block: " + e.getMessage(), NamedTextColor.RED));
+                return;
+            }
         }
 
         // Schedule network detection for next tick (after block is placed)
@@ -88,9 +119,11 @@ public class BlockListener implements Listener {
                 NetworkInfo network = networkManager.detectNetwork(location);
 
                 if (network != null && network.isValid()) {
-                    // Check network size limit
+                    // Check network size limit (blocks only, not cables)
                     int maxBlocks = plugin.getConfigManager().getMaxNetworkBlocks();
-                    if (network.getAllBlocks().size() > maxBlocks) {
+                    int networkBlockCount = network.getAllBlocks().size() - network.getNetworkCables().size();
+
+                    if (networkBlockCount > maxBlocks) {
                         // Network exceeds size limit - break the block and give it back
                         block.setType(Material.AIR);
                         removeCustomBlockMarker(location);
@@ -107,7 +140,8 @@ public class BlockListener implements Listener {
 
                     player.sendMessage(Component.text("Mass Storage Network formed successfully!", NamedTextColor.GREEN));
                     player.sendMessage(Component.text("Network ID: " + network.getNetworkId(), NamedTextColor.GRAY));
-                    player.sendMessage(Component.text("Network Size: " + network.getAllBlocks().size() + "/" + maxBlocks + " blocks", NamedTextColor.GRAY));
+                    player.sendMessage(Component.text("Network Size: " + networkBlockCount + "/" + maxBlocks + " blocks, " +
+                            network.getNetworkCables().size() + "/" + plugin.getConfigManager().getMaxNetworkCables() + " cables", NamedTextColor.GRAY));
 
                     if (hasRestoredContent) {
                         player.sendMessage(Component.text("Restored drive bay contents from previous network!", NamedTextColor.AQUA));
@@ -123,7 +157,9 @@ public class BlockListener implements Listener {
                             if (expandedNetwork != null && expandedNetwork.isValid()) {
                                 // Check network size limit
                                 int maxBlocks = plugin.getConfigManager().getMaxNetworkBlocks();
-                                if (expandedNetwork.getAllBlocks().size() > maxBlocks) {
+                                int networkBlockCount = expandedNetwork.getAllBlocks().size() - expandedNetwork.getNetworkCables().size();
+
+                                if (networkBlockCount > maxBlocks) {
                                     // Network exceeds size limit - break the block and give it back
                                     block.setType(Material.AIR);
                                     removeCustomBlockMarker(location);
@@ -139,7 +175,8 @@ public class BlockListener implements Listener {
                                 boolean hasRestoredContent = plugin.getDisksManager().checkForRestoredContent(expandedNetwork.getDriveBays());
 
                                 player.sendMessage(Component.text("Block added to existing network!", NamedTextColor.GREEN));
-                                player.sendMessage(Component.text("Network Size: " + expandedNetwork.getAllBlocks().size() + "/" + maxBlocks + " blocks", NamedTextColor.GRAY));
+                                player.sendMessage(Component.text("Network Size: " + networkBlockCount + "/" + maxBlocks + " blocks, " +
+                                        expandedNetwork.getNetworkCables().size() + "/" + plugin.getConfigManager().getMaxNetworkCables() + " cables", NamedTextColor.GRAY));
 
                                 if (hasRestoredContent) {
                                     player.sendMessage(Component.text("Restored drive bay contents!", NamedTextColor.AQUA));
@@ -152,6 +189,8 @@ public class BlockListener implements Listener {
 
                     if (itemManager.isStorageServer(item)) {
                         player.sendMessage(Component.text("Storage Server requires Drive Bays and Terminals to form a network.", NamedTextColor.YELLOW));
+                    } else if (itemManager.isNetworkCable(item)) {
+                        player.sendMessage(Component.text("Cable placed. Connect to network blocks to extend your network.", NamedTextColor.YELLOW));
                     } else {
                         player.sendMessage(Component.text("This block needs to be connected to a Storage Server to function.", NamedTextColor.YELLOW));
                     }
@@ -170,8 +209,8 @@ public class BlockListener implements Listener {
         Block block = event.getBlock();
         Location location = block.getLocation();
 
-        // Check if it's one of our CUSTOM network blocks (not just vanilla blocks)
-        if (!isCustomNetworkBlock(block)) {
+        // Check if it's one of our CUSTOM network blocks or cables
+        if (!isCustomNetworkBlockOrCable(block)) {
             return;
         }
 
@@ -208,14 +247,16 @@ public class BlockListener implements Listener {
                         boolean networkStillValid = false;
 
                         for (Location adjacent : getAdjacentLocations(location)) {
-                            if (isCustomNetworkBlock(adjacent.getBlock())) {
+                            if (isCustomNetworkBlockOrCable(adjacent.getBlock())) {
                                 NetworkInfo updatedNetwork = networkManager.detectNetwork(adjacent);
                                 if (updatedNetwork != null && updatedNetwork.isValid()) {
                                     networkManager.registerNetwork(updatedNetwork, player.getUniqueId());
                                     networkStillValid = true;
                                     player.sendMessage(Component.text("Network updated after block removal.", NamedTextColor.YELLOW));
                                     int maxBlocks = plugin.getConfigManager().getMaxNetworkBlocks();
-                                    player.sendMessage(Component.text("Network Size: " + updatedNetwork.getAllBlocks().size() + "/" + maxBlocks + " blocks", NamedTextColor.GRAY));
+                                    int networkBlockCount = updatedNetwork.getAllBlocks().size() - updatedNetwork.getNetworkCables().size();
+                                    player.sendMessage(Component.text("Network Size: " + networkBlockCount + "/" + maxBlocks + " blocks, " +
+                                            updatedNetwork.getNetworkCables().size() + "/" + plugin.getConfigManager().getMaxNetworkCables() + " cables", NamedTextColor.GRAY));
                                     break;
                                 }
                             }
@@ -265,12 +306,19 @@ public class BlockListener implements Listener {
 
             // Get network block count
             int blockCount = 0;
+            int cableCount = 0;
             try (PreparedStatement stmt = conn.prepareStatement(
-                    "SELECT COUNT(*) FROM network_blocks WHERE network_id = ?")) {
+                    "SELECT block_type, COUNT(*) as count FROM network_blocks WHERE network_id = ? GROUP BY block_type")) {
                 stmt.setString(1, networkId);
                 try (ResultSet rs = stmt.executeQuery()) {
-                    if (rs.next()) {
-                        blockCount = rs.getInt(1);
+                    while (rs.next()) {
+                        String blockType = rs.getString("block_type");
+                        int count = rs.getInt("count");
+                        if ("NETWORK_CABLE".equals(blockType)) {
+                            cableCount = count;
+                        } else {
+                            blockCount += count;
+                        }
                     }
                 }
             }
@@ -329,6 +377,7 @@ public class BlockListener implements Listener {
             }
 
             player.sendMessage(Component.text("Network Size: " + blockCount + "/" + plugin.getConfigManager().getMaxNetworkBlocks() + " blocks", NamedTextColor.AQUA));
+            player.sendMessage(Component.text("Network Cables: " + cableCount + "/" + plugin.getConfigManager().getMaxNetworkCables() + " cables", NamedTextColor.BLUE));
             player.sendMessage(Component.text("Drive Bays: " + driveBayCount, NamedTextColor.YELLOW));
             player.sendMessage(Component.text("Terminals: " + terminalCount, NamedTextColor.GREEN));
             player.sendMessage(Component.text("Storage Disks: " + diskCount, NamedTextColor.LIGHT_PURPLE));
@@ -498,11 +547,15 @@ public class BlockListener implements Listener {
                 player.sendMessage(Component.text("Error accessing drive bay: " + e.getMessage(), NamedTextColor.RED));
                 plugin.getLogger().severe("Error accessing drive bay: " + e.getMessage());
             }
-            return; // FIXED: Add return to prevent fall-through
+            // FIXED: Add return to prevent fall-through
         }
     }
 
-    // Helper methods to check if blocks are OUR custom blocks
+    // Helper methods to check if blocks are OUR custom blocks or cables
+    private boolean isCustomNetworkBlockOrCable(Block block) {
+        return isCustomNetworkBlock(block) || cableManager.isCustomNetworkCable(block);
+    }
+
     private boolean isCustomNetworkBlock(Block block) {
         return isCustomStorageServer(block) || isCustomDriveBay(block) || isCustomMSSTerminal(block);
     }
@@ -581,6 +634,7 @@ public class BlockListener implements Listener {
         if (itemManager.isStorageServer(item)) return "STORAGE_SERVER";
         if (itemManager.isDriveBay(item)) return "DRIVE_BAY";
         if (itemManager.isMSSTerminal(item)) return "MSS_TERMINAL";
+        if (itemManager.isNetworkCable(item)) return "NETWORK_CABLE";
         return "UNKNOWN";
     }
 
@@ -612,6 +666,8 @@ public class BlockListener implements Listener {
             return itemManager.createDriveBay();
         } else if (isCustomMSSTerminal(block)) {
             return itemManager.createMSSTerminal();
+        } else if (cableManager.isCustomNetworkCable(block)) {
+            return itemManager.createNetworkCable();
         }
         return null;
     }

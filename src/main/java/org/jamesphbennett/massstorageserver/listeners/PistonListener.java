@@ -27,7 +27,7 @@ public class PistonListener implements Listener {
     }
 
     /**
-     * Prevent pistons from extending if they would push any custom MSS blocks
+     * Prevent pistons from extending if they would push any custom MSS blocks or cables
      */
     @EventHandler(priority = EventPriority.HIGH)
     public void onPistonExtend(BlockPistonExtendEvent event) {
@@ -38,14 +38,14 @@ public class PistonListener implements Listener {
 
         for (Block block : blocksToMove) {
             if (isCustomNetworkBlockOrCable(block)) {
-                // Found a custom MSS block in the path - cancel the entire piston event
+                // Found a custom MSS block or cable in the path - cancel the entire piston event
                 event.setCancelled(true);
                 plugin.getLogger().info("Cancelled piston extend at " + event.getBlock().getLocation() +
-                        " - would move custom MSS block at " + block.getLocation());
+                        " - would move custom MSS block/cable at " + block.getLocation());
 
                 // Notify nearby players
                 notifyNearbyPlayers(event.getBlock().getLocation(),
-                        Component.text("Pistons cannot move Mass Storage blocks!", NamedTextColor.RED));
+                        Component.text("Pistons cannot move Mass Storage blocks or cables!", NamedTextColor.RED));
                 return;
             }
         }
@@ -53,7 +53,13 @@ public class PistonListener implements Listener {
         // Also check if the piston would push blocks into the space where custom blocks exist
         // This handles cases where pistons push other blocks into our custom blocks
         Block pistonBlock = event.getBlock();
-        org.bukkit.block.data.type.Piston pistonData = (org.bukkit.block.data.type.Piston) pistonBlock.getBlockData();
+
+        // FIXED: Safe type checking to prevent ClassCastException
+        if (!(pistonBlock.getBlockData() instanceof org.bukkit.block.data.type.Piston pistonData)) {
+            plugin.getLogger().warning("Piston block data is not of type Piston: " + pistonBlock.getBlockData().getClass().getSimpleName());
+            return;
+        }
+
         org.bukkit.block.BlockFace direction = pistonData.getFacing();
 
         // Check each position where blocks would end up
@@ -65,15 +71,15 @@ public class PistonListener implements Listener {
                     direction.getModZ()
             );
 
-            if (isCustomNetworkBlock(targetLocation.getBlock())) {
+            if (isCustomNetworkBlockOrCable(targetLocation.getBlock())) {
                 // A block would be pushed into a custom MSS block - cancel
                 event.setCancelled(true);
                 plugin.getLogger().info("Cancelled piston extend at " + event.getBlock().getLocation() +
-                        " - would push block into custom MSS block at " + targetLocation);
+                        " - would push block into custom MSS block/cable at " + targetLocation);
 
                 // Notify nearby players
                 notifyNearbyPlayers(event.getBlock().getLocation(),
-                        Component.text("Pistons cannot push blocks into Mass Storage blocks!", NamedTextColor.RED));
+                        Component.text("Pistons cannot push blocks into Mass Storage blocks or cables!", NamedTextColor.RED));
                 return;
             }
         }
@@ -87,20 +93,20 @@ public class PistonListener implements Listener {
                     direction.getModZ()
             );
 
-            if (isCustomNetworkBlock(frontTarget.getBlock())) {
+            if (isCustomNetworkBlockOrCable(frontTarget.getBlock())) {
                 event.setCancelled(true);
                 plugin.getLogger().info("Cancelled piston extend at " + event.getBlock().getLocation() +
-                        " - would push into custom MSS block at " + frontTarget);
+                        " - would push into custom MSS block/cable at " + frontTarget);
 
                 // Notify nearby players
                 notifyNearbyPlayers(event.getBlock().getLocation(),
-                        Component.text("Pistons cannot push into Mass Storage blocks!", NamedTextColor.RED));
+                        Component.text("Pistons cannot push into Mass Storage blocks or cables!", NamedTextColor.RED));
             }
         }
     }
 
     /**
-     * Prevent pistons from retracting if they would pull any custom MSS blocks
+     * Prevent pistons from retracting if they would pull any custom MSS blocks or cables
      */
     @EventHandler(priority = EventPriority.HIGH)
     public void onPistonRetract(BlockPistonRetractEvent event) {
@@ -111,21 +117,27 @@ public class PistonListener implements Listener {
 
         for (Block block : blocksToMove) {
             if (isCustomNetworkBlockOrCable(block)) {
-                // Found a custom MSS block in the path - cancel the entire piston event
+                // Found a custom MSS block or cable in the path - cancel the entire piston event
                 event.setCancelled(true);
                 plugin.getLogger().info("Cancelled piston retract at " + event.getBlock().getLocation() +
-                        " - would move custom MSS block at " + block.getLocation());
+                        " - would move custom MSS block/cable at " + block.getLocation());
 
                 // Notify nearby players
                 notifyNearbyPlayers(event.getBlock().getLocation(),
-                        Component.text("Pistons cannot pull Mass Storage blocks!", NamedTextColor.RED));
+                        Component.text("Pistons cannot pull Mass Storage blocks or cables!", NamedTextColor.RED));
                 return;
             }
         }
 
         // For sticky pistons, also check if they would pull blocks into custom block spaces
         Block pistonBlock = event.getBlock();
-        org.bukkit.block.data.type.Piston pistonData = (org.bukkit.block.data.type.Piston) pistonBlock.getBlockData();
+
+        // FIXED: Safe type checking to prevent ClassCastException
+        if (!(pistonBlock.getBlockData() instanceof org.bukkit.block.data.type.Piston pistonData)) {
+            plugin.getLogger().warning("Piston block data is not of type Piston: " + pistonBlock.getBlockData().getClass().getSimpleName());
+            return;
+        }
+
         org.bukkit.block.BlockFace direction = pistonData.getFacing();
 
         // Check each position where blocks would end up after retraction
@@ -137,18 +149,35 @@ public class PistonListener implements Listener {
                     direction.getModZ()
             );
 
-            if (isCustomNetworkBlock(targetLocation.getBlock())) {
+            if (isCustomNetworkBlockOrCable(targetLocation.getBlock())) {
                 // A block would be pulled into a custom MSS block - cancel
                 event.setCancelled(true);
                 plugin.getLogger().info("Cancelled piston retract at " + event.getBlock().getLocation() +
-                        " - would pull block into custom MSS block at " + targetLocation);
+                        " - would pull block into custom MSS block/cable at " + targetLocation);
 
                 // Notify nearby players
                 notifyNearbyPlayers(event.getBlock().getLocation(),
-                        Component.text("Pistons cannot pull blocks into Mass Storage blocks!", NamedTextColor.RED));
+                        Component.text("Pistons cannot pull blocks into Mass Storage blocks or cables!", NamedTextColor.RED));
                 return;
             }
         }
+    }
+
+    /**
+     * Check if a block is a custom network block or cable
+     */
+    private boolean isCustomNetworkBlockOrCable(Block block) {
+        if (block == null || block.getType().isAir()) {
+            return false;
+        }
+
+        // Check for custom network blocks (storage server, drive bay, terminal)
+        if (isCustomNetworkBlock(block)) {
+            return true;
+        }
+
+        // Check for custom network cables
+        return plugin.getCableManager().isCustomNetworkCable(block);
     }
 
     /**
@@ -169,15 +198,6 @@ public class PistonListener implements Listener {
 
         // Then check if this specific location is marked as an MSS block in our database
         return isMarkedAsMSSBlock(block.getLocation());
-    }
-
-    /**
-     * Check if a block is a custom network block or cable (for future cable support)
-     * Currently just checks for MSS blocks, but ready for cable expansion
-     */
-    private boolean isCustomNetworkBlockOrCable(Block block) {
-        // Currently we only have MSS blocks, but this method is ready for future cable support
-        return isCustomNetworkBlock(block);
     }
 
     /**

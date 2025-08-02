@@ -20,6 +20,9 @@ public class NetworkManager {
     // Network locks for thread safety
     private final Map<String, ReentrantLock> networkLocks = new ConcurrentHashMap<>();
 
+    // Flag to reduce redundant drive bay restoration logging
+    private final Set<String> restorationLoggedNetworks = new HashSet<>();
+
     public NetworkManager(MassStorageServer plugin) {
         this.plugin = plugin;
     }
@@ -45,26 +48,6 @@ public class NetworkManager {
     }
 
     /**
-     * Check if placing a network cable would connect to another existing network
-     */
-    public boolean wouldConnectToAnotherNetwork(Location location) {
-        Set<String> adjacentNetworks = new HashSet<>();
-
-        for (Location adjacent : getAdjacentLocations(location)) {
-            Block block = adjacent.getBlock();
-            if (isNetworkBlock(block)) {
-                String networkId = getNetworkId(adjacent);
-                if (networkId != null) {
-                    adjacentNetworks.add(networkId);
-                }
-            }
-        }
-
-        // If more than one different network, placement would connect them
-        return adjacentNetworks.size() > 1;
-    }
-
-    /**
      * Detect and validate a network starting from a given block
      */
     public NetworkInfo detectNetwork(Location location) {
@@ -87,7 +70,7 @@ public class NetworkManager {
 
             if (!isNetworkBlockOrCable(block)) continue;
 
-            if (isNetworkCable(block)) {
+            if (plugin.getCableManager().isCustomNetworkCable(block)) {
                 networkCables.add(current);
             } else {
                 networkBlocks.add(current);
@@ -117,6 +100,12 @@ public class NetworkManager {
 
         // Validate network requirements
         if (storageServer == null || driveBays.isEmpty() || terminals.isEmpty()) {
+            return null;
+        }
+
+        // Check block limit (excluding cables)
+        if (networkBlocks.size() > plugin.getConfigManager().getMaxNetworkBlocks()) {
+            plugin.getLogger().warning("Network exceeds block limit: " + networkBlocks.size() + "/" + plugin.getConfigManager().getMaxNetworkBlocks());
             return null;
         }
 
@@ -151,7 +140,7 @@ public class NetworkManager {
             try (PreparedStatement stmt = conn.prepareStatement(
                     "INSERT OR REPLACE INTO networks (network_id, owner_uuid, last_accessed) VALUES (?, ?, CURRENT_TIMESTAMP)")) {
                 stmt.setString(1, network.getNetworkId());
-                stmt.setString(2, ownerUUID.toString());
+                stmt.setString(2, ownerUUID != null ? ownerUUID.toString() : "00000000-0000-0000-0000-000000000000");
                 stmt.executeUpdate();
             }
 
@@ -178,7 +167,7 @@ public class NetworkManager {
                 stmt.executeBatch();
             }
 
-            // COMPREHENSIVE DRIVE BAY RESTORATION
+            // COMPREHENSIVE DRIVE BAY RESTORATION (with reduced logging)
             restoreAllDriveBayContents(conn, network.getNetworkId(), network.getDriveBays());
         });
     }
@@ -222,24 +211,31 @@ public class NetworkManager {
         // CRITICAL: Notify GUI manager about network invalidation
         plugin.getGUIManager().handleNetworkInvalidated(networkId);
 
-        // Remove network lock
+        // Remove network lock and restoration flag
         networkLocks.remove(networkId);
+        restorationLoggedNetworks.remove(networkId);
 
         plugin.getLogger().info("Unregistered network " + networkId + " and preserved drive bay contents");
     }
 
     /**
      * COMPREHENSIVE restoration of ALL drive bay contents when network is reconstructed
+     * UPDATED: Reduced logging and redundancy prevention
      */
     private void restoreAllDriveBayContents(Connection conn, String newNetworkId, Set<Location> driveBayLocations) throws SQLException {
         int totalRestoredSlots = 0;
         int totalRestoredDisks = 0;
+        boolean shouldLog = !restorationLoggedNetworks.contains(newNetworkId);
 
-        plugin.getLogger().info("Starting comprehensive drive bay restoration for network " + newNetworkId +
-                " with " + driveBayLocations.size() + " drive bay locations");
+        if (shouldLog) {
+            plugin.getLogger().info("Starting drive bay restoration for network " + newNetworkId +
+                    " with " + driveBayLocations.size() + " drive bay locations");
+        }
 
         for (Location location : driveBayLocations) {
-            plugin.getLogger().info("Checking drive bay at " + location + " for restoration");
+            if (shouldLog) {
+                plugin.getLogger().info("Checking drive bay at " + location + " for restoration");
+            }
 
             // STEP 1: Restore orphaned drive bay slots at this location
             int restoredSlots = restoreOrphanedDriveBaySlots(conn, newNetworkId, location);
@@ -263,9 +259,13 @@ public class NetworkManager {
                 plugin.getGUIManager().refreshNetworkTerminals(newNetworkId);
                 plugin.getGUIManager().refreshNetworkDriveBays(newNetworkId);
             });
-        } else {
+        } else if (shouldLog) {
+            // Only log when we haven't logged for this network before
             plugin.getLogger().info("No drive bay contents needed restoration for network " + newNetworkId);
         }
+
+        // Mark this network as having been processed for restoration logging
+        restorationLoggedNetworks.add(newNetworkId);
     }
 
     /**
@@ -406,9 +406,9 @@ public class NetworkManager {
     }
 
     /**
-         * Helper class to store drive slot information
-         */
-        private record DriveSlotInfo(String oldNetworkId, int slotNumber, String diskId) {
+     * Helper class to store drive slot information
+     */
+    private record DriveSlotInfo(String oldNetworkId, int slotNumber, String diskId) {
     }
 
     /**
@@ -469,35 +469,51 @@ public class NetworkManager {
                 storageServerLocation.getBlockZ());
     }
 
+    private boolean isNetworkBlockOrCable(Block block) {
+        return isNetworkBlock(block) || plugin.getCableManager().isCustomNetworkCable(block);
+    }
+
     private boolean isNetworkBlock(Block block) {
         return isStorageServer(block) || isDriveBay(block) || isMSSTerminal(block);
     }
 
-    private boolean isNetworkBlockOrCable(Block block) {
-        return isNetworkBlock(block) || isNetworkCable(block);
-    }
-
     private boolean isStorageServer(Block block) {
-        return block.getType() == Material.CHISELED_TUFF;
+        return block.getType() == Material.CHISELED_TUFF && isMarkedAsCustomBlock(block.getLocation(), "STORAGE_SERVER");
     }
 
     private boolean isDriveBay(Block block) {
-        return block.getType() == Material.CHISELED_TUFF_BRICKS;
+        return block.getType() == Material.CHISELED_TUFF_BRICKS && isMarkedAsCustomBlock(block.getLocation(), "DRIVE_BAY");
     }
 
     private boolean isMSSTerminal(Block block) {
-        return block.getType() == Material.CRAFTER;
+        return block.getType() == Material.CRAFTER && isMarkedAsCustomBlock(block.getLocation(), "MSS_TERMINAL");
     }
 
-    private boolean isNetworkCable(Block block) {
-        return block.getType() == Material.HEAVY_CORE;
+    private boolean isMarkedAsCustomBlock(Location location, String blockType) {
+        try (Connection conn = plugin.getDatabaseManager().getConnection();
+             PreparedStatement stmt = conn.prepareStatement(
+                     "SELECT COUNT(*) FROM custom_block_markers WHERE world_name = ? AND x = ? AND y = ? AND z = ? AND block_type = ?")) {
+
+            stmt.setString(1, location.getWorld().getName());
+            stmt.setInt(2, location.getBlockX());
+            stmt.setInt(3, location.getBlockY());
+            stmt.setInt(4, location.getBlockZ());
+            stmt.setString(5, blockType);
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                return rs.next() && rs.getInt(1) > 0;
+            }
+        } catch (Exception e) {
+            plugin.getLogger().warning("Error checking custom block marker: " + e.getMessage());
+            return false;
+        }
     }
 
     private String getBlockType(Block block) {
         if (isStorageServer(block)) return "STORAGE_SERVER";
         if (isDriveBay(block)) return "DRIVE_BAY";
         if (isMSSTerminal(block)) return "MSS_TERMINAL";
-        if (isNetworkCable(block)) return "NETWORK_CABLE";
+        if (plugin.getCableManager().isCustomNetworkCable(block)) return "NETWORK_CABLE";
         return "UNKNOWN";
     }
 

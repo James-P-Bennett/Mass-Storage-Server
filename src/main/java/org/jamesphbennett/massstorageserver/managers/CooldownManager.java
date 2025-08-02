@@ -7,11 +7,7 @@ public class CooldownManager {
     
     private final ConcurrentHashMap<String, Long> cooldowns = new ConcurrentHashMap<>();
     private final long cooldownDuration;
-    
-    public CooldownManager() {
-        this.cooldownDuration = 100; // 100ms default cooldown
-    }
-    
+
     public CooldownManager(long cooldownDurationMs) {
         this.cooldownDuration = cooldownDurationMs;
     }
@@ -52,21 +48,7 @@ public class CooldownManager {
         long elapsed = System.currentTimeMillis() - lastOperation;
         return Math.max(0, cooldownDuration - elapsed);
     }
-    
-    /**
-     * Clear all cooldowns for a player
-     */
-    public void clearPlayerCooldowns(UUID playerUUID) {
-        cooldowns.entrySet().removeIf(entry -> entry.getKey().startsWith(playerUUID.toString()));
-    }
-    
-    /**
-     * Clear all cooldowns for a network
-     */
-    public void clearNetworkCooldowns(String networkId) {
-        cooldowns.entrySet().removeIf(entry -> entry.getKey().endsWith(networkId));
-    }
-    
+
     /**
      * Clean up expired cooldowns (should be called periodically)
      */

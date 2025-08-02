@@ -98,7 +98,7 @@ public class PlayerListener implements Listener {
             return; // IMPORTANT: Return here to avoid blocking the recipe
         }
 
-        // CRITICAL: Check if any MSS items are being used in non-MSS recipes
+        // CRITICAL: Check if any MSS items (including cables) are being used in non-MSS recipes
         if (containsMSSItems(matrix)) {
             Recipe recipe = event.getRecipe();
             if (recipe instanceof ShapedRecipe shapedRecipe) {
@@ -139,7 +139,7 @@ public class PlayerListener implements Listener {
 
         // Check crafting permission first
         if (plugin.getConfigManager().isRequireCraftPermission() && !player.hasPermission("massstorageserver.craft")) {
-            // Check if this involves any MSS items
+            // Check if this involves any MSS items (including cables)
             if (containsMSSItems(event.getInventory().getMatrix()) ||
                     (event.getCurrentItem() != null && itemManager.isMSSItem(event.getCurrentItem()))) {
                 event.setCancelled(true);
@@ -186,7 +186,7 @@ public class PlayerListener implements Listener {
             }
         }
 
-        // CRITICAL: Final check - prevent any MSS items from being used in non-MSS recipes
+        // CRITICAL: Final check - prevent any MSS items (including cables) from being used in non-MSS recipes
         if (containsMSSItems(event.getInventory().getMatrix())) {
             boolean isMSSRecipe = false;
 
@@ -209,7 +209,7 @@ public class PlayerListener implements Listener {
     }
 
     /**
-     * Check if the crafting matrix contains any MSS items
+     * Check if the crafting matrix contains any MSS items (including cables)
      */
     private boolean containsMSSItems(ItemStack[] matrix) {
         for (ItemStack item : matrix) {

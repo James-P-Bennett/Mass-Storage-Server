@@ -2,7 +2,9 @@
 
 package org.jamesphbennett.massstorageserver.gui;
 
-import org.bukkit.ChatColor;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.entity.Player;
 import org.bukkit.Location;
 import org.bukkit.scheduler.BukkitRunnable;
@@ -18,6 +20,7 @@ import java.util.List;
 public class GUIManager {
 
     private final MassStorageServer plugin;
+    private final MiniMessage miniMessage;
     private final Map<UUID, String> playerCurrentGUI = new ConcurrentHashMap<>();
     private final Map<UUID, Location> playerGUILocation = new ConcurrentHashMap<>();
     private final Map<UUID, String> playerGUINetworkId = new ConcurrentHashMap<>();
@@ -39,6 +42,7 @@ public class GUIManager {
 
     public GUIManager(MassStorageServer plugin) {
         this.plugin = plugin;
+        this.miniMessage = MiniMessage.miniMessage();
     }
 
     /**
@@ -65,6 +69,36 @@ public class GUIManager {
     }
 
     /**
+     * Open an Exporter GUI for a player
+     */
+    public void openExporterGUI(Player player, Location exporterLocation, String exporterId, String networkId) {
+        try {
+            // Validate network is still valid
+            if (!isNetworkValid(networkId)) {
+                player.sendMessage(Component.text("This exporter is not connected to a valid network.", NamedTextColor.RED));
+                return;
+            }
+
+            plugin.getLogger().info("Opening exporter GUI for player " + player.getName() +
+                    " at " + exporterLocation + " with exporter ID: " + exporterId);
+
+            ExporterGUI gui = new ExporterGUI(plugin, exporterLocation, exporterId, networkId);
+            gui.open(player);
+
+            playerCurrentGUI.put(player.getUniqueId(), "EXPORTER");
+            playerGUILocation.put(player.getUniqueId(), exporterLocation);
+            playerGUINetworkId.put(player.getUniqueId(), networkId);
+            playerGUIInstance.put(player.getUniqueId(), gui);
+
+            plugin.getLogger().info("Successfully opened exporter GUI for player " + player.getName());
+        } catch (Exception e) {
+            player.sendMessage(Component.text("Error opening Exporter GUI: " + e.getMessage(), NamedTextColor.RED));
+            plugin.getLogger().severe("Error opening Exporter GUI: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    /**
      * Open a Drive Bay GUI for a player (UPDATED to allow standalone access)
      */
     public void openDriveBayGUI(Player player, Location driveBayLocation, String networkId) {
@@ -84,7 +118,7 @@ public class GUIManager {
 
             plugin.getLogger().info("Successfully opened drive bay GUI for player " + player.getName());
         } catch (Exception e) {
-            player.sendMessage("§cError opening Drive Bay GUI: " + e.getMessage());
+            player.sendMessage(Component.text("Error opening Drive Bay GUI: " + e.getMessage(), NamedTextColor.RED));
             plugin.getLogger().severe("Error opening Drive Bay GUI: " + e.getMessage());
             e.printStackTrace();
         }
@@ -149,7 +183,7 @@ public class GUIManager {
 
             // Validate network is still valid
             if (!isNetworkValid(networkId)) {
-                player.sendMessage(ChatColor.RED + "This terminal is no longer connected to a valid network.");
+                player.sendMessage(Component.text("This terminal is no longer connected to a valid network.", NamedTextColor.RED));
                 return;
             }
 
@@ -171,7 +205,7 @@ public class GUIManager {
 
             plugin.getLogger().info("Opened terminal GUI for player " + player.getName() + " in network " + networkId);
         } catch (Exception e) {
-            player.sendMessage("§cError opening Terminal GUI: " + e.getMessage());
+            player.sendMessage(Component.text("Error opening Terminal GUI: " + e.getMessage(), NamedTextColor.RED));
             plugin.getLogger().severe("Error opening Terminal GUI: " + e.getMessage());
         }
     }
@@ -198,7 +232,7 @@ public class GUIManager {
                 if (playersAwaitingSearchInput.remove(playerId) != null) {
                     searchTimeoutTasks.remove(playerId);
                     if (player.isOnline()) {
-                        player.sendMessage(ChatColor.RED + "Search timed out.");
+                        player.sendMessage(Component.text("Search timed out.", NamedTextColor.RED));
                     }
                 }
             }
@@ -236,15 +270,15 @@ public class GUIManager {
         if (message.equalsIgnoreCase("cancel")) {
             // Clear search for this terminal
             setTerminalSearchTerm(terminalLocation, null);
-            player.sendMessage(ChatColor.RED + "Search cancelled.");
+            player.sendMessage(Component.text("Search cancelled.", NamedTextColor.RED));
         } else if (message.trim().isEmpty()) {
             // Clear search for this terminal
             setTerminalSearchTerm(terminalLocation, null);
-            player.sendMessage(ChatColor.YELLOW + "Search cleared.");
+            player.sendMessage(Component.text("Search cleared.", NamedTextColor.YELLOW));
         } else {
             // Save search term for this terminal
             setTerminalSearchTerm(terminalLocation, message.trim());
-            player.sendMessage(ChatColor.GREEN + "Search saved: '" + message.trim() + "'.");
+            player.sendMessage(Component.text("Search saved: '" + message.trim() + "'.", NamedTextColor.GREEN));
         }
 
         // DO NOT auto-reopen the terminal - let the player manually reopen it
@@ -298,7 +332,7 @@ public class GUIManager {
     public void forceCloseGUI(Player player, String reason) {
         if (hasGUIOpen(player)) {
             player.closeInventory();
-            player.sendMessage(ChatColor.YELLOW + reason);
+            player.sendMessage(Component.text(reason, NamedTextColor.YELLOW));
             closeGUI(player);
         }
     }
@@ -453,7 +487,7 @@ public class GUIManager {
 
         // Notify players about network status change but don't close GUIs
         for (Player player : playersToNotify) {
-            player.sendMessage(ChatColor.YELLOW + "Network connection lost - you can still manage disks in this drive bay.");
+            player.sendMessage(Component.text("Network connection lost - you can still manage disks in this drive bay.", NamedTextColor.YELLOW));
         }
 
         plugin.getLogger().info("Refreshed " + refreshCount + " drive bays for network " + networkId +
@@ -495,7 +529,7 @@ public class GUIManager {
 
         // Notify drive bay users but keep their GUIs open
         for (Player player : driveBaysToNotify) {
-            player.sendMessage(ChatColor.YELLOW + "Storage network dissolved - you can still manage disks in this drive bay.");
+            player.sendMessage(Component.text("Storage network dissolved - you can still manage disks in this drive bay.", NamedTextColor.YELLOW));
             // Refresh the drive bay to show updated network status
             refreshPlayerDriveBay(player);
         }

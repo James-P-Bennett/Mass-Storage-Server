@@ -29,6 +29,7 @@ public final class MassStorageServer extends JavaPlugin {
     private StorageManager storageManager;
     private GUIManager guiManager;
     private ExplosionManager explosionManager;
+    private ExporterManager exporterManager;
 
     public MassStorageServer() {
         // Constructor
@@ -60,6 +61,7 @@ public final class MassStorageServer extends JavaPlugin {
             storageManager = new StorageManager(this);
             guiManager = new GUIManager(this);
             explosionManager = new ExplosionManager(this);
+            exporterManager = new ExporterManager(this);
 
             // Start periodic GUI validation task (every 30 seconds)
             getServer().getScheduler().runTaskTimer(this, () -> {
@@ -145,5 +147,9 @@ public final class MassStorageServer extends JavaPlugin {
 
     public ExplosionManager getExplosionManager() {
         return explosionManager;
+    }
+
+    public ExporterManager getExporterManager() {
+        return exporterManager;
     }
 }

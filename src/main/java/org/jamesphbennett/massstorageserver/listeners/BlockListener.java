@@ -17,6 +17,7 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.ItemStack;
 import org.jamesphbennett.massstorageserver.MassStorageServer;
 import org.jamesphbennett.massstorageserver.managers.ItemManager;
+import org.jamesphbennett.massstorageserver.managers.ExporterManager;
 import org.jamesphbennett.massstorageserver.network.NetworkManager;
 import org.jamesphbennett.massstorageserver.network.NetworkInfo;
 import org.jamesphbennett.massstorageserver.network.CableManager;
@@ -24,6 +25,7 @@ import org.jamesphbennett.massstorageserver.network.CableManager;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -62,8 +64,8 @@ public class BlockListener implements Listener {
             return;
         }
 
-        // Check if it's one of our CUSTOM network blocks or cables
-        if (!itemManager.isNetworkBlock(item) && !itemManager.isNetworkCable(item)) {
+        // Check if it's one of our CUSTOM network blocks, cables, or exporters
+        if (!itemManager.isNetworkBlock(item) && !itemManager.isNetworkCable(item) && !itemManager.isExporter(item)) {
             return;
         }
 
@@ -72,6 +74,43 @@ public class BlockListener implements Listener {
             event.setCancelled(true);
             player.sendMessage(Component.text("You don't have permission to place Mass Storage blocks.", NamedTextColor.RED));
             return;
+        }
+
+        // Handle exporter placement
+        if (itemManager.isExporter(item)) {
+            // Check if there's a valid network nearby to connect to
+            String nearbyNetworkId = null;
+            for (Location adjacent : getAdjacentLocations(location)) {
+                if (isCustomNetworkBlock(adjacent.getBlock()) || cableManager.isCustomNetworkCable(adjacent.getBlock())) {
+                    nearbyNetworkId = networkManager.getNetworkId(adjacent);
+                    if (nearbyNetworkId != null) {
+                        break;
+                    }
+                }
+            }
+
+            if (nearbyNetworkId == null) {
+                event.setCancelled(true);
+                player.sendMessage(Component.text("Exporters must be placed adjacent to a network!", NamedTextColor.RED));
+                return;
+            }
+
+            // Mark as custom block
+            try {
+                markLocationAsCustomBlock(location, "EXPORTER");
+
+                // Create the exporter in the manager
+                String exporterId = plugin.getExporterManager().createExporter(location, nearbyNetworkId, player);
+                player.sendMessage(Component.text("Exporter created successfully! Right-click to configure.", NamedTextColor.GREEN));
+                plugin.getLogger().info("Created exporter " + exporterId + " for player " + player.getName() + " at " + location);
+
+            } catch (Exception e) {
+                player.sendMessage(Component.text("Error creating exporter: " + e.getMessage(), NamedTextColor.RED));
+                plugin.getLogger().severe("Error creating exporter: " + e.getMessage());
+                event.setCancelled(true);
+                return;
+            }
+            return; // Don't continue to network detection for exporters
         }
 
         // Handle network cable placement
@@ -209,13 +248,41 @@ public class BlockListener implements Listener {
         Block block = event.getBlock();
         Location location = block.getLocation();
 
-        // Check if it's one of our CUSTOM network blocks or cables
-        if (!isCustomNetworkBlockOrCable(block)) {
+        // Check if it's one of our CUSTOM network blocks, cables, or exporters
+        if (!isCustomNetworkBlockOrCableOrExporter(block)) {
             return;
         }
 
         try {
             String networkId = networkManager.getNetworkId(location);
+
+            // Handle exporter removal
+            if (isCustomExporter(block)) {
+                try {
+                    // Get the exporter data before removing
+                    ExporterManager.ExporterData exporterData = plugin.getExporterManager().getExporterAtLocation(location);
+                    if (exporterData != null) {
+                        // Remove from exporter manager
+                        plugin.getExporterManager().removeExporter(exporterData.exporterId);
+                        plugin.getLogger().info("Removed exporter " + exporterData.exporterId + " at " + location);
+                    }
+
+                    // Drop the custom item
+                    event.setDropItems(false);
+                    ItemStack customItem = plugin.getItemManager().createExporter();
+                    if (customItem != null) {
+                        block.getWorld().dropItemNaturally(location, customItem);
+                    }
+
+                    // Remove custom block marker
+                    removeCustomBlockMarker(location);
+
+                } catch (Exception e) {
+                    player.sendMessage(Component.text("Error removing exporter: " + e.getMessage(), NamedTextColor.RED));
+                    plugin.getLogger().severe("Error removing exporter: " + e.getMessage());
+                }
+                return; // Exporters don't affect network topology, so return early
+            }
 
             // ENHANCED: Always drop drive bay contents, whether part of network or not
             if (isCustomDriveBay(block)) {
@@ -383,9 +450,9 @@ public class BlockListener implements Listener {
             player.sendMessage(Component.text("Storage Disks: " + diskCount, NamedTextColor.LIGHT_PURPLE));
 
             if (diskCount > 0) {
-                player.sendMessage(Component.text("Storage Cells: " + usedCells + "/" + totalCells + " used",
-                        usedCells >= totalCells * 0.9 ? NamedTextColor.RED :
-                                usedCells >= totalCells * 0.7 ? NamedTextColor.YELLOW : NamedTextColor.GREEN));
+                NamedTextColor storageColor = usedCells >= totalCells * 0.9 ? NamedTextColor.RED :
+                        usedCells >= totalCells * 0.7 ? NamedTextColor.YELLOW : NamedTextColor.GREEN;
+                player.sendMessage(Component.text("Storage Cells: " + usedCells + "/" + totalCells + " used", storageColor));
                 player.sendMessage(Component.text("Total Items: " + String.format("%,d", totalItems), NamedTextColor.AQUA));
             }
 
@@ -444,6 +511,39 @@ public class BlockListener implements Listener {
             return;
         }
 
+        // Handle Exporter interactions (only custom ones)
+        if (isCustomExporter(block)) {
+            event.setCancelled(true);
+
+            if (plugin.getConfigManager().isRequireUsePermission() && !player.hasPermission("massstorageserver.use")) {
+                player.sendMessage(Component.text("You don't have permission to use Exporters.", NamedTextColor.RED));
+                return;
+            }
+
+            try {
+                String networkId = networkManager.getNetworkId(block.getLocation());
+                if (networkId == null) {
+                    player.sendMessage(Component.text("This exporter is not connected to a valid network.", NamedTextColor.RED));
+                    return;
+                }
+
+                // Get the exporter from the manager
+                ExporterManager.ExporterData exporterData = plugin.getExporterManager().getExporterAtLocation(block.getLocation());
+                if (exporterData == null) {
+                    player.sendMessage(Component.text("Exporter data not found. Try breaking and replacing the block.", NamedTextColor.RED));
+                    return;
+                }
+
+                // Open exporter GUI
+                plugin.getGUIManager().openExporterGUI(player, block.getLocation(), exporterData.exporterId, networkId);
+
+            } catch (Exception e) {
+                player.sendMessage(Component.text("Error accessing exporter: " + e.getMessage(), NamedTextColor.RED));
+                plugin.getLogger().severe("Error accessing exporter: " + e.getMessage());
+            }
+            return;
+        }
+
         // Handle MSS Terminal interactions (only custom ones)
         if (isCustomMSSTerminal(block)) {
             event.setCancelled(true);
@@ -478,7 +578,7 @@ public class BlockListener implements Listener {
                 player.sendMessage(Component.text("Error accessing terminal: " + e.getMessage(), NamedTextColor.RED));
                 plugin.getLogger().severe("Error accessing terminal: " + e.getMessage());
             }
-            return; // FIXED: Add return to prevent fall-through
+            return;
         }
 
         // Handle Storage Server interactions (only custom ones)
@@ -508,7 +608,7 @@ public class BlockListener implements Listener {
                 player.sendMessage(Component.text("Error accessing Storage Server: " + e.getMessage(), NamedTextColor.RED));
                 plugin.getLogger().severe("Error accessing Storage Server: " + e.getMessage());
             }
-            return; // FIXED: Add return to prevent fall-through
+            return;
         }
 
         // Handle Drive Bay interactions (only custom ones)
@@ -547,11 +647,14 @@ public class BlockListener implements Listener {
                 player.sendMessage(Component.text("Error accessing drive bay: " + e.getMessage(), NamedTextColor.RED));
                 plugin.getLogger().severe("Error accessing drive bay: " + e.getMessage());
             }
-            // FIXED: Add return to prevent fall-through
         }
     }
 
     // Helper methods to check if blocks are OUR custom blocks or cables
+    private boolean isCustomNetworkBlockOrCableOrExporter(Block block) {
+        return isCustomNetworkBlock(block) || cableManager.isCustomNetworkCable(block) || isCustomExporter(block);
+    }
+
     private boolean isCustomNetworkBlockOrCable(Block block) {
         return isCustomNetworkBlock(block) || cableManager.isCustomNetworkCable(block);
     }
@@ -573,6 +676,11 @@ public class BlockListener implements Listener {
     private boolean isCustomMSSTerminal(Block block) {
         if (block.getType() != Material.CRAFTER) return false;
         return isMarkedAsCustomBlock(block.getLocation(), "MSS_TERMINAL");
+    }
+
+    private boolean isCustomExporter(Block block) {
+        if (block.getType() != Material.PLAYER_HEAD && block.getType() != Material.PLAYER_WALL_HEAD) return false;
+        return isMarkedAsCustomBlock(block.getLocation(), "EXPORTER");
     }
 
     private boolean isMarkedAsCustomBlock(Location location, String blockType) {
@@ -635,6 +743,7 @@ public class BlockListener implements Listener {
         if (itemManager.isDriveBay(item)) return "DRIVE_BAY";
         if (itemManager.isMSSTerminal(item)) return "MSS_TERMINAL";
         if (itemManager.isNetworkCable(item)) return "NETWORK_CABLE";
+        if (itemManager.isExporter(item)) return "EXPORTER";
         return "UNKNOWN";
     }
 
@@ -668,6 +777,8 @@ public class BlockListener implements Listener {
             return itemManager.createMSSTerminal();
         } else if (cableManager.isCustomNetworkCable(block)) {
             return itemManager.createNetworkCable();
+        } else if (isCustomExporter(block)) {
+            return itemManager.createExporter();
         }
         return null;
     }

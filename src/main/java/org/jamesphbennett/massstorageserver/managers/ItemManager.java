@@ -32,6 +32,7 @@ public class ItemManager {
     private final NamespacedKey MSS_TERMINAL_KEY;
     private final NamespacedKey NETWORK_CABLE_KEY;
     private final NamespacedKey STORAGE_DISK_KEY;
+    private final NamespacedKey EXPORTER_KEY;
     private final NamespacedKey DISK_ID_KEY;
     private final NamespacedKey DISK_CRAFTER_UUID_KEY;
     private final NamespacedKey DISK_CRAFTER_NAME_KEY;
@@ -54,6 +55,7 @@ public class ItemManager {
         MSS_TERMINAL_KEY = new NamespacedKey(plugin, "mss_terminal");
         NETWORK_CABLE_KEY = new NamespacedKey(plugin, "network_cable");
         STORAGE_DISK_KEY = new NamespacedKey(plugin, "storage_disk");
+        EXPORTER_KEY = new NamespacedKey(plugin, "exporter");
         DISK_ID_KEY = new NamespacedKey(plugin, "disk_id");
         DISK_CRAFTER_UUID_KEY = new NamespacedKey(plugin, "disk_crafter_uuid");
         DISK_CRAFTER_NAME_KEY = new NamespacedKey(plugin, "disk_crafter_name");
@@ -139,6 +141,26 @@ public class ItemManager {
 
         meta.setCustomModelData(1005);
         meta.getPersistentDataContainer().set(NETWORK_CABLE_KEY, PersistentDataType.BOOLEAN, true);
+
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    public ItemStack createExporter() {
+        ItemStack item = new ItemStack(Material.PLAYER_HEAD);
+        ItemMeta meta = item.getItemMeta();
+
+        Component displayName = miniMessage.deserialize("<dark_purple>Exporter");
+        meta.setDisplayName(legacySerializer.serialize(displayName));
+
+        List<String> lore = new ArrayList<>();
+        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Automatically exports items to containers")));
+        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Place adjacent to any inventory")));
+        lore.add(legacySerializer.serialize(miniMessage.deserialize("<yellow>Connects: North, South, East, West, or Down")));
+        meta.setLore(lore);
+
+        meta.setCustomModelData(1011);
+        meta.getPersistentDataContainer().set(EXPORTER_KEY, PersistentDataType.BOOLEAN, true);
 
         item.setItemMeta(meta);
         return item;
@@ -577,8 +599,13 @@ public class ItemManager {
         return item.getItemMeta().getPersistentDataContainer().has(STORAGE_DISK_KEY, PersistentDataType.BOOLEAN);
     }
 
+    public boolean isExporter(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) return false;
+        return item.getItemMeta().getPersistentDataContainer().has(EXPORTER_KEY, PersistentDataType.BOOLEAN);
+    }
+
     public boolean isNetworkBlock(ItemStack item) {
-        return isStorageServer(item) || isDriveBay(item) || isMSSTerminal(item) || isNetworkCable(item);
+        return isStorageServer(item) || isDriveBay(item) || isMSSTerminal(item) || isNetworkCable(item) || isExporter(item);
     }
 
     /**

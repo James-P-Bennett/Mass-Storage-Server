@@ -237,6 +237,37 @@ public class DatabaseManager {
                     FOREIGN KEY (disk_id) REFERENCES storage_disks(disk_id) ON DELETE CASCADE,
                     CHECK (quantity >= 0 AND quantity <= 8128)
                 )
+                """,
+
+                // Exporters table
+                """
+                CREATE TABLE IF NOT EXISTS exporters (
+                    exporter_id TEXT PRIMARY KEY,
+                    network_id TEXT NOT NULL,
+                    world_name TEXT NOT NULL,
+                    x INTEGER NOT NULL,
+                    y INTEGER NOT NULL,
+                    z INTEGER NOT NULL,
+                    enabled BOOLEAN NOT NULL DEFAULT true,
+                    last_export TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (network_id) REFERENCES networks(network_id) ON DELETE CASCADE,
+                    UNIQUE(world_name, x, y, z)
+                )
+                """,
+
+                // Exporter filters table
+                """
+                CREATE TABLE IF NOT EXISTS exporter_filters (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    exporter_id TEXT NOT NULL,
+                    item_hash TEXT NOT NULL,
+                    filter_type TEXT NOT NULL DEFAULT 'whitelist',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (exporter_id) REFERENCES exporters(exporter_id) ON DELETE CASCADE,
+                    UNIQUE(exporter_id, item_hash, filter_type)
+                )
                 """
         };
 
@@ -252,7 +283,12 @@ public class DatabaseManager {
                 "CREATE INDEX IF NOT EXISTS idx_drive_bay_slots_disk ON drive_bay_slots(disk_id)",
                 "CREATE INDEX IF NOT EXISTS idx_storage_items_disk ON storage_items(disk_id)",
                 "CREATE INDEX IF NOT EXISTS idx_storage_items_hash ON storage_items(item_hash)",
-                "CREATE INDEX IF NOT EXISTS idx_networks_owner ON networks(owner_uuid)"
+                "CREATE INDEX IF NOT EXISTS idx_networks_owner ON networks(owner_uuid)",
+                "CREATE INDEX IF NOT EXISTS idx_exporters_location ON exporters(world_name, x, y, z)",
+                "CREATE INDEX IF NOT EXISTS idx_exporters_network ON exporters(network_id)",
+                "CREATE INDEX IF NOT EXISTS idx_exporters_enabled ON exporters(enabled)",
+                "CREATE INDEX IF NOT EXISTS idx_exporter_filters_exporter ON exporter_filters(exporter_id)",
+                "CREATE INDEX IF NOT EXISTS idx_exporter_filters_hash ON exporter_filters(item_hash)"
         };
 
         try (Connection conn = getConnection()) {

@@ -16,6 +16,9 @@ network:
 storage:
   # Number of drive bay slots per drive bay
   drive_bay_slots: 7
+  
+  # Tick interval for exporter operations (20 ticks = 1 second)
+  export_tick_interval: 20
 
   # NOTE: All storage disks now have exactly 64 cells (hardcoded)
   # NOTE: Items per cell are tier-specific (hardcoded):

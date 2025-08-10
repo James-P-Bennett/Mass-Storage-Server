@@ -24,6 +24,7 @@ public class ConfigManager {
     private int maxNetworkCables;
     private long operationCooldown;
     private int maxDriveBaySlots;
+    private int exportTickInterval;
     private Set<Material> blacklistedItems;
     private boolean requireUsePermission;
     private boolean requireCraftPermission;
@@ -104,6 +105,7 @@ public class ConfigManager {
 
     private void loadStorageSettings() {
         maxDriveBaySlots = config.getInt("storage.drive_bay_slots", 7);
+        exportTickInterval = config.getInt("storage.export_tick_interval", 20); // Default 20 ticks = 1 second
 
         // NOTE: default_cells_per_disk config option is now IGNORED - hardcoded to 64
         if (config.contains("storage.default_cells_per_disk")) {
@@ -173,6 +175,13 @@ public class ConfigManager {
 
     public int getMaxDriveBaySlots() {
         return maxDriveBaySlots;
+    }
+
+    /**
+     * Get the tick interval for export operations
+     */
+    public int getExportTickInterval() {
+        return exportTickInterval;
     }
 
     public boolean isItemBlacklisted(Material material) {

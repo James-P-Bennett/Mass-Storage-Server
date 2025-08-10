@@ -183,6 +183,7 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
             case "bay", "drive_bay" -> plugin.getItemManager().createDriveBay();
             case "terminal", "mss_terminal" -> plugin.getItemManager().createMSSTerminal();
             case "cable", "network_cable" -> plugin.getItemManager().createNetworkCable();
+            case "exporter" -> plugin.getItemManager().createExporter();
 
             // Storage disks
             case "disk", "storage_disk", "disk1k" -> plugin.getItemManager().createStorageDisk(
@@ -206,7 +207,7 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
 
         if (item == null) {
             sender.sendMessage(Component.text("Invalid item type. Available:", NamedTextColor.RED));
-            sender.sendMessage(Component.text("Blocks: server, bay, terminal, cable", NamedTextColor.YELLOW));
+            sender.sendMessage(Component.text("Blocks: server, bay, terminal, cable, exporter", NamedTextColor.YELLOW));
             sender.sendMessage(Component.text("Disks: disk1k, disk4k, disk16k, disk64k", NamedTextColor.YELLOW));
             sender.sendMessage(Component.text("Components: housing, platter1k, platter4k, platter16k, platter64k", NamedTextColor.YELLOW));
             return;
@@ -264,6 +265,14 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
                 rs.next();
                 int cableCount = rs.getInt(1);
                 sender.sendMessage(Component.text("Network Cables Placed: " + cableCount, NamedTextColor.YELLOW));
+            }
+
+            // Count exporters
+            try (PreparedStatement stmt = conn.prepareStatement("SELECT COUNT(*) FROM exporters");
+                 ResultSet rs = stmt.executeQuery()) {
+                rs.next();
+                int exporterCount = rs.getInt(1);
+                sender.sendMessage(Component.text("Exporters Placed: " + exporterCount, NamedTextColor.YELLOW));
             }
 
             // Recipe information
@@ -407,7 +416,7 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
                 case "give":
                     List<String> items = Arrays.asList(
                             // Network blocks
-                            "server", "bay", "terminal", "cable",
+                            "server", "bay", "terminal", "cable", "exporter",
                             // Storage disks
                             "disk1k", "disk4k", "disk16k", "disk64k",
                             // Components

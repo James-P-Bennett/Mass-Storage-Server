@@ -146,6 +146,54 @@ public class DatabaseManager {
         }
     }
 
+
+    /**
+     * Migrate exporter_filters table to include item_data column
+     */
+    private void migrateExporterFilters() throws SQLException {
+        try (Connection conn = getConnection()) {
+            // Check if item_data column exists in exporter_filters
+            boolean needsMigration = false;
+
+            try (var stmt = conn.createStatement();
+                 var rs = stmt.executeQuery("PRAGMA table_info(exporter_filters)")) {
+                boolean hasItemDataColumn = false;
+                while (rs.next()) {
+                    String columnName = rs.getString("name");
+                    if ("item_data".equals(columnName)) {
+                        hasItemDataColumn = true;
+                        break;
+                    }
+                }
+
+                if (!hasItemDataColumn) {
+                    needsMigration = true;
+                    plugin.getLogger().info("Database migration needed - adding item_data column to exporter_filters");
+                }
+            }
+
+            if (needsMigration) {
+                conn.setAutoCommit(false);
+
+                try {
+                    // Add item_data column
+                    try (var stmt = conn.createStatement()) {
+                        stmt.execute("ALTER TABLE exporter_filters ADD COLUMN item_data TEXT");
+                    }
+
+                    conn.commit();
+                    plugin.getLogger().info("Successfully added item_data column to exporter_filters table");
+
+                } catch (Exception e) {
+                    conn.rollback();
+                    throw new SQLException("Failed to migrate exporter_filters table", e);
+                } finally {
+                    conn.setAutoCommit(true);
+                }
+            }
+        }
+    }
+
     private void createTables() throws SQLException {
         String[] tableCreationQueries = {
                 // Networks table
@@ -263,6 +311,7 @@ public class DatabaseManager {
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     exporter_id TEXT NOT NULL,
                     item_hash TEXT NOT NULL,
+                    item_data TEXT,
                     filter_type TEXT NOT NULL DEFAULT 'whitelist',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (exporter_id) REFERENCES exporters(exporter_id) ON DELETE CASCADE,

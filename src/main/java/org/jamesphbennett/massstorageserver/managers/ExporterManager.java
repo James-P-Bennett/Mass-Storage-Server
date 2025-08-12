@@ -76,10 +76,10 @@ public class ExporterManager {
                     if (world != null) {
                         Location location = new Location(world, x, y, z);
                         ExporterData data = new ExporterData(exporterId, networkId, location, enabled);
-                        
+
                         // Load filters for this exporter
                         loadExporterFilters(conn, data);
-                        
+
                         activeExporters.put(exporterId, data);
                         exporterCycleIndex.put(exporterId, 0);
                     }
@@ -94,7 +94,7 @@ public class ExporterManager {
     }
 
     /**
-     * Load filters for a specific exporter
+     * Load filters for a specific exporter - loads hashes for compatibility with export logic
      */
     private void loadExporterFilters(Connection conn, ExporterData data) throws SQLException {
         try (PreparedStatement stmt = conn.prepareStatement(
@@ -114,7 +114,7 @@ public class ExporterManager {
      */
     private void startExportTask() {
         int tickInterval = plugin.getConfigManager().getExportTickInterval();
-        
+
         plugin.getServer().getScheduler().runTaskTimer(plugin, () -> {
             for (ExporterData exporter : activeExporters.values()) {
                 if (exporter.enabled && !exporter.filterItems.isEmpty()) {
@@ -179,12 +179,12 @@ public class ExporterManager {
         }
 
         int currentIndex = exporterCycleIndex.get(exporter.exporterId);
-        
+
         // Try each filter item once, starting from current index
         for (int i = 0; i < exporter.filterItems.size(); i++) {
             int checkIndex = (currentIndex + i) % exporter.filterItems.size();
             String itemHash = exporter.filterItems.get(checkIndex);
-            
+
             // Check if this item is available in the network
             try {
                 if (isItemAvailableInNetwork(exporter.networkId, itemHash)) {
@@ -196,7 +196,7 @@ public class ExporterManager {
                 plugin.getLogger().warning("Error checking item availability: " + e.getMessage());
             }
         }
-        
+
         // No items available, increment index anyway for next cycle
         exporterCycleIndex.put(exporter.exporterId, (currentIndex + 1) % exporter.filterItems.size());
         return null;
@@ -222,14 +222,14 @@ public class ExporterManager {
         try {
             // Retrieve up to one stack from the network
             ItemStack retrievedItem = plugin.getStorageManager().retrieveItems(exporter.networkId, itemHash, 64);
-            
+
             if (retrievedItem == null || retrievedItem.getAmount() == 0) {
                 return; // Nothing retrieved
             }
 
             // Try to add to target inventory
             HashMap<Integer, ItemStack> leftover = targetInventory.addItem(retrievedItem);
-            
+
             // If there's leftover, put it back in the network
             if (!leftover.isEmpty()) {
                 for (ItemStack leftoverStack : leftover.values()) {
@@ -237,7 +237,7 @@ public class ExporterManager {
                     toReturn.add(leftoverStack);
                     plugin.getStorageManager().storeItems(exporter.networkId, toReturn);
                 }
-                
+
                 // Calculate what was actually exported
                 int exported = retrievedItem.getAmount() - leftover.values().stream().mapToInt(ItemStack::getAmount).sum();
                 if (exported > 0) {
@@ -266,14 +266,14 @@ public class ExporterManager {
     private Container getTargetContainer(Block exporterBlock) {
         // Check each valid direction (N, S, E, W, DOWN)
         BlockFace[] validFaces = {BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST, BlockFace.DOWN};
-        
+
         for (BlockFace face : validFaces) {
             Block targetBlock = exporterBlock.getRelative(face);
             if (targetBlock.getState() instanceof Container container) {
                 return container;
             }
         }
-        
+
         return null;
     }
 
@@ -282,7 +282,7 @@ public class ExporterManager {
      */
     public String createExporter(Location location, String networkId, Player placer) throws SQLException {
         String exporterId = generateExporterId();
-        
+
         plugin.getDatabaseManager().executeTransaction(conn -> {
             try (PreparedStatement stmt = conn.prepareStatement(
                     "INSERT INTO exporters (exporter_id, network_id, world_name, x, y, z, enabled) VALUES (?, ?, ?, ?, ?, ?, ?)")) {
@@ -342,19 +342,19 @@ public class ExporterManager {
         ExporterData data = activeExporters.get(exporterId);
         if (data != null) {
             data.enabled = enabled;
-            
+
             plugin.getDatabaseManager().executeUpdate(
                     "UPDATE exporters SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE exporter_id = ?",
                     enabled, exporterId);
-            
+
             plugin.getLogger().info("Exporter " + exporterId + " set to " + (enabled ? "enabled" : "disabled"));
         }
     }
 
     /**
-     * Update filter for an exporter
+     * Update filter for an exporter - now stores actual item data
      */
-    public void updateExporterFilter(String exporterId, List<String> itemHashes) throws SQLException {
+    public void updateExporterFilter(String exporterId, List<ItemStack> filterItems) throws SQLException {
         ExporterData data = activeExporters.get(exporterId);
         if (data == null) return;
 
@@ -365,13 +365,17 @@ public class ExporterManager {
                 stmt.executeUpdate();
             }
 
-            // Add new filters
-            if (!itemHashes.isEmpty()) {
+            // Add new filters with both hash and item data
+            if (!filterItems.isEmpty()) {
                 try (PreparedStatement stmt = conn.prepareStatement(
-                        "INSERT INTO exporter_filters (exporter_id, item_hash, filter_type) VALUES (?, ?, 'whitelist')")) {
-                    for (String hash : itemHashes) {
+                        "INSERT INTO exporter_filters (exporter_id, item_hash, item_data, filter_type) VALUES (?, ?, ?, 'whitelist')")) {
+                    for (ItemStack item : filterItems) {
+                        String itemHash = plugin.getItemManager().generateItemHash(item);
+                        String itemData = serializeItemStack(item);
+
                         stmt.setString(1, exporterId);
-                        stmt.setString(2, hash);
+                        stmt.setString(2, itemHash);
+                        stmt.setString(3, itemData);
                         stmt.addBatch();
                     }
                     stmt.executeBatch();
@@ -379,22 +383,56 @@ public class ExporterManager {
             }
         });
 
-        // Update in memory
+        // Update in memory (store hashes for compatibility with existing export logic)
         data.filterItems.clear();
-        data.filterItems.addAll(itemHashes);
-        
+        for (ItemStack item : filterItems) {
+            String itemHash = plugin.getItemManager().generateItemHash(item);
+            data.filterItems.add(itemHash);
+        }
+
         // Enable if filters are set, disable if empty
-        if (!itemHashes.isEmpty() && !data.enabled) {
+        if (!filterItems.isEmpty() && !data.enabled) {
             toggleExporter(exporterId, true);
-        } else if (itemHashes.isEmpty() && data.enabled) {
+        } else if (filterItems.isEmpty() && data.enabled) {
             toggleExporter(exporterId, false);
         }
 
-        plugin.getLogger().info("Updated filters for exporter " + exporterId + " (" + itemHashes.size() + " items)");
+        plugin.getLogger().info("Updated filters for exporter " + exporterId + " (" + filterItems.size() + " items)");
     }
 
     /**
-     * Get filters for an exporter
+     * Get filter items for an exporter with actual ItemStack data
+     */
+    public List<ItemStack> getExporterFilterItems(String exporterId) {
+        List<ItemStack> filterItems = new ArrayList<>();
+
+        try (Connection conn = plugin.getDatabaseManager().getConnection();
+             PreparedStatement stmt = conn.prepareStatement(
+                     "SELECT item_data FROM exporter_filters WHERE exporter_id = ? AND filter_type = 'whitelist' ORDER BY created_at")) {
+
+            stmt.setString(1, exporterId);
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    String itemData = rs.getString("item_data");
+                    if (itemData != null && !itemData.isEmpty()) {
+                        ItemStack item = deserializeItemStack(itemData);
+                        if (item != null) {
+                            filterItems.add(item);
+                        }
+                    }
+                }
+            }
+
+        } catch (Exception e) {
+            plugin.getLogger().severe("Error loading filter items for exporter " + exporterId + ": " + e.getMessage());
+        }
+
+        return filterItems;
+    }
+
+    /**
+     * Get filters for an exporter (legacy method - returns hashes for compatibility)
      */
     public List<String> getExporterFilters(String exporterId) {
         ExporterData data = activeExporters.get(exporterId);
@@ -428,5 +466,38 @@ public class ExporterManager {
         activeExporters.clear();
         exporterCycleIndex.clear();
         loadExporters();
+    }
+
+    /**
+     * Serialize ItemStack to Base64 string for database storage
+     */
+    private String serializeItemStack(ItemStack item) {
+        try {
+            java.io.ByteArrayOutputStream outputStream = new java.io.ByteArrayOutputStream();
+            org.bukkit.util.io.BukkitObjectOutputStream dataOutput = new org.bukkit.util.io.BukkitObjectOutputStream(outputStream);
+            dataOutput.writeObject(item);
+            dataOutput.close();
+            return java.util.Base64.getEncoder().encodeToString(outputStream.toByteArray());
+        } catch (Exception e) {
+            plugin.getLogger().warning("Failed to serialize filter item: " + e.getMessage());
+            return "";
+        }
+    }
+
+    /**
+     * Deserialize ItemStack from Base64 string from database
+     */
+    private ItemStack deserializeItemStack(String data) {
+        try {
+            byte[] bytes = java.util.Base64.getDecoder().decode(data);
+            java.io.ByteArrayInputStream inputStream = new java.io.ByteArrayInputStream(bytes);
+            org.bukkit.util.io.BukkitObjectInputStream dataInput = new org.bukkit.util.io.BukkitObjectInputStream(inputStream);
+            ItemStack item = (ItemStack) dataInput.readObject();
+            dataInput.close();
+            return item;
+        } catch (Exception e) {
+            plugin.getLogger().warning("Failed to deserialize filter item: " + e.getMessage());
+            return null;
+        }
     }
 }

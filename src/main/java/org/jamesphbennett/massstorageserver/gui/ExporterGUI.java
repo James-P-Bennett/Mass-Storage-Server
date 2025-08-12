@@ -38,8 +38,8 @@ public class ExporterGUI implements Listener {
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
     // Filter slots (18 slots for filters)
-    private final Map<Integer, String> slotToItemHash = new HashMap<>();
-    private final List<String> currentFilters = new ArrayList<>();
+    private final Map<Integer, ItemStack> slotToFilterItem = new HashMap<>();
+    private final List<ItemStack> currentFilterItems = new ArrayList<>();
 
     public ExporterGUI(MassStorageServer plugin, Location exporterLocation, String exporterId, String networkId) {
         this.plugin = plugin;
@@ -55,16 +55,16 @@ public class ExporterGUI implements Listener {
     }
 
     private void loadCurrentFilters() {
-        currentFilters.clear();
-        currentFilters.addAll(plugin.getExporterManager().getExporterFilters(exporterId));
+        currentFilterItems.clear();
+        currentFilterItems.addAll(plugin.getExporterManager().getExporterFilterItems(exporterId));
     }
 
     private void setupGUI() {
-        // Clear inventory
+        // Clear inventory first
         inventory.clear();
-        slotToItemHash.clear();
+        slotToFilterItem.clear();
 
-        // Top section (rows 0-1): Filter slots (18 slots)
+        // Top section (rows 0-1): Filter slots (18 slots) - no placeholders, just empty
         displayFilterSlots();
 
         // Divider row (row 2): Glass panes
@@ -76,65 +76,63 @@ public class ExporterGUI implements Listener {
             inventory.setItem(i, divider);
         }
 
-        // Bottom section (rows 3-4): Control buttons
+        // Bottom section (rows 3-4): Control buttons with glass pane fillers
         setupControlButtons();
     }
 
     private void displayFilterSlots() {
-        // Display current filters
-        for (int i = 0; i < Math.min(18, currentFilters.size()); i++) {
-            String itemHash = currentFilters.get(i);
-            ItemStack filterItem = getItemFromHash(itemHash);
+        // Display current filters - no placeholders for empty slots
+        for (int i = 0; i < Math.min(18, currentFilterItems.size()); i++) {
+            ItemStack filterItem = currentFilterItems.get(i);
             if (filterItem != null) {
                 ItemStack displayItem = filterItem.clone();
                 ItemMeta meta = displayItem.getItemMeta();
-                
+
                 List<String> lore = new ArrayList<>();
                 lore.add(legacySerialize("<gray>Filter Item"));
                 lore.add("");
                 lore.add(legacySerialize("<yellow>Click to remove from filter"));
                 meta.setLore(lore);
-                
+
                 // Add glowing effect
                 meta.addEnchant(Enchantment.UNBREAKING, 1, true);
                 meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
-                
+
                 displayItem.setItemMeta(meta);
                 inventory.setItem(i, displayItem);
-                slotToItemHash.put(i, itemHash);
+                slotToFilterItem.put(i, filterItem);
             }
         }
 
-        // Fill empty filter slots with placeholder
-        for (int i = currentFilters.size(); i < 18; i++) {
-            ItemStack emptySlot = new ItemStack(Material.LIGHT_GRAY_STAINED_GLASS_PANE);
-            ItemMeta emptyMeta = emptySlot.getItemMeta();
-            emptyMeta.setDisplayName(legacySerialize("<gray>Empty Filter Slot"));
-            List<String> lore = new ArrayList<>();
-            lore.add("");
-            lore.add(legacySerialize("<yellow>Place an item here to add to filter"));
-            emptyMeta.setLore(lore);
-            emptySlot.setItemMeta(emptyMeta);
-            inventory.setItem(i, emptySlot);
-        }
+        // Leave empty filter slots actually empty (no glass panes)
     }
 
     private void setupControlButtons() {
         ExporterManager.ExporterData exporterData = plugin.getExporterManager().getExporterAtLocation(exporterLocation);
         boolean isEnabled = exporterData != null && exporterData.enabled;
 
+        // Fill all control area slots with glass panes first
+        ItemStack filler = new ItemStack(Material.LIGHT_GRAY_STAINED_GLASS_PANE);
+        ItemMeta fillerMeta = filler.getItemMeta();
+        fillerMeta.setDisplayName(" ");
+        filler.setItemMeta(fillerMeta);
+
+        for (int i = 27; i < 45; i++) {
+            inventory.setItem(i, filler);
+        }
+
         // Status indicator (slot 29)
         ItemStack status = new ItemStack(isEnabled ? Material.LIME_DYE : Material.GRAY_DYE);
         ItemMeta statusMeta = status.getItemMeta();
         statusMeta.setDisplayName(legacySerialize(isEnabled ? "<green>Status: Enabled" : "<gray>Status: Disabled"));
-        
+
         List<String> statusLore = new ArrayList<>();
-        if (!isEnabled && currentFilters.isEmpty()) {
+        if (!isEnabled && currentFilterItems.isEmpty()) {
             statusLore.add(legacySerialize("<red>Add items to filter to enable"));
         } else {
             statusLore.add(legacySerialize("<gray>Exporter is " + (isEnabled ? "actively exporting" : "inactive")));
         }
-        
+
         // Add connection status
         Container target = getTargetContainer();
         if (target != null) {
@@ -144,7 +142,7 @@ public class ExporterGUI implements Listener {
             statusLore.add("");
             statusLore.add(legacySerialize("<red>No valid container connected"));
         }
-        
+
         statusLore.add("");
         statusLore.add(legacySerialize("<yellow>Click to toggle"));
         statusMeta.setLore(statusLore);
@@ -162,91 +160,55 @@ public class ExporterGUI implements Listener {
         clearButton.setItemMeta(clearMeta);
         inventory.setItem(31, clearButton);
 
-        // Info panel (slot 33)
+        // Add from network button (slot 33)
+        ItemStack addButton = new ItemStack(Material.EMERALD);
+        ItemMeta addMeta = addButton.getItemMeta();
+        addMeta.setDisplayName(legacySerialize("<green>Add from Network"));
+        List<String> addLore = new ArrayList<>();
+        addLore.add("");
+        addLore.add(legacySerialize("<yellow>Click to select items from network"));
+        addMeta.setLore(addLore);
+        addButton.setItemMeta(addMeta);
+        inventory.setItem(33, addButton);
+
+        // Info panel (slot 35)
         ItemStack info = new ItemStack(Material.BOOK);
         ItemMeta infoMeta = info.getItemMeta();
         infoMeta.setDisplayName(legacySerialize("<aqua>Exporter Information"));
         List<String> infoLore = new ArrayList<>();
         infoLore.add(legacySerialize("<gray>Network: " + networkId.substring(0, Math.min(16, networkId.length()))));
-        infoLore.add(legacySerialize("<gray>Filters: " + currentFilters.size() + "/18"));
-        
-        if (exporterData != null && exporterData.lastExport > 0) {
-            long timeSinceExport = System.currentTimeMillis() - exporterData.lastExport;
-            infoLore.add(legacySerialize("<gray>Last Export: " + formatTime(timeSinceExport) + " ago"));
-        }
-        
+        infoLore.add(legacySerialize("<gray>Filters: " + currentFilterItems.size() + "/18"));
         infoLore.add("");
-        infoLore.add(legacySerialize("<yellow>Exports 1 stack per tick"));
-        infoLore.add(legacySerialize("<yellow>Cycles through filter items"));
+        infoLore.add(legacySerialize("<yellow>Shift+Click items from inventory to add filters"));
         infoMeta.setLore(infoLore);
         info.setItemMeta(infoMeta);
-        inventory.setItem(33, info);
-
-        // Add items from network button (slot 40)
-        ItemStack addButton = new ItemStack(Material.HOPPER);
-        ItemMeta addMeta = addButton.getItemMeta();
-        addMeta.setDisplayName(legacySerialize("<green>Add Items from Network"));
-        List<String> addLore = new ArrayList<>();
-        addLore.add("");
-        addLore.add(legacySerialize("<yellow>Click to browse network items"));
-        addLore.add(legacySerialize("<yellow>and add them to the filter"));
-        addMeta.setLore(addLore);
-        addButton.setItemMeta(addMeta);
-        inventory.setItem(40, addButton);
+        inventory.setItem(35, info);
     }
 
     private Container getTargetContainer() {
-        Block exporterBlock = exporterLocation.getBlock();
-        if (exporterBlock.getType() != Material.PLAYER_HEAD && exporterBlock.getType() != Material.PLAYER_WALL_HEAD) {
-            return null;
-        }
-
-        org.bukkit.block.BlockFace[] validFaces = {
-            org.bukkit.block.BlockFace.NORTH,
-            org.bukkit.block.BlockFace.SOUTH,
-            org.bukkit.block.BlockFace.EAST,
-            org.bukkit.block.BlockFace.WEST,
-            org.bukkit.block.BlockFace.DOWN
-        };
-
-        for (org.bukkit.block.BlockFace face : validFaces) {
-            Block targetBlock = exporterBlock.getRelative(face);
-            if (targetBlock.getState() instanceof Container container) {
-                return container;
-            }
-        }
-
-        return null;
-    }
-
-    private ItemStack getItemFromHash(String itemHash) {
         try {
-            // Get network items and find matching hash
-            List<StoredItem> networkItems = plugin.getStorageManager().getNetworkItems(networkId);
-            for (StoredItem storedItem : networkItems) {
-                if (storedItem.getItemHash().equals(itemHash)) {
-                    return storedItem.getItemStack();
+            // Check adjacent blocks for containers
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dy = -1; dy <= 1; dy++) {
+                    for (int dz = -1; dz <= 1; dz++) {
+                        if (dx == 0 && dy == 0 && dz == 0) continue;
+
+                        Block adjacent = exporterLocation.getBlock().getRelative(dx, dy, dz);
+                        if (adjacent.getState() instanceof Container container) {
+                            return container;
+                        }
+                    }
                 }
             }
         } catch (Exception e) {
-            plugin.getLogger().warning("Error getting item from hash: " + e.getMessage());
+            plugin.getLogger().warning("Error checking for target container: " + e.getMessage());
         }
         return null;
-    }
-
-    private String formatTime(long milliseconds) {
-        long seconds = milliseconds / 1000;
-        if (seconds < 60) {
-            return seconds + "s";
-        } else if (seconds < 3600) {
-            return (seconds / 60) + "m " + (seconds % 60) + "s";
-        } else {
-            return (seconds / 3600) + "h " + ((seconds % 3600) / 60) + "m";
-        }
     }
 
     public void open(Player player) {
         player.openInventory(inventory);
+        // Register this instance as a listener
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
     }
 
@@ -257,74 +219,103 @@ public class ExporterGUI implements Listener {
 
         int slot = event.getRawSlot();
 
-        // Handle clicks in filter area (0-17)
-        if (slot >= 0 && slot < 18) {
-            handleFilterSlotClick(event, player, slot);
+        // Handle status button click (slot 29)
+        if (slot == 29) {
+            event.setCancelled(true);
+            handleToggleClick(player);
             return;
         }
 
-        // Handle control button clicks
-        switch (slot) {
-            case 29 -> { // Toggle enable/disable
+        // Handle clear filters button click (slot 31)
+        if (slot == 31) {
+            event.setCancelled(true);
+            handleClearFilters(player);
+            return;
+        }
+
+        // Handle add from network button click (slot 33)
+        if (slot == 33) {
+            event.setCancelled(true);
+            openNetworkItemSelector(player);
+            return;
+        }
+
+        // Handle info book click (slot 35) - CANCEL BUT DO NOTHING
+        if (slot == 35) {
+            event.setCancelled(true);
+            // Info book is display-only, no action
+            return;
+        }
+
+        // Handle clicks on glass panes and other GUI elements - cancel them
+        if (slot >= 18 && slot < inventory.getSize()) {
+            event.setCancelled(true);
+            return;
+        }
+
+        // Handle shift-clicks from player inventory to add filters
+        if ((event.getClick() == ClickType.SHIFT_LEFT || event.getClick() == ClickType.SHIFT_RIGHT) &&
+                slot >= inventory.getSize()) {
+
+            ItemStack shiftClickedItem = event.getCurrentItem();
+            if (shiftClickedItem != null && !shiftClickedItem.getType().isAir()) {
+                event.setCancelled(true); // Don't actually move the item
+                handleAddItemToFilter(player, shiftClickedItem);
+            }
+            return;
+        }
+
+        // Handle clicks in filter area (slots 0-17)
+        if (slot >= 0 && slot < 18) {
+            // Check if this slot has a filter item
+            ItemStack filterItem = slotToFilterItem.get(slot);
+            if (filterItem != null) {
+                // There's a filter item here - cancel and remove it
                 event.setCancelled(true);
-                handleToggleClick(player);
-            }
-            case 31 -> { // Clear filters
+                handleFilterSlotClick(player, slot);
+            } else {
+                // Empty filter slot - cancel and do nothing
                 event.setCancelled(true);
-                handleClearFilters(player);
             }
-            case 40 -> { // Add from network
-                event.setCancelled(true);
-                openNetworkItemSelector(player);
-            }
-            default -> {
-                // Cancel clicks in GUI area
-                if (slot < 45) {
-                    event.setCancelled(true);
-                }
-            }
+            return;
         }
     }
 
-    private void handleFilterSlotClick(InventoryClickEvent event, Player player, int slot) {
-        event.setCancelled(true);
-
-        ItemStack cursorItem = event.getCursor();
-        ItemStack slotItem = event.getCurrentItem();
-
-        // If player has item on cursor, try to add it to filter
-        if (cursorItem != null && !cursorItem.getType().isAir()) {
-            String itemHash = plugin.getItemManager().generateItemHash(cursorItem);
-            
-            // Check if already in filter
-            if (currentFilters.contains(itemHash)) {
+    private void handleAddItemToFilter(Player player, ItemStack itemToAdd) {
+        // Check if already in filter (compare by hash since ItemStack.equals might not work reliably)
+        String newItemHash = plugin.getItemManager().generateItemHash(itemToAdd);
+        for (ItemStack existingItem : currentFilterItems) {
+            String existingHash = plugin.getItemManager().generateItemHash(existingItem);
+            if (newItemHash.equals(existingHash)) {
                 player.sendMessage(Component.text("This item is already in the filter!", NamedTextColor.RED));
                 return;
             }
+        }
 
-            // Check if filter is full
-            if (currentFilters.size() >= 18) {
-                player.sendMessage(Component.text("Filter is full! Remove items first.", NamedTextColor.RED));
-                return;
-            }
+        // Check if filter is full
+        if (currentFilterItems.size() >= 18) {
+            player.sendMessage(Component.text("Filter is full! Remove items first.", NamedTextColor.RED));
+            return;
+        }
 
-            // Add to filter
-            currentFilters.add(itemHash);
+        // Add to filter (don't actually take the item from player)
+        currentFilterItems.add(itemToAdd.clone());
+        saveFilters();
+        setupGUI(); // Refresh GUI to show new filter item
+        player.sendMessage(Component.text("Added " + itemToAdd.getType() + " to filter", NamedTextColor.GREEN));
+    }
+
+    private void handleFilterSlotClick(Player player, int slot) {
+        // Check if this slot has a filter item
+        ItemStack filterItem = slotToFilterItem.get(slot);
+        if (filterItem != null) {
+            // Remove from filter
+            currentFilterItems.remove(filterItem);
             saveFilters();
             setupGUI();
-            player.sendMessage(Component.text("Added " + cursorItem.getType() + " to filter", NamedTextColor.GREEN));
-            
-        } else if (slotItem != null && !slotItem.getType().isAir() && !slotItem.getType().name().contains("GLASS")) {
-            // Remove from filter
-            String hashToRemove = slotToItemHash.get(slot);
-            if (hashToRemove != null) {
-                currentFilters.remove(hashToRemove);
-                slotToItemHash.remove(slot);
-                saveFilters();
-                setupGUI();
-                player.sendMessage(Component.text("Removed item from filter", NamedTextColor.YELLOW));
-            }
+            player.sendMessage(Component.text("Removed item from filter", NamedTextColor.YELLOW));
         }
+        // If slot is empty, do nothing (no placeholder to interact with)
     }
 
     private void handleToggleClick(Player player) {
@@ -333,7 +324,7 @@ public class ExporterGUI implements Listener {
             if (data == null) return;
 
             // Can't enable without filters
-            if (currentFilters.isEmpty() && !data.enabled) {
+            if (currentFilterItems.isEmpty() && !data.enabled) {
                 player.sendMessage(Component.text("Cannot enable exporter without filter items!", NamedTextColor.RED));
                 return;
             }
@@ -341,8 +332,8 @@ public class ExporterGUI implements Listener {
             boolean newState = !data.enabled;
             plugin.getExporterManager().toggleExporter(exporterId, newState);
             setupGUI(); // Refresh GUI
-            
-            player.sendMessage(Component.text("Exporter " + (newState ? "enabled" : "disabled"), 
+
+            player.sendMessage(Component.text("Exporter " + (newState ? "enabled" : "disabled"),
                     newState ? NamedTextColor.GREEN : NamedTextColor.YELLOW));
         } catch (Exception e) {
             player.sendMessage(Component.text("Error toggling exporter: " + e.getMessage(), NamedTextColor.RED));
@@ -350,13 +341,12 @@ public class ExporterGUI implements Listener {
     }
 
     private void handleClearFilters(Player player) {
-        if (currentFilters.isEmpty()) {
+        if (currentFilterItems.isEmpty()) {
             player.sendMessage(Component.text("No filters to clear", NamedTextColor.YELLOW));
             return;
         }
 
-        currentFilters.clear();
-        slotToItemHash.clear();
+        currentFilterItems.clear();
         saveFilters();
         setupGUI();
         player.sendMessage(Component.text("Cleared all filters", NamedTextColor.YELLOW));
@@ -364,7 +354,7 @@ public class ExporterGUI implements Listener {
 
     private void saveFilters() {
         try {
-            plugin.getExporterManager().updateExporterFilter(exporterId, currentFilters);
+            plugin.getExporterManager().updateExporterFilter(exporterId, currentFilterItems);
         } catch (Exception e) {
             plugin.getLogger().severe("Error saving filters: " + e.getMessage());
         }
@@ -373,80 +363,101 @@ public class ExporterGUI implements Listener {
     private void openNetworkItemSelector(Player player) {
         // Create a new inventory to show network items
         Inventory selector = Bukkit.createInventory(null, 54, legacySerialize("<dark_purple>Select Items to Export"));
-        
+
         try {
             List<StoredItem> networkItems = plugin.getStorageManager().getNetworkItems(networkId);
-            
+
             // Show up to 45 items (leaving bottom row for navigation)
             for (int i = 0; i < Math.min(45, networkItems.size()); i++) {
                 StoredItem storedItem = networkItems.get(i);
-                ItemStack displayItem = storedItem.getItemStack().clone();
+                ItemStack displayItem = storedItem.getDisplayStack().clone();
                 ItemMeta meta = displayItem.getItemMeta();
-                
+
                 List<String> lore = new ArrayList<>();
                 if (meta.hasLore()) {
                     lore.addAll(meta.getLore());
                 }
                 lore.add("");
                 lore.add(legacySerialize("<gray>Available: " + storedItem.getQuantity()));
-                
-                if (currentFilters.contains(storedItem.getItemHash())) {
+
+                // Check if this item is already in filter
+                String itemHash = plugin.getItemManager().generateItemHash(storedItem.getDisplayStack());
+                boolean alreadyInFilter = false;
+                for (ItemStack filterItem : currentFilterItems) {
+                    String filterHash = plugin.getItemManager().generateItemHash(filterItem);
+                    if (itemHash.equals(filterHash)) {
+                        alreadyInFilter = true;
+                        break;
+                    }
+                }
+
+                if (alreadyInFilter) {
                     lore.add(legacySerialize("<red>Already in filter"));
                     meta.addEnchant(Enchantment.UNBREAKING, 1, true);
                     meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
                 } else {
                     lore.add(legacySerialize("<yellow>Click to add to filter"));
                 }
-                
+
                 meta.setLore(lore);
                 displayItem.setItemMeta(meta);
                 selector.setItem(i, displayItem);
             }
-            
+
             // Add back button
             ItemStack backButton = new ItemStack(Material.BARRIER);
             ItemMeta backMeta = backButton.getItemMeta();
             backMeta.setDisplayName(legacySerialize("<red>Back to Exporter"));
             backButton.setItemMeta(backMeta);
             selector.setItem(49, backButton);
-            
+
             // Open selector with its own click handler
             player.openInventory(selector);
-            
+
             // Register temporary listener for selector
             Listener selectorListener = new Listener() {
                 @EventHandler
                 public void onSelectorClick(InventoryClickEvent e) {
                     if (!e.getInventory().equals(selector)) return;
                     e.setCancelled(true);
-                    
+
                     if (e.getRawSlot() == 49) { // Back button
                         InventoryClickEvent.getHandlerList().unregister(this);
                         open(player);
                         return;
                     }
-                    
+
                     if (e.getRawSlot() < 45 && e.getCurrentItem() != null && !e.getCurrentItem().getType().isAir()) {
                         // Add this item to filter
                         ItemStack clickedItem = e.getCurrentItem();
-                        String itemHash = plugin.getItemManager().generateItemHash(clickedItem);
-                        
-                        if (!currentFilters.contains(itemHash) && currentFilters.size() < 18) {
-                            currentFilters.add(itemHash);
+
+                        // Check if already in filter
+                        String newItemHash = plugin.getItemManager().generateItemHash(clickedItem);
+                        boolean alreadyInFilter = false;
+                        for (ItemStack filterItem : currentFilterItems) {
+                            String filterHash = plugin.getItemManager().generateItemHash(filterItem);
+                            if (newItemHash.equals(filterHash)) {
+                                alreadyInFilter = true;
+                                break;
+                            }
+                        }
+
+                        if (!alreadyInFilter && currentFilterItems.size() < 18) {
+                            currentFilterItems.add(clickedItem.clone());
                             saveFilters();
                             player.sendMessage(Component.text("Added " + clickedItem.getType() + " to filter", NamedTextColor.GREEN));
-                            
+
                             // Go back to main GUI
                             InventoryClickEvent.getHandlerList().unregister(this);
                             open(player);
-                        } else if (currentFilters.contains(itemHash)) {
+                        } else if (alreadyInFilter) {
                             player.sendMessage(Component.text("Item already in filter!", NamedTextColor.RED));
                         } else {
                             player.sendMessage(Component.text("Filter is full!", NamedTextColor.RED));
                         }
                     }
                 }
-                
+
                 @EventHandler
                 public void onSelectorClose(InventoryCloseEvent e) {
                     if (!e.getInventory().equals(selector)) return;
@@ -454,9 +465,9 @@ public class ExporterGUI implements Listener {
                     InventoryCloseEvent.getHandlerList().unregister(this);
                 }
             };
-            
+
             plugin.getServer().getPluginManager().registerEvents(selectorListener, plugin);
-            
+
         } catch (Exception e) {
             player.sendMessage(Component.text("Error loading network items: " + e.getMessage(), NamedTextColor.RED));
         }
@@ -465,14 +476,17 @@ public class ExporterGUI implements Listener {
     @EventHandler
     public void onInventoryDrag(InventoryDragEvent event) {
         if (!event.getInventory().equals(inventory)) return;
-        
-        // Allow dragging only in filter slots
+
+        // Check if dragging into any GUI area
         for (int slot : event.getRawSlots()) {
-            if (slot >= 18 || slot < 0) {
+            if (slot >= 0 && slot < inventory.getSize()) {
+                // Dragging into GUI area - cancel it
                 event.setCancelled(true);
                 return;
             }
         }
+
+        // If we get here, the drag is only in player inventory - allow it
     }
 
     @EventHandler

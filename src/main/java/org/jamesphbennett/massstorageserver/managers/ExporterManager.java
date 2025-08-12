@@ -432,6 +432,69 @@ public class ExporterManager {
     }
 
     /**
+     * Update exporter network assignments when networks change
+     * This should be called after network detection/updates
+     */
+    public void updateExporterNetworkAssignments() {
+        for (ExporterData exporter : activeExporters.values()) {
+            // Only update unconnected exporters or validate existing connections
+            if ("UNCONNECTED".equals(exporter.networkId) || !plugin.getNetworkManager().isNetworkValid(exporter.networkId)) {
+
+                // Check if this exporter is now adjacent to a valid network
+                String newNetworkId = findAdjacentNetwork(exporter.location);
+
+                if (newNetworkId != null && !newNetworkId.equals(exporter.networkId)) {
+                    // Update the exporter's network assignment
+                    try {
+                        plugin.getDatabaseManager().executeUpdate(
+                                "UPDATE exporters SET network_id = ?, updated_at = CURRENT_TIMESTAMP WHERE exporter_id = ?",
+                                newNetworkId, exporter.exporterId);
+
+                        // Update in memory
+                        activeExporters.remove(exporter.exporterId);
+                        ExporterData updatedData = new ExporterData(exporter.exporterId, newNetworkId, exporter.location, exporter.enabled);
+                        updatedData.filterItems.addAll(exporter.filterItems);
+                        activeExporters.put(exporter.exporterId, updatedData);
+
+                        plugin.getLogger().info("Updated exporter " + exporter.exporterId + " network assignment: " +
+                                exporter.networkId + " -> " + newNetworkId);
+
+                    } catch (SQLException e) {
+                        plugin.getLogger().warning("Failed to update exporter network assignment: " + e.getMessage());
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Find a valid network adjacent to the given location
+     */
+    private String findAdjacentNetwork(Location location) {
+        // Check adjacent locations for network blocks or cables
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    if (dx == 0 && dy == 0 && dz == 0) continue;
+
+                    // Only check face-adjacent blocks
+                    int nonZero = (dx != 0 ? 1 : 0) + (dy != 0 ? 1 : 0) + (dz != 0 ? 1 : 0);
+                    if (nonZero == 1) {
+                        Location adjacent = location.clone().add(dx, dy, dz);
+                        String networkId = plugin.getNetworkManager().getNetworkId(adjacent);
+
+                        if (networkId != null && !networkId.startsWith("UNCONNECTED") &&
+                                plugin.getNetworkManager().isNetworkValid(networkId)) {
+                            return networkId;
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
      * Get filters for an exporter (legacy method - returns hashes for compatibility)
      */
     public List<String> getExporterFilters(String exporterId) {

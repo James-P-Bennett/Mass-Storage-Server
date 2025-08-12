@@ -78,7 +78,7 @@ public class BlockListener implements Listener {
 
         // Handle exporter placement
         if (itemManager.isExporter(item)) {
-            // Check if there's a valid network nearby to connect to
+            // Check if there's a valid network nearby to connect to (optional)
             String nearbyNetworkId = null;
             for (Location adjacent : getAdjacentLocations(location)) {
                 if (isCustomNetworkBlock(adjacent.getBlock()) || cableManager.isCustomNetworkCable(adjacent.getBlock())) {
@@ -89,10 +89,12 @@ public class BlockListener implements Listener {
                 }
             }
 
+            // If no network found, use placeholder - exporter will remain inactive until connected
             if (nearbyNetworkId == null) {
-                event.setCancelled(true);
-                player.sendMessage(Component.text("Exporters must be placed adjacent to a network!", NamedTextColor.RED));
-                return;
+                nearbyNetworkId = "UNCONNECTED";
+                player.sendMessage(Component.text("Exporter placed! Connect it to a network to activate.", NamedTextColor.YELLOW));
+            } else {
+                player.sendMessage(Component.text("Exporter created successfully! Right-click to configure.", NamedTextColor.GREEN));
             }
 
             // Mark as custom block
@@ -101,8 +103,8 @@ public class BlockListener implements Listener {
 
                 // Create the exporter in the manager
                 String exporterId = plugin.getExporterManager().createExporter(location, nearbyNetworkId, player);
-                player.sendMessage(Component.text("Exporter created successfully! Right-click to configure.", NamedTextColor.GREEN));
-                plugin.getLogger().info("Created exporter " + exporterId + " for player " + player.getName() + " at " + location);
+                plugin.getLogger().info("Created exporter " + exporterId + " for player " + player.getName() + " at " + location +
+                        (nearbyNetworkId.equals("UNCONNECTED") ? " (unconnected)" : " (connected to " + nearbyNetworkId + ")"));
 
             } catch (Exception e) {
                 player.sendMessage(Component.text("Error creating exporter: " + e.getMessage(), NamedTextColor.RED));

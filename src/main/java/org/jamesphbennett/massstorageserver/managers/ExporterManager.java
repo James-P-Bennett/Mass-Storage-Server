@@ -136,20 +136,31 @@ public class ExporterManager {
      * This goes beyond just checking if the network exists - it verifies actual connectivity
      */
     private boolean isExporterConnectedToNetwork(ExporterData exporter) {
-        // First check if network exists at all
-        if (!plugin.getNetworkManager().isNetworkValid(exporter.networkId)) {
-            return false;
+        // AGGRESSIVE CHECK: Look for any adjacent network blocks or cables
+        Location exporterLoc = exporter.location;
+
+        // Check all 6 adjacent faces for network connectivity
+        Location[] adjacentLocs = {
+                exporterLoc.clone().add(1, 0, 0),   // East
+                exporterLoc.clone().add(-1, 0, 0),  // West
+                exporterLoc.clone().add(0, 1, 0),   // Up
+                exporterLoc.clone().add(0, -1, 0),  // Down
+                exporterLoc.clone().add(0, 0, 1),   // South
+                exporterLoc.clone().add(0, 0, -1)   // North
+        };
+
+        for (Location loc : adjacentLocs) {
+            String networkId = plugin.getNetworkManager().getNetworkId(loc);
+            plugin.getLogger().info("DEBUG ADJACENT: Checking " + loc + " -> network: " + networkId);
+
+            if (exporter.networkId.equals(networkId)) {
+                plugin.getLogger().info("DEBUG: Found matching network at adjacent location: " + loc);
+                return true;
+            }
         }
 
-        // Then check if exporter location is actually connected to that network
-        String actualNetworkId = plugin.getNetworkManager().getNetworkId(exporter.location);
-
-        // Debug logging
-        plugin.getLogger().info("DEBUG: Exporter " + exporter.exporterId +
-                " expects network " + exporter.networkId +
-                " but location shows network " + actualNetworkId);
-
-        return exporter.networkId.equals(actualNetworkId);
+        plugin.getLogger().info("DEBUG: No adjacent network blocks found for exporter " + exporter.exporterId);
+        return false;
     }
     /**
      * Process a single export operation

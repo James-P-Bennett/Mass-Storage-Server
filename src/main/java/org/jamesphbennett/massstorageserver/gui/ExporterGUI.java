@@ -59,7 +59,8 @@ public class ExporterGUI implements Listener {
         currentFilterItems.addAll(plugin.getExporterManager().getExporterFilterItems(exporterId));
     }
 
-    private void setupGUI() {
+    // CHANGED: Made public for GUI refresh functionality
+    public void setupGUI() {
         // Clear inventory first
         inventory.clear();
         slotToFilterItem.clear();
@@ -209,76 +210,37 @@ public class ExporterGUI implements Listener {
         if (!event.getInventory().equals(inventory)) return;
         if (!(event.getWhoClicked() instanceof Player player)) return;
 
-        int slot = event.getRawSlot();
-
-        // Handle status button click (slot 29)
-        if (slot == 29) {
-            event.setCancelled(true);
-            handleToggleClick(player);
-            return;
-        }
-
-        // Handle clear filters button click (slot 31)
-        if (slot == 31) {
-            event.setCancelled(true);
-            handleClearFilters(player);
-            return;
-        }
-
-        // Handle info book click (slot 35) - CANCEL BUT DO NOTHING
-        if (slot == 35) {
-            event.setCancelled(true);
-            return;
-        }
-
-        // Handle shift-clicks from player inventory to add filters
-        if ((event.getClick() == ClickType.SHIFT_LEFT || event.getClick() == ClickType.SHIFT_RIGHT) &&
-                slot >= inventory.getSize()) {
-
-            ItemStack shiftClickedItem = event.getCurrentItem();
-            if (shiftClickedItem != null && !shiftClickedItem.getType().isAir()) {
-                event.setCancelled(true);
-                handleAddItemToFilter(player, shiftClickedItem);
-            }
-            return;
-        }
-
-        // Handle clicks in filter area (slots 0-17) - ANY action should try to add to filter
-        if (slot >= 0 && slot < 18) {
-            handleFilterAreaClick(event, player, slot);
-            return;
-        }
-
-        // Handle clicks on glass panes and other control elements - cancel them
-        if (slot >= 18 && slot < inventory.getSize()) {
-            event.setCancelled(true);
-            return;
-        }
-    }
-
-    private void handleFilterAreaClick(InventoryClickEvent event, Player player, int slot) {
         event.setCancelled(true);
 
+        int slot = event.getSlot();
+
+        // Handle different areas of the GUI
+        if (slot < 18) {
+            // Filter area (top 2 rows)
+            handleFilterAreaClick(player, slot, event);
+        } else if (slot >= 27 && slot < 45) {
+            // Control area (bottom 2 rows)
+            handleControlAreaClick(player, slot, event);
+        }
+        // Slots 18-26 are divider glass panes - do nothing
+    }
+
+    private void handleFilterAreaClick(Player player, int slot, InventoryClickEvent event) {
         ItemStack cursorItem = event.getCursor();
-        ItemStack slotItem = event.getCurrentItem();
 
-        // PRIORITY 1: If player has items on cursor, try to add them to filter
-        if (cursorItem != null && !cursorItem.getType().isAir()) {
-            String itemHash = plugin.getItemManager().generateItemHash(cursorItem);
-
-            // Check if already in filter
-            boolean alreadyInFilter = false;
+        // PRIORITY 1: If player has item on cursor, try to add to filter
+        if (cursorItem != null && cursorItem.getType() != Material.AIR) {
+            // Check if item is already in filter
+            String newItemHash = plugin.getItemManager().generateItemHash(cursorItem);
             for (ItemStack existingItem : currentFilterItems) {
                 String existingHash = plugin.getItemManager().generateItemHash(existingItem);
-                if (itemHash.equals(existingHash)) {
-                    alreadyInFilter = true;
-                    break;
+                if (newItemHash.equals(existingHash)) {
+                    player.sendMessage(Component.text("This item is already in the filter!", NamedTextColor.RED));
+                    return;
                 }
             }
 
-            if (alreadyInFilter) {
-                player.sendMessage(Component.text("This item is already in the filter!", NamedTextColor.RED));
-            } else if (currentFilterItems.size() >= 18) {
+            if (currentFilterItems.size() >= 18) {
                 player.sendMessage(Component.text("Filter is full! Remove items first.", NamedTextColor.RED));
             } else {
                 // Add to filter - don't consume the cursor item
@@ -301,6 +263,22 @@ public class ExporterGUI implements Listener {
         }
 
         // PRIORITY 3: If empty slot, do nothing (already cancelled above)
+    }
+
+    private void handleControlAreaClick(Player player, int slot, InventoryClickEvent event) {
+        switch (slot) {
+            case 29: // Status/Toggle button
+                handleToggleClick(player);
+                break;
+            case 31: // Clear filters button
+                handleClearFilters(player);
+                break;
+            case 35: // Info panel - do nothing
+                break;
+            default:
+                // Glass pane filler - do nothing
+                break;
+        }
     }
 
     private void handleAddItemToFilter(Player player, ItemStack itemToAdd) {
@@ -374,65 +352,62 @@ public class ExporterGUI implements Listener {
         if (!event.getInventory().equals(inventory)) return;
         if (!(event.getWhoClicked() instanceof Player player)) return;
 
-        // Check if dragging into the filter area vs control area
-        boolean draggedIntoFilterArea = false;
-        boolean draggedIntoControlArea = false;
-
+        // Check if dragging into our GUI
+        boolean dragIntoGUI = false;
         for (int slot : event.getRawSlots()) {
-            if (slot >= 0 && slot < 18) {
-                draggedIntoFilterArea = true;
-            } else if (slot >= 18 && slot < inventory.getSize()) {
-                draggedIntoControlArea = true;
+            if (slot < inventory.getSize()) {
+                dragIntoGUI = true;
+                break;
             }
         }
 
-        if (draggedIntoControlArea) {
-            // Dragging into control area - always cancel
+        if (dragIntoGUI) {
             event.setCancelled(true);
-            return;
-        }
 
-        if (draggedIntoFilterArea) {
-            // Dragging into filter area - try to add item to filter
+            // Handle drag into filter area (slots 0-17)
             ItemStack draggedItem = event.getOldCursor();
-
-            if (draggedItem != null && !draggedItem.getType().isAir()) {
-                // Cancel the default drag behavior
-                event.setCancelled(true);
-
-                // Check if already in filter
-                String itemHash = plugin.getItemManager().generateItemHash(draggedItem);
-                boolean alreadyInFilter = false;
-                for (ItemStack existingItem : currentFilterItems) {
-                    String existingHash = plugin.getItemManager().generateItemHash(existingItem);
-                    if (itemHash.equals(existingHash)) {
-                        alreadyInFilter = true;
+            if (draggedItem != null && draggedItem.getType() != Material.AIR) {
+                // Check if any dragged slots are in filter area
+                boolean dragIntoFilterArea = false;
+                for (int slot : event.getRawSlots()) {
+                    if (slot < 18) {
+                        dragIntoFilterArea = true;
                         break;
                     }
                 }
 
-                if (alreadyInFilter) {
-                    player.sendMessage(Component.text("This item is already in the filter!", NamedTextColor.RED));
-                } else if (currentFilterItems.size() >= 18) {
-                    player.sendMessage(Component.text("Filter is full! Remove items first.", NamedTextColor.RED));
+                if (dragIntoFilterArea) {
+                    // Check if item is already in filter
+                    String newItemHash = plugin.getItemManager().generateItemHash(draggedItem);
+                    for (ItemStack existingItem : currentFilterItems) {
+                        String existingHash = plugin.getItemManager().generateItemHash(existingItem);
+                        if (newItemHash.equals(existingHash)) {
+                            player.sendMessage(Component.text("This item is already in the filter!", NamedTextColor.RED));
+                            return;
+                        }
+                    }
+
+                    if (currentFilterItems.size() >= 18) {
+                        player.sendMessage(Component.text("Filter is full! Remove items first.", NamedTextColor.RED));
+                    } else {
+                        // Add to filter - keep original item on cursor (don't consume it)
+                        currentFilterItems.add(draggedItem.clone());
+                        saveFilters();
+                        setupGUI();
+                        player.sendMessage(Component.text("Added " + draggedItem.getType() + " to filter", NamedTextColor.GREEN));
+
+                        // Keep the original item on cursor
+                        event.setCursor(draggedItem);
+                    }
                 } else {
-                    // Add to filter - keep original item on cursor (don't consume it)
-                    currentFilterItems.add(draggedItem.clone());
-                    saveFilters();
-                    setupGUI();
-                    player.sendMessage(Component.text("Added " + draggedItem.getType() + " to filter", NamedTextColor.GREEN));
-
-                    // Keep the original item on cursor
-                    event.setCursor(draggedItem);
+                    // No item being dragged or air - just cancel
+                    event.setCancelled(true);
                 }
-            } else {
-                // No item being dragged or air - just cancel
-                event.setCancelled(true);
+                return;
             }
-            return;
-        }
 
-        // If we get here, the drag is only in player inventory - allow it
+            // If we get here, the drag is only in player inventory - allow it
+        }
     }
 
     @EventHandler
@@ -453,6 +428,11 @@ public class ExporterGUI implements Listener {
     private String legacySerialize(String miniMessage) {
         Component component = this.miniMessage.deserialize(miniMessage);
         return LegacyComponentSerializer.legacySection().serialize(component);
+    }
+
+    // ADDED: Getter method for exporter ID (needed for GUI refresh)
+    public String getExporterId() {
+        return exporterId;
     }
 
     public Location getExporterLocation() {

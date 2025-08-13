@@ -173,61 +173,24 @@ public class BlockListener implements Listener {
                         return;
                     }
 
-                    // ENHANCED: Register the network with comprehensive drive bay restoration
+                    // Register the network with comprehensive drive bay restoration
                     networkManager.registerNetwork(network, player.getUniqueId());
 
-                    // ENHANCED: Check if any drive bay contents were restored
+                    // Check if any drive bay contents were restored
                     boolean hasRestoredContent = plugin.getDisksManager().checkForRestoredContent(network.getDriveBays());
 
-                    player.sendMessage(Component.text("Mass Storage Network formed successfully!", NamedTextColor.GREEN));
-                    player.sendMessage(Component.text("Network ID: " + network.getNetworkId(), NamedTextColor.GRAY));
-                    player.sendMessage(Component.text("Network Size: " + networkBlockCount + "/" + maxBlocks + " blocks, " +
-                            network.getNetworkCables().size() + "/" + plugin.getConfigManager().getMaxNetworkCables() + " cables", NamedTextColor.GRAY));
+                    player.sendMessage(Component.text("Connected to network with " +
+                            network.getDriveBays().size() + " drive bay(s) and " +
+                            network.getTerminals().size() + " terminal(s).", NamedTextColor.GREEN));
 
+                    // Show restoration message if items were restored
                     if (hasRestoredContent) {
-                        player.sendMessage(Component.text("Restored drive bay contents from previous network!", NamedTextColor.AQUA));
-                        player.sendMessage(Component.text("Check your terminals to see restored items.", NamedTextColor.YELLOW));
+                        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+                            player.sendMessage(Component.text("Drive bay contents have been restored!", NamedTextColor.AQUA));
+                            player.sendMessage(Component.text("Check your terminals to see restored items.", NamedTextColor.YELLOW));
+                        }, 10L);
                     }
                 } else {
-                    // Check if this block connects to an existing network
-                    for (Location adjacent : getAdjacentLocations(location)) {
-                        String existingNetworkId = networkManager.getNetworkId(adjacent);
-                        if (existingNetworkId != null) {
-                            // Re-detect the expanded network
-                            NetworkInfo expandedNetwork = networkManager.detectNetwork(adjacent);
-                            if (expandedNetwork != null && expandedNetwork.isValid()) {
-                                // Check network size limit
-                                int maxBlocks = plugin.getConfigManager().getMaxNetworkBlocks();
-                                int networkBlockCount = expandedNetwork.getAllBlocks().size() - expandedNetwork.getNetworkCables().size();
-
-                                if (networkBlockCount > maxBlocks) {
-                                    // Network exceeds size limit - break the block and give it back
-                                    block.setType(Material.AIR);
-                                    removeCustomBlockMarker(location);
-                                    block.getWorld().dropItemNaturally(location, item);
-                                    player.sendMessage(Component.text("Network size limit exceeded! Maximum " + maxBlocks + " blocks per network.", NamedTextColor.RED));
-                                    return;
-                                }
-
-                                // ENHANCED: Register the expanded network with restoration
-                                networkManager.registerNetwork(expandedNetwork, player.getUniqueId());
-
-                                // ENHANCED: Check if any drive bay contents were restored
-                                boolean hasRestoredContent = plugin.getDisksManager().checkForRestoredContent(expandedNetwork.getDriveBays());
-
-                                player.sendMessage(Component.text("Block added to existing network!", NamedTextColor.GREEN));
-                                player.sendMessage(Component.text("Network Size: " + networkBlockCount + "/" + maxBlocks + " blocks, " +
-                                        expandedNetwork.getNetworkCables().size() + "/" + plugin.getConfigManager().getMaxNetworkCables() + " cables", NamedTextColor.GRAY));
-
-                                if (hasRestoredContent) {
-                                    player.sendMessage(Component.text("Restored drive bay contents!", NamedTextColor.AQUA));
-                                    player.sendMessage(Component.text("Check your terminals to see restored items.", NamedTextColor.YELLOW));
-                                }
-                                return;
-                            }
-                        }
-                    }
-
                     if (itemManager.isStorageServer(item)) {
                         player.sendMessage(Component.text("Storage Server requires Drive Bays and Terminals to form a network.", NamedTextColor.YELLOW));
                     } else if (itemManager.isNetworkCable(item)) {
@@ -236,6 +199,9 @@ public class BlockListener implements Listener {
                         player.sendMessage(Component.text("This block needs to be connected to a Storage Server to function.", NamedTextColor.YELLOW));
                     }
                 }
+
+                // FIXED: Update exporter network assignments after network changes
+                plugin.getExporterManager().updateExporterNetworkAssignments();
 
             } catch (Exception e) {
                 player.sendMessage(Component.text("Error setting up network: " + e.getMessage(), NamedTextColor.RED));
@@ -321,150 +287,35 @@ public class BlockListener implements Listener {
                                 if (updatedNetwork != null && updatedNetwork.isValid()) {
                                     networkManager.registerNetwork(updatedNetwork, player.getUniqueId());
                                     networkStillValid = true;
-                                    player.sendMessage(Component.text("Network updated after block removal.", NamedTextColor.YELLOW));
-                                    int maxBlocks = plugin.getConfigManager().getMaxNetworkBlocks();
-                                    int networkBlockCount = updatedNetwork.getAllBlocks().size() - updatedNetwork.getNetworkCables().size();
-                                    player.sendMessage(Component.text("Network Size: " + networkBlockCount + "/" + maxBlocks + " blocks, " +
-                                            updatedNetwork.getNetworkCables().size() + "/" + plugin.getConfigManager().getMaxNetworkCables() + " cables", NamedTextColor.GRAY));
+                                    player.sendMessage(Component.text("Network updated after block removal.", NamedTextColor.GREEN));
                                     break;
                                 }
                             }
                         }
 
                         if (!networkStillValid) {
-                            // Network is no longer valid, unregister it
-                            networkManager.unregisterNetwork(networkId);
-                            player.sendMessage(Component.text("Mass Storage Network dissolved.", NamedTextColor.RED));
+                            // Network was completely broken - unregister it
+                            try {
+                                networkManager.unregisterNetwork(networkId);
+                                player.sendMessage(Component.text("Storage network dissolved. Drive bay contents preserved.", NamedTextColor.YELLOW));
+                            } catch (Exception e) {
+                                plugin.getLogger().warning("Error unregistering network " + networkId + ": " + e.getMessage());
+                            }
                         }
+
+                        // FIXED: Update exporter network assignments after any network changes
+                        plugin.getExporterManager().updateExporterNetworkAssignments();
 
                     } catch (Exception e) {
                         player.sendMessage(Component.text("Error updating network: " + e.getMessage(), NamedTextColor.RED));
-                        plugin.getLogger().severe("Error updating network: " + e.getMessage());
+                        plugin.getLogger().severe("Error updating network after block break: " + e.getMessage());
                     }
                 });
             }
 
         } catch (Exception e) {
-            player.sendMessage(Component.text("Error handling block break: " + e.getMessage(), NamedTextColor.RED));
-            plugin.getLogger().severe("Error handling block break: " + e.getMessage());
-        }
-    }
-
-    /**
-     * Display storage server status information to a player
-     */
-    private void displayStorageServerStatus(Player player, String networkId) {
-        // Add debug logging
-        plugin.getLogger().info("Displaying storage server status for " + player.getName() + " with network ID: " + networkId);
-
-        try (Connection conn = plugin.getDatabaseManager().getConnection()) {
-            // Get network information
-            String ownerUUID = null;
-            String lastAccessed = null;
-
-            try (PreparedStatement stmt = conn.prepareStatement(
-                    "SELECT owner_uuid, last_accessed FROM networks WHERE network_id = ?")) {
-                stmt.setString(1, networkId);
-                try (ResultSet rs = stmt.executeQuery()) {
-                    if (rs.next()) {
-                        ownerUUID = rs.getString("owner_uuid");
-                        lastAccessed = rs.getString("last_accessed");
-                    }
-                }
-            }
-
-            // Get network block count
-            int blockCount = 0;
-            int cableCount = 0;
-            try (PreparedStatement stmt = conn.prepareStatement(
-                    "SELECT block_type, COUNT(*) as count FROM network_blocks WHERE network_id = ? GROUP BY block_type")) {
-                stmt.setString(1, networkId);
-                try (ResultSet rs = stmt.executeQuery()) {
-                    while (rs.next()) {
-                        String blockType = rs.getString("block_type");
-                        int count = rs.getInt("count");
-                        if ("NETWORK_CABLE".equals(blockType)) {
-                            cableCount = count;
-                        } else {
-                            blockCount += count;
-                        }
-                    }
-                }
-            }
-
-            // Get drive bay and terminal counts
-            int driveBayCount = 0;
-            int terminalCount = 0;
-            try (PreparedStatement stmt = conn.prepareStatement(
-                    "SELECT block_type, COUNT(*) as count FROM network_blocks WHERE network_id = ? AND block_type IN ('DRIVE_BAY', 'MSS_TERMINAL') GROUP BY block_type")) {
-                stmt.setString(1, networkId);
-                try (ResultSet rs = stmt.executeQuery()) {
-                    while (rs.next()) {
-                        String blockType = rs.getString("block_type");
-                        int count = rs.getInt("count");
-                        if ("DRIVE_BAY".equals(blockType)) {
-                            driveBayCount = count;
-                        } else if ("MSS_TERMINAL".equals(blockType)) {
-                            terminalCount = count;
-                        }
-                    }
-                }
-            }
-
-            // Get storage disk count and total capacity
-            int diskCount = 0;
-            long totalItems = 0;
-            int totalCells = 0;
-            int usedCells = 0;
-
-            try (PreparedStatement stmt = conn.prepareStatement(
-                    "SELECT COUNT(DISTINCT sd.disk_id) as disk_count, " +
-                            "SUM(sd.max_cells) as total_cells, " +
-                            "SUM(sd.used_cells) as used_cells, " +
-                            "COALESCE(SUM(si.quantity), 0) as total_items " +
-                            "FROM storage_disks sd " +
-                            "LEFT JOIN storage_items si ON sd.disk_id = si.disk_id " +
-                            "WHERE sd.network_id = ?")) {
-                stmt.setString(1, networkId);
-                try (ResultSet rs = stmt.executeQuery()) {
-                    if (rs.next()) {
-                        diskCount = rs.getInt("disk_count");
-                        totalCells = rs.getInt("total_cells");
-                        usedCells = rs.getInt("used_cells");
-                        totalItems = rs.getLong("total_items");
-                    }
-                }
-            }
-
-            // Display the information
-            player.sendMessage(Component.text("=== Storage Server Status ===", NamedTextColor.GOLD));
-            player.sendMessage(Component.text("Network ID: " + networkId, NamedTextColor.GRAY));
-
-            if (ownerUUID != null) {
-                String ownerName = plugin.getServer().getOfflinePlayer(java.util.UUID.fromString(ownerUUID)).getName();
-                player.sendMessage(Component.text("Owner: " + (ownerName != null ? ownerName : "Unknown"), NamedTextColor.GRAY));
-            }
-
-            player.sendMessage(Component.text("Network Size: " + blockCount + "/" + plugin.getConfigManager().getMaxNetworkBlocks() + " blocks", NamedTextColor.AQUA));
-            player.sendMessage(Component.text("Network Cables: " + cableCount + "/" + plugin.getConfigManager().getMaxNetworkCables() + " cables", NamedTextColor.BLUE));
-            player.sendMessage(Component.text("Drive Bays: " + driveBayCount, NamedTextColor.YELLOW));
-            player.sendMessage(Component.text("Terminals: " + terminalCount, NamedTextColor.GREEN));
-            player.sendMessage(Component.text("Storage Disks: " + diskCount, NamedTextColor.LIGHT_PURPLE));
-
-            if (diskCount > 0) {
-                NamedTextColor storageColor = usedCells >= totalCells * 0.9 ? NamedTextColor.RED :
-                        usedCells >= totalCells * 0.7 ? NamedTextColor.YELLOW : NamedTextColor.GREEN;
-                player.sendMessage(Component.text("Storage Cells: " + usedCells + "/" + totalCells + " used", storageColor));
-                player.sendMessage(Component.text("Total Items: " + String.format("%,d", totalItems), NamedTextColor.AQUA));
-            }
-
-            if (lastAccessed != null) {
-                player.sendMessage(Component.text("Last Accessed: " + lastAccessed, NamedTextColor.DARK_GRAY));
-            }
-
-        } catch (Exception e) {
-            player.sendMessage(Component.text("Error retrieving storage server status: " + e.getMessage(), NamedTextColor.RED));
-            plugin.getLogger().severe("Error retrieving storage server status: " + e.getMessage());
+            player.sendMessage(Component.text("Error processing block break: " + e.getMessage(), NamedTextColor.RED));
+            plugin.getLogger().severe("Error in block break event: " + e.getMessage());
         }
     }
 
@@ -536,7 +387,7 @@ public class BlockListener implements Listener {
                     return;
                 }
 
-                // Open exporter GUI
+                // Open the exporter GUI
                 plugin.getGUIManager().openExporterGUI(player, block.getLocation(), exporterData.exporterId, networkId);
 
             } catch (Exception e) {
@@ -551,64 +402,23 @@ public class BlockListener implements Listener {
             event.setCancelled(true);
 
             if (plugin.getConfigManager().isRequireUsePermission() && !player.hasPermission("massstorageserver.use")) {
-                player.sendMessage(Component.text("You don't have permission to use Mass Storage terminals.", NamedTextColor.RED));
+                player.sendMessage(Component.text("You don't have permission to use terminals.", NamedTextColor.RED));
                 return;
             }
 
             try {
                 String networkId = networkManager.getNetworkId(block.getLocation());
-
-                if (networkId == null) {
+                if (networkId == null || !networkManager.isNetworkValid(networkId)) {
                     player.sendMessage(Component.text("This terminal is not connected to a valid network.", NamedTextColor.RED));
                     return;
                 }
 
-                // Check cooldown
-                if (!plugin.getCooldownManager().canOperate(player.getUniqueId(), networkId)) {
-                    long remaining = plugin.getCooldownManager().getRemainingCooldown(player.getUniqueId(), networkId);
-                    player.sendMessage(Component.text("Please wait " + remaining + "ms before using the network again.", NamedTextColor.YELLOW));
-                    return;
-                }
-
-                // Open terminal GUI
+                // Open the terminal GUI
                 plugin.getGUIManager().openTerminalGUI(player, block.getLocation(), networkId);
-
-                // Record operation
-                plugin.getCooldownManager().recordOperation(player.getUniqueId(), networkId);
 
             } catch (Exception e) {
                 player.sendMessage(Component.text("Error accessing terminal: " + e.getMessage(), NamedTextColor.RED));
                 plugin.getLogger().severe("Error accessing terminal: " + e.getMessage());
-            }
-            return;
-        }
-
-        // Handle Storage Server interactions (only custom ones)
-        if (isCustomStorageServer(block)) {
-            event.setCancelled(true);
-
-            if (plugin.getConfigManager().isRequireUsePermission() && !player.hasPermission("massstorageserver.use")) {
-                player.sendMessage(Component.text("You don't have permission to view Storage Server information.", NamedTextColor.RED));
-                return;
-            }
-
-            // Add debug logging
-            plugin.getLogger().info("Storage Server interaction by " + player.getName() + " at " + block.getLocation());
-
-            try {
-                String networkId = networkManager.getNetworkId(block.getLocation());
-
-                if (networkId == null) {
-                    player.sendMessage(Component.text("This Storage Server is not part of a valid network.", NamedTextColor.RED));
-                    return;
-                }
-
-                // Display network status information
-                displayStorageServerStatus(player, networkId);
-
-            } catch (Exception e) {
-                player.sendMessage(Component.text("Error accessing Storage Server: " + e.getMessage(), NamedTextColor.RED));
-                plugin.getLogger().severe("Error accessing Storage Server: " + e.getMessage());
             }
             return;
         }
@@ -618,26 +428,16 @@ public class BlockListener implements Listener {
             event.setCancelled(true);
 
             if (plugin.getConfigManager().isRequireUsePermission() && !player.hasPermission("massstorageserver.use")) {
-                player.sendMessage(Component.text("You don't have permission to use Drive Bays.", NamedTextColor.RED));
+                player.sendMessage(Component.text("You don't have permission to use drive bays.", NamedTextColor.RED));
                 return;
             }
 
             try {
                 String networkId = networkManager.getNetworkId(block.getLocation());
 
-                // UPDATED: Allow Drive Bay access even without a valid network
+                // UPDATED: Allow access even without network, show status message
                 if (networkId == null) {
-                    // Try to find any network ID associated with this location in the database
-                    networkId = plugin.getDisksManager().findDriveBayNetworkId(block.getLocation());
-
-                    if (networkId == null) {
-                        // Generate a temporary network ID for standalone drive bay access
-                        networkId = plugin.getDisksManager().generateStandaloneNetworkId(block.getLocation());
-
-                        player.sendMessage(Component.text("Opening standalone drive bay (not connected to a network).", NamedTextColor.YELLOW));
-                    } else {
-                        player.sendMessage(Component.text("Opening drive bay (network connection lost).", NamedTextColor.YELLOW));
-                    }
+                    player.sendMessage(Component.text("Opening drive bay (no network connection).", NamedTextColor.YELLOW));
                 } else if (!networkManager.isNetworkValid(networkId)) {
                     player.sendMessage(Component.text("Opening drive bay (network is no longer valid).", NamedTextColor.YELLOW));
                 }
@@ -705,22 +505,18 @@ public class BlockListener implements Listener {
         }
     }
 
-    private void markLocationAsCustomBlock(Location location, String blockType) {
-        try {
-            plugin.getDatabaseManager().executeTransaction(conn -> {
-                try (PreparedStatement stmt = conn.prepareStatement(
-                        "INSERT OR REPLACE INTO custom_block_markers (world_name, x, y, z, block_type) VALUES (?, ?, ?, ?, ?)")) {
-                    stmt.setString(1, location.getWorld().getName());
-                    stmt.setInt(2, location.getBlockX());
-                    stmt.setInt(3, location.getBlockY());
-                    stmt.setInt(4, location.getBlockZ());
-                    stmt.setString(5, blockType);
-                    stmt.executeUpdate();
-                }
-            });
-        } catch (Exception e) {
-            plugin.getLogger().severe("Error marking custom block: " + e.getMessage());
-        }
+    private void markLocationAsCustomBlock(Location location, String blockType) throws SQLException {
+        plugin.getDatabaseManager().executeTransaction(conn -> {
+            try (PreparedStatement stmt = conn.prepareStatement(
+                    "INSERT OR REPLACE INTO custom_block_markers (world_name, x, y, z, block_type) VALUES (?, ?, ?, ?, ?)")) {
+                stmt.setString(1, location.getWorld().getName());
+                stmt.setInt(2, location.getBlockX());
+                stmt.setInt(3, location.getBlockY());
+                stmt.setInt(4, location.getBlockZ());
+                stmt.setString(5, blockType);
+                stmt.executeUpdate();
+            }
+        });
     }
 
     private void removeCustomBlockMarker(Location location) {

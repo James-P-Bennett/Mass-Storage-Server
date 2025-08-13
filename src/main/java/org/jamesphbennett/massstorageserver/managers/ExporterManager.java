@@ -123,16 +123,42 @@ public class ExporterManager {
             }
         }, tickInterval, tickInterval);
 
-        plugin.getLogger().info("Export task started with " + tickInterval + " tick interval");
-    }
+        // ADDED: Periodic validation of exporter network assignments (every 30 seconds)
+        plugin.getServer().getScheduler().runTaskTimer(plugin, () -> {
+            updateExporterNetworkAssignments();
+        }, 600L, 600L); // 600 ticks = 30 seconds
 
+        plugin.getLogger().info("Export task started with " + tickInterval + " tick interval");
+        plugin.getLogger().info("Exporter network validation task started (30 second interval)");
+    }
+    /**
+            * ENHANCED: Check if exporter is physically connected to its assigned network
+     * This goes beyond just checking if the network exists - it verifies actual connectivity
+     */
+    private boolean isExporterConnectedToNetwork(ExporterData exporter) {
+        // First check if network exists at all
+        if (!plugin.getNetworkManager().isNetworkValid(exporter.networkId)) {
+            return false;
+        }
+
+        // Then check if exporter location is actually connected to that network
+        String actualNetworkId = plugin.getNetworkManager().getNetworkId(exporter.location);
+
+        // Debug logging
+        plugin.getLogger().info("DEBUG: Exporter " + exporter.exporterId +
+                " expects network " + exporter.networkId +
+                " but location shows network " + actualNetworkId);
+
+        return exporter.networkId.equals(actualNetworkId);
+    }
     /**
      * Process a single export operation
      */
     private void processExport(ExporterData exporter) {
         try {
-            // Check if network is still valid
-            if (!plugin.getNetworkManager().isNetworkValid(exporter.networkId)) {
+            // ENHANCED: Check if exporter is physically connected to its network
+            if (!isExporterConnectedToNetwork(exporter)) {
+                plugin.getLogger().info("Exporter " + exporter.exporterId + " is no longer connected to network " + exporter.networkId + " - skipping export");
                 return;
             }
 
@@ -503,32 +529,113 @@ public class ExporterManager {
     }
 
     /**
-     * Update network assignments for exporters when networks merge/split
+     * ADDED: Handle network invalidation - disconnect exporters from invalid networks
+     * This should be called when a network is unregistered/dissolved
      */
-    public void updateNetworkAssignments() {
+    public void handleNetworkInvalidated(String networkId) {
+        plugin.getLogger().info("Handling exporter disconnections for invalidated network: " + networkId);
+
+        int disconnectedCount = 0;
         for (ExporterData exporter : activeExporters.values()) {
-            String currentNetworkId = plugin.getNetworkManager().getNetworkId(exporter.location);
-            if (currentNetworkId != null && !currentNetworkId.equals(exporter.networkId)) {
+            if (networkId.equals(exporter.networkId)) {
                 try {
-                    // Update database
+                    // Mark exporter as disconnected in database
                     plugin.getDatabaseManager().executeUpdate(
                             "UPDATE exporters SET network_id = ?, updated_at = CURRENT_TIMESTAMP WHERE exporter_id = ?",
-                            currentNetworkId, exporter.exporterId);
+                            "UNCONNECTED", exporter.exporterId);
 
-                    // Update in memory
+                    // Update in memory - create new ExporterData with UNCONNECTED status
                     activeExporters.remove(exporter.exporterId);
-                    ExporterData updatedData = new ExporterData(exporter.exporterId, currentNetworkId, exporter.location, exporter.enabled);
-                    updatedData.filterItems.addAll(exporter.filterItems);
-                    activeExporters.put(exporter.exporterId, updatedData);
+                    ExporterData disconnectedData = new ExporterData(exporter.exporterId, "UNCONNECTED", exporter.location, false); // Disable when disconnected
+                    disconnectedData.filterItems.addAll(exporter.filterItems); // Preserve filters
+                    activeExporters.put(exporter.exporterId, disconnectedData);
 
-                    plugin.getLogger().info("Updated exporter " + exporter.exporterId + " network assignment: " +
-                            exporter.networkId + " -> " + currentNetworkId);
+                    plugin.getLogger().info("Disconnected exporter " + exporter.exporterId + " from invalidated network " + networkId);
+                    disconnectedCount++;
 
                 } catch (SQLException e) {
-                    plugin.getLogger().warning("Failed to update exporter network assignment: " + e.getMessage());
+                    plugin.getLogger().warning("Failed to disconnect exporter " + exporter.exporterId + ": " + e.getMessage());
                 }
             }
         }
+
+        if (disconnectedCount > 0) {
+            plugin.getLogger().info("Disconnected " + disconnectedCount + " exporters from invalidated network " + networkId);
+        }
+    }
+
+    /**
+     * ADDED: Update exporter network assignments when networks change
+     * This should be called after network detection/updates
+     */
+    public void updateExporterNetworkAssignments() {
+        int reconnectedCount = 0;
+        int disconnectedCount = 0;
+
+        for (ExporterData exporter : activeExporters.values()) {
+            // Check if current network is valid
+            boolean currentNetworkValid = exporter.networkId != null &&
+                    !"UNCONNECTED".equals(exporter.networkId) &&
+                    plugin.getNetworkManager().isNetworkValid(exporter.networkId);
+
+            if (!currentNetworkValid) {
+                // Exporter is unconnected or has invalid network - try to find a new network
+                String newNetworkId = findAdjacentNetwork(exporter.location);
+
+                if (newNetworkId != null && !newNetworkId.equals(exporter.networkId)) {
+                    // Found a new valid network - reconnect
+                    try {
+                        plugin.getDatabaseManager().executeUpdate(
+                                "UPDATE exporters SET network_id = ?, updated_at = CURRENT_TIMESTAMP WHERE exporter_id = ?",
+                                newNetworkId, exporter.exporterId);
+
+                        // Update in memory
+                        activeExporters.remove(exporter.exporterId);
+                        ExporterData updatedData = new ExporterData(exporter.exporterId, newNetworkId, exporter.location, exporter.enabled);
+                        updatedData.filterItems.addAll(exporter.filterItems);
+                        activeExporters.put(exporter.exporterId, updatedData);
+
+                        plugin.getLogger().info("Reconnected exporter " + exporter.exporterId + " to network " + newNetworkId);
+                        reconnectedCount++;
+
+                    } catch (SQLException e) {
+                        plugin.getLogger().warning("Failed to reconnect exporter " + exporter.exporterId + ": " + e.getMessage());
+                    }
+                } else if (!"UNCONNECTED".equals(exporter.networkId)) {
+                    // No valid network found and not already marked as unconnected - disconnect
+                    try {
+                        plugin.getDatabaseManager().executeUpdate(
+                                "UPDATE exporters SET network_id = ?, updated_at = CURRENT_TIMESTAMP WHERE exporter_id = ?",
+                                "UNCONNECTED", exporter.exporterId);
+
+                        // Update in memory
+                        activeExporters.remove(exporter.exporterId);
+                        ExporterData disconnectedData = new ExporterData(exporter.exporterId, "UNCONNECTED", exporter.location, false);
+                        disconnectedData.filterItems.addAll(exporter.filterItems);
+                        activeExporters.put(exporter.exporterId, disconnectedData);
+
+                        plugin.getLogger().info("Disconnected exporter " + exporter.exporterId + " - no valid network found");
+                        disconnectedCount++;
+
+                    } catch (SQLException e) {
+                        plugin.getLogger().warning("Failed to disconnect exporter " + exporter.exporterId + ": " + e.getMessage());
+                    }
+                }
+            }
+        }
+
+        if (reconnectedCount > 0 || disconnectedCount > 0) {
+            plugin.getLogger().info("Exporter network assignment update: " + reconnectedCount + " reconnected, " + disconnectedCount + " disconnected");
+        }
+    }
+
+    /**
+     * Update network assignments for exporters when networks merge/split
+     * (LEGACY METHOD - kept for compatibility)
+     */
+    public void updateNetworkAssignments() {
+        // Call the new method
+        updateExporterNetworkAssignments();
     }
 
     /**

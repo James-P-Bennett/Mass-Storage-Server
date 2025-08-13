@@ -534,6 +534,9 @@ public class GUIManager {
             refreshPlayerDriveBay(player);
         }
 
+        // FIXED: Handle exporter disconnections when network is invalidated
+        plugin.getExporterManager().handleNetworkInvalidated(networkId);
+
         // Clear the modified flag for this network
         clearNetworkModified(networkId);
 

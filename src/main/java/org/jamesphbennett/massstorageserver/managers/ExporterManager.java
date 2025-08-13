@@ -132,10 +132,15 @@ public class ExporterManager {
         plugin.getLogger().info("Exporter network validation task started (30 second interval)");
     }
     /**
-            * ENHANCED: Check if exporter is physically connected to its assigned network
-     * This goes beyond just checking if the network exists - it verifies actual connectivity
+     * ENHANCED: Check if exporter is physically connected to its assigned network
+     * This checks adjacent blocks directly instead of relying on network detection at exporter location
      */
     private boolean isExporterConnectedToNetwork(ExporterData exporter) {
+        // First check if network exists at all
+        if (!plugin.getNetworkManager().isNetworkValid(exporter.networkId)) {
+            return false;
+        }
+
         // AGGRESSIVE CHECK: Look for any adjacent network blocks or cables
         Location exporterLoc = exporter.location;
 
@@ -151,16 +156,24 @@ public class ExporterManager {
 
         for (Location loc : adjacentLocs) {
             String networkId = plugin.getNetworkManager().getNetworkId(loc);
-            plugin.getLogger().info("DEBUG ADJACENT: Checking " + loc + " -> network: " + networkId);
 
             if (exporter.networkId.equals(networkId)) {
-                plugin.getLogger().info("DEBUG: Found matching network at adjacent location: " + loc);
-                return true;
+                return true; // Found matching network at adjacent location
             }
         }
 
-        plugin.getLogger().info("DEBUG: No adjacent network blocks found for exporter " + exporter.exporterId);
-        return false;
+        return false; // No adjacent network blocks found
+    }
+    /**
+     * Refresh any open exporter GUIs for a specific exporter
+     */
+    private void refreshExporterGUIs(String exporterId) {
+        try {
+            // Notify GUI manager to refresh this specific exporter's GUIs
+            plugin.getGUIManager().refreshExporterGUIs(exporterId);
+        } catch (Exception e) {
+            plugin.getLogger().warning("Failed to refresh exporter GUIs for " + exporterId + ": " + e.getMessage());
+        }
     }
     /**
      * Process a single export operation
@@ -169,7 +182,20 @@ public class ExporterManager {
         try {
             // ENHANCED: Check if exporter is physically connected to its network
             if (!isExporterConnectedToNetwork(exporter)) {
-                plugin.getLogger().info("Exporter " + exporter.exporterId + " is no longer connected to network " + exporter.networkId + " - skipping export");
+                plugin.getLogger().info("Exporter " + exporter.exporterId + " is no longer connected to network " + exporter.networkId + " - auto-disabling");
+
+                // AUTO-DISABLE: Set exporter as disabled when disconnected
+                try {
+                    toggleExporter(exporter.exporterId, false);
+                    plugin.getLogger().info("Auto-disabled exporter " + exporter.exporterId + " due to network disconnection");
+
+                    // Refresh any open exporter GUIs to show disabled status
+                    refreshExporterGUIs(exporter.exporterId);
+
+                } catch (SQLException e) {
+                    plugin.getLogger().warning("Failed to auto-disable exporter " + exporter.exporterId + ": " + e.getMessage());
+                }
+
                 return;
             }
 
@@ -582,6 +608,7 @@ public class ExporterManager {
     public void updateExporterNetworkAssignments() {
         int reconnectedCount = 0;
         int disconnectedCount = 0;
+        int autoDisabledCount = 0;
 
         for (ExporterData exporter : activeExporters.values()) {
             // Check if current network is valid
@@ -632,11 +659,25 @@ public class ExporterManager {
                         plugin.getLogger().warning("Failed to disconnect exporter " + exporter.exporterId + ": " + e.getMessage());
                     }
                 }
+            } else {
+                // Network is valid, but check physical connectivity
+                if (exporter.enabled && !isExporterConnectedToNetwork(exporter)) {
+                    // Auto-disable exporters that are enabled but physically disconnected
+                    try {
+                        toggleExporter(exporter.exporterId, false);
+                        plugin.getLogger().info("Auto-disabled exporter " + exporter.exporterId + " during periodic validation - physically disconnected");
+                        refreshExporterGUIs(exporter.exporterId);
+                        autoDisabledCount++;
+                    } catch (SQLException e) {
+                        plugin.getLogger().warning("Failed to auto-disable exporter " + exporter.exporterId + ": " + e.getMessage());
+                    }
+                }
             }
         }
 
-        if (reconnectedCount > 0 || disconnectedCount > 0) {
-            plugin.getLogger().info("Exporter network assignment update: " + reconnectedCount + " reconnected, " + disconnectedCount + " disconnected");
+        if (reconnectedCount > 0 || disconnectedCount > 0 || autoDisabledCount > 0) {
+            plugin.getLogger().info("Exporter network assignment update: " + reconnectedCount + " reconnected, " +
+                    disconnectedCount + " disconnected, " + autoDisabledCount + " auto-disabled");
         }
     }
 

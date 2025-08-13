@@ -589,7 +589,39 @@ public class GUIManager {
             plugin.getLogger().info("Validated and closed " + terminalsToClose.size() + " invalid terminal GUIs");
         }
     }
+    /**
+     * Refresh exporter GUIs for a specific exporter
+     */
+    public void refreshExporterGUIs(String exporterId) {
+        // Find any players with the exporter GUI open for this specific exporter
+        for (Map.Entry<UUID, Object> entry : playerGUIInstance.entrySet()) {
+            UUID playerId = entry.getKey();
+            Object guiInstance = entry.getValue();
 
+            if (guiInstance instanceof ExporterGUI) {
+                ExporterGUI exporterGUI = (ExporterGUI) guiInstance;
+                // Check if this GUI is for the specific exporter
+                if (exporterId.equals(getExporterIdFromGUI(exporterGUI))) {
+                    Player player = plugin.getServer().getPlayer(playerId);
+                    if (player != null && player.isOnline()) {
+                        // Refresh the GUI by reopening it
+                        String networkId = playerGUINetworkId.get(playerId);
+                        Location location = playerGUILocation.get(playerId);
+                        if (networkId != null && location != null) {
+                            openExporterGUI(player, location, exporterId, networkId);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Helper method to get exporter ID from GUI (you may need to add a getter to ExporterGUI)
+    private String getExporterIdFromGUI(ExporterGUI gui) {
+        // This assumes you have a getter method in ExporterGUI class
+        // You may need to add: public String getExporterId() { return exporterId; }
+        return gui.getExporterId();
+    }
     /**
      * Force close all GUIs (for plugin shutdown)
      */

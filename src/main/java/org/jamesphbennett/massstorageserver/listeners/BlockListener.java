@@ -78,6 +78,14 @@ public class BlockListener implements Listener {
 
         // Handle exporter placement
         if (itemManager.isExporter(item)) {
+            // Check if exporter is being placed against (attached to) an MSS block
+            Block blockAgainst = event.getBlockAgainst();
+            if (blockAgainst != null && isCustomMSSBlock(blockAgainst)) {
+                event.setCancelled(true);
+                player.sendMessage(Component.text("You cannot attach an exporter directly to the network!", NamedTextColor.RED));
+                return;
+            }
+
             // Check if there's a valid network nearby to connect to (optional)
             String nearbyNetworkId = null;
             for (Location adjacent : getAdjacentLocations(location)) {
@@ -140,6 +148,16 @@ public class BlockListener implements Listener {
                 event.setCancelled(true);
                 player.sendMessage(Component.text(serverConflict, NamedTextColor.RED));
                 return;
+            }
+
+            // Check if placing this MSS block would cause an exporter to be attached to it
+            if (isMSSBlockType(blockType)) {
+                String exporterConflict = checkExporterAttachmentConflict(location);
+                if (exporterConflict != null) {
+                    event.setCancelled(true);
+                    player.sendMessage(Component.text(exporterConflict, NamedTextColor.RED));
+                    return;
+                }
             }
 
             // Mark this location as containing our custom block in the database (SYNCHRONOUSLY)
@@ -510,6 +528,69 @@ public class BlockListener implements Listener {
     private boolean isCustomExporter(Block block) {
         if (block.getType() != Material.PLAYER_HEAD && block.getType() != Material.PLAYER_WALL_HEAD) return false;
         return isMarkedAsCustomBlock(block.getLocation(), "EXPORTER");
+    }
+
+    /**
+     * Check if a block is a custom MSS block (Storage Server, Drive Bay, or MSS Terminal)
+     * Used for exporter placement validation
+     */
+    private boolean isCustomMSSBlock(Block block) {
+        return isCustomStorageServer(block) || isCustomDriveBay(block) || isCustomMSSTerminal(block);
+    }
+
+    /**
+     * Check if a block type is an MSS block type
+     */
+    private boolean isMSSBlockType(String blockType) {
+        return "STORAGE_SERVER".equals(blockType) || "DRIVE_BAY".equals(blockType) || "MSS_TERMINAL".equals(blockType);
+    }
+
+    /**
+     * Check if placing an MSS block at this location would cause an existing exporter to be attached to it
+     */
+    private String checkExporterAttachmentConflict(Location mssBlockLocation) {
+        // Check all adjacent locations for exporters that would be attached to this MSS block
+        for (Location adjacent : getAdjacentLocations(mssBlockLocation)) {
+            Block adjacentBlock = adjacent.getBlock();
+            
+            // Check if there's an exporter at this adjacent location
+            if (isCustomExporter(adjacentBlock)) {
+                // Check if this exporter would be wall/floor mounted on the MSS block we're placing
+                if (isExporterAttachedToBlock(adjacent, mssBlockLocation)) {
+                    return "You cannot attach an exporter directly to the network!";
+                }
+            }
+        }
+        return null; // No conflict
+    }
+
+    /**
+     * Check if an exporter at exporterLocation is attached to (wall/floor mounted on) the block at blockLocation
+     */
+    private boolean isExporterAttachedToBlock(Location exporterLocation, Location blockLocation) {
+        Block exporterBlock = exporterLocation.getBlock();
+        
+        // For player heads, we need to check if they're attached to the specific block
+        if (exporterBlock.getType() == Material.PLAYER_HEAD) {
+            // Floor mounted head - check if it's sitting on top of the block
+            Location below = exporterLocation.clone().add(0, -1, 0);
+            if (below.equals(blockLocation)) {
+                return true;
+            }
+        } else if (exporterBlock.getType() == Material.PLAYER_WALL_HEAD) {
+            // Wall mounted head - check if it's attached to any face of the block
+            // Player wall heads are attached to the block they're facing away from
+            org.bukkit.block.data.Directional directional = (org.bukkit.block.data.Directional) exporterBlock.getBlockData();
+            org.bukkit.block.BlockFace facing = directional.getFacing();
+            
+            // The block the wall head is attached to is in the opposite direction
+            Location attachedTo = exporterLocation.clone().add(facing.getOppositeFace().getDirection());
+            if (attachedTo.equals(blockLocation)) {
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     private boolean isMarkedAsCustomBlock(Location location, String blockType) {

@@ -1,13 +1,10 @@
 package org.jamesphbennett.massstorageserver.managers;
 
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.Container;
-import org.bukkit.block.Skull;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
@@ -478,7 +475,7 @@ public class ExporterManager {
     }
 
     /**
-     * Update filter for an exporter - now stores actual item data
+     * Update filter for an exporter - FIXED to store actual item data as single-item templates
      */
     public void updateExporterFilter(String exporterId, List<ItemStack> filterItems) throws SQLException {
         ExporterData data = activeExporters.get(exporterId);
@@ -491,15 +488,22 @@ public class ExporterManager {
                 stmt.executeUpdate();
             }
 
-            // Add new filters with hashes
+            // Add new filters with both hashes and item data
             if (!filterItems.isEmpty()) {
                 try (PreparedStatement stmt = conn.prepareStatement(
-                        "INSERT INTO exporter_filters (exporter_id, item_hash, filter_type) VALUES (?, ?, 'whitelist')")) {
+                        "INSERT INTO exporter_filters (exporter_id, item_hash, item_data, filter_type) VALUES (?, ?, ?, 'whitelist')")) {
 
                     for (ItemStack item : filterItems) {
-                        String itemHash = plugin.getItemManager().generateItemHash(item);
+                        // FIXED: Ensure we store single-item templates
+                        ItemStack template = item.clone();
+                        template.setAmount(1);
+
+                        String itemHash = plugin.getItemManager().generateItemHash(template);
+                        String itemData = plugin.getStorageManager().serializeItemStack(template); // Store actual item data
+
                         stmt.setString(1, exporterId);
                         stmt.setString(2, itemHash);
+                        stmt.setString(3, itemData);
                         stmt.addBatch();
                     }
                     stmt.executeBatch();
@@ -507,10 +511,12 @@ public class ExporterManager {
             }
         });
 
-        // Update in-memory data with hashes
+        // Update in-memory data with hashes from single-item templates
         data.filterItems.clear();
         for (ItemStack item : filterItems) {
-            String itemHash = plugin.getItemManager().generateItemHash(item);
+            ItemStack template = item.clone();
+            template.setAmount(1);
+            String itemHash = plugin.getItemManager().generateItemHash(template);
             data.filterItems.add(itemHash);
         }
 
@@ -518,43 +524,32 @@ public class ExporterManager {
     }
 
     /**
-     * Get filter items for an exporter (returns actual ItemStacks for GUI)
+     * Get filter items for an exporter - FIXED to return actual ItemStacks as single-item templates
      */
     public List<ItemStack> getExporterFilterItems(String exporterId) {
         List<ItemStack> items = new ArrayList<>();
 
         try (Connection conn = plugin.getDatabaseManager().getConnection();
              PreparedStatement stmt = conn.prepareStatement(
-                     "SELECT item_hash FROM exporter_filters WHERE exporter_id = ? AND filter_type = 'whitelist'")) {
+                     "SELECT item_data FROM exporter_filters WHERE exporter_id = ? AND item_data IS NOT NULL")) {
 
             stmt.setString(1, exporterId);
-
             try (ResultSet rs = stmt.executeQuery()) {
                 while (rs.next()) {
-                    String itemHash = rs.getString("item_hash");
-
-                    // Try to find a stored item with this hash to get the ItemStack
-                    ExporterData exporter = activeExporters.get(exporterId);
-                    if (exporter != null) {
-                        try {
-                            List<StoredItem> networkItems = plugin.getStorageManager().getNetworkItems(exporter.networkId);
-                            for (StoredItem storedItem : networkItems) {
-                                if (storedItem.getItemHash().equals(itemHash)) {
-                                    items.add(storedItem.getItemStack().clone());
-                                    break;
-                                }
-                            }
-                        } catch (Exception e) {
-                            plugin.getLogger().warning("Could not resolve filter item for hash " + itemHash + ": " + e.getMessage());
-                        }
+                    String itemData = rs.getString("item_data");
+                    ItemStack item = plugin.getStorageManager().deserializeItemStack(itemData);
+                    if (item != null) {
+                        // Ensure it's a single-item template
+                        item.setAmount(1);
+                        items.add(item);
                     }
                 }
             }
-
         } catch (SQLException e) {
-            plugin.getLogger().severe("Error loading exporter filter items: " + e.getMessage());
+            plugin.getLogger().severe("Error loading exporter filters: " + e.getMessage());
         }
 
+        plugin.getLogger().info("Loaded " + items.size() + " filter items for exporter " + exporterId);
         return items;
     }
 

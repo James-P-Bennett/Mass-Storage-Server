@@ -61,14 +61,47 @@ public class ExporterGUI implements Listener {
 
     // CHANGED: Made public for GUI refresh functionality
     public void setupGUI() {
-        // Clear inventory first
+        // Clear inventory
         inventory.clear();
         slotToFilterItem.clear();
 
-        // Top section (rows 0-1): Filter slots (18 slots) - no placeholders, just empty
-        displayFilterSlots();
+        // Add filter items (slots 0-17)
+        for (int i = 0; i < 18; i++) {
+            if (i < currentFilterItems.size()) {
+                ItemStack filterItem = currentFilterItems.get(i);
+                // Always display as single items regardless of original stack size
+                ItemStack displayItem = filterItem.clone();
+                displayItem.setAmount(1);
 
-        // Divider row (row 2): Glass panes
+                // Add lore to indicate it's a filter item
+                ItemMeta meta = displayItem.getItemMeta();
+                if (meta != null) {
+                    List<String> lore = meta.hasLore() ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
+                    lore.add("");
+                    lore.add(legacySerialize("<gray>Filter Item"));
+                    lore.add(legacySerialize("<yellow>Click to remove from filter"));
+                    meta.setLore(lore);
+                    displayItem.setItemMeta(meta);
+                }
+
+                inventory.setItem(i, displayItem);
+                slotToFilterItem.put(i, filterItem);
+            } else {
+                // Empty filter slot with glass pane
+                ItemStack placeholder = new ItemStack(Material.LIGHT_GRAY_STAINED_GLASS_PANE);
+                ItemMeta meta = placeholder.getItemMeta();
+                meta.setDisplayName(legacySerialize("<gray>Empty Filter Slot"));
+                List<String> lore = new ArrayList<>();
+                lore.add("");
+                lore.add(legacySerialize("<yellow>Drag items here to add them to the filter"));
+                lore.add(legacySerialize("<yellow>Or shift-click items from your inventory"));
+                meta.setLore(lore);
+                placeholder.setItemMeta(meta);
+                inventory.setItem(i, placeholder);
+            }
+        }
+
+        // Glass pane divider (slots 18-26)
         ItemStack divider = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
         ItemMeta dividerMeta = divider.getItemMeta();
         dividerMeta.setDisplayName(" ");
@@ -77,54 +110,24 @@ public class ExporterGUI implements Listener {
             inventory.setItem(i, divider);
         }
 
-        // Bottom section (rows 3-4): Control buttons with glass pane fillers
-        setupControlButtons();
+        // Control area setup (slots 27-44)
+        setupControlArea();
     }
 
-    private void displayFilterSlots() {
-        // Display current filters - no placeholders for empty slots
-        for (int i = 0; i < Math.min(18, currentFilterItems.size()); i++) {
-            ItemStack filterItem = currentFilterItems.get(i);
-            if (filterItem != null) {
-                ItemStack displayItem = filterItem.clone();
-
-                // Always display exactly 1 item in filter slots regardless of original stack size
-                displayItem.setAmount(1);
-
-                ItemMeta meta = displayItem.getItemMeta();
-
-                List<String> lore = new ArrayList<>();
-                lore.add(legacySerialize("<gray>Filter Item"));
-                lore.add("");
-                lore.add(legacySerialize("<yellow>Click to remove from filter"));
-                meta.setLore(lore);
-
-                // No artificial glowing effect - let naturally enchanted items glow on their own
-
-                displayItem.setItemMeta(meta);
-                inventory.setItem(i, displayItem);
-                slotToFilterItem.put(i, filterItem);
-            }
-        }
-
-        // Leave empty filter slots actually empty (no glass panes)
-    }
-
-    private void setupControlButtons() {
-        ExporterManager.ExporterData exporterData = plugin.getExporterManager().getExporterAtLocation(exporterLocation);
-        boolean isEnabled = exporterData != null && exporterData.enabled;
-
-        // Fill all control area slots with glass panes first
-        ItemStack filler = new ItemStack(Material.LIGHT_GRAY_STAINED_GLASS_PANE);
+    private void setupControlArea() {
+        // Fill control area with glass panes first
+        ItemStack filler = new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
         ItemMeta fillerMeta = filler.getItemMeta();
         fillerMeta.setDisplayName(" ");
         filler.setItemMeta(fillerMeta);
-
         for (int i = 27; i < 45; i++) {
             inventory.setItem(i, filler);
         }
 
-        // Status indicator (slot 29)
+        // Status button (slot 29)
+        ExporterManager.ExporterData data = plugin.getExporterManager().getExporterAtLocation(exporterLocation);
+        boolean isEnabled = data != null && data.enabled;
+
         ItemStack status = new ItemStack(isEnabled ? Material.LIME_DYE : Material.GRAY_DYE);
         ItemMeta statusMeta = status.getItemMeta();
         statusMeta.setDisplayName(legacySerialize(isEnabled ? "<green>Status: Enabled" : "<gray>Status: Disabled"));
@@ -210,19 +213,39 @@ public class ExporterGUI implements Listener {
         if (!event.getInventory().equals(inventory)) return;
         if (!(event.getWhoClicked() instanceof Player player)) return;
 
-        event.setCancelled(true);
+        int slot = event.getRawSlot(); // Use getRawSlot() like TerminalGUI
 
-        int slot = event.getSlot();
+        // Handle shift-clicks from player inventory for item addition
+        if ((event.getClick() == ClickType.SHIFT_LEFT || event.getClick() == ClickType.SHIFT_RIGHT) &&
+                slot >= inventory.getSize()) {
 
-        // Handle different areas of the GUI
-        if (slot < 18) {
-            // Filter area (top 2 rows)
-            handleFilterAreaClick(player, slot, event);
-        } else if (slot >= 27 && slot < 45) {
-            // Control area (bottom 2 rows)
-            handleControlAreaClick(player, slot, event);
+            // Shift-clicking FROM player inventory TO exporter (to add filter items)
+            ItemStack itemToAdd = event.getCurrentItem();
+
+            if (itemToAdd != null && !itemToAdd.getType().isAir()) {
+                event.setCancelled(true);
+                handleAddItemToFilter(player, itemToAdd);
+            }
+            return;
         }
-        // Slots 18-26 are divider glass panes - do nothing
+
+        // Handle clicks within the exporter GUI (slots 0-44)
+        if (slot < inventory.getSize()) {
+            event.setCancelled(true);
+
+            if (slot < 18) {
+                // Filter area (top 2 rows)
+                handleFilterAreaClick(player, slot, event);
+            } else if (slot >= 27 && slot < 45) {
+                // Control area (bottom 2 rows)
+                handleControlAreaClick(player, slot, event);
+            }
+            // Slots 18-26 are divider glass panes - already cancelled, do nothing
+            return;
+        }
+
+        // All other clicks (in player inventory) are allowed for manual item management
+        // Don't cancel these clicks
     }
 
     private void handleFilterAreaClick(Player player, int slot, InventoryClickEvent event) {
@@ -243,8 +266,11 @@ public class ExporterGUI implements Listener {
             if (currentFilterItems.size() >= 18) {
                 player.sendMessage(Component.text("Filter is full! Remove items first.", NamedTextColor.RED));
             } else {
-                // Add to filter - don't consume the cursor item
-                currentFilterItems.add(cursorItem.clone());
+                // FIXED: Create a single-item template for the filter
+                ItemStack filterTemplate = cursorItem.clone();
+                filterTemplate.setAmount(1); // Always store as single item template
+
+                currentFilterItems.add(filterTemplate);
                 saveFilters();
                 setupGUI();
                 player.sendMessage(Component.text("Added " + cursorItem.getType() + " to filter", NamedTextColor.GREEN));
@@ -298,8 +324,11 @@ public class ExporterGUI implements Listener {
             return;
         }
 
-        // Add to filter (don't actually take the item from player)
-        currentFilterItems.add(itemToAdd.clone());
+        // FIXED: Create a single-item template for the filter (don't actually take the item from player)
+        ItemStack filterTemplate = itemToAdd.clone();
+        filterTemplate.setAmount(1); // Always store as single item template
+
+        currentFilterItems.add(filterTemplate);
         saveFilters();
         setupGUI(); // Refresh GUI to show new filter item
         player.sendMessage(Component.text("Added " + itemToAdd.getType() + " to filter", NamedTextColor.GREEN));
@@ -390,8 +419,11 @@ public class ExporterGUI implements Listener {
                     if (currentFilterItems.size() >= 18) {
                         player.sendMessage(Component.text("Filter is full! Remove items first.", NamedTextColor.RED));
                     } else {
-                        // Add to filter - keep original item on cursor (don't consume it)
-                        currentFilterItems.add(draggedItem.clone());
+                        // FIXED: Create a single-item template for the filter
+                        ItemStack filterTemplate = draggedItem.clone();
+                        filterTemplate.setAmount(1); // Always store as single item template
+
+                        currentFilterItems.add(filterTemplate);
                         saveFilters();
                         setupGUI();
                         player.sendMessage(Component.text("Added " + draggedItem.getType() + " to filter", NamedTextColor.GREEN));
@@ -399,15 +431,11 @@ public class ExporterGUI implements Listener {
                         // Keep the original item on cursor
                         event.setCursor(draggedItem);
                     }
-                } else {
-                    // No item being dragged or air - just cancel
-                    event.setCancelled(true);
                 }
                 return;
             }
-
-            // If we get here, the drag is only in player inventory - allow it
         }
+        // If we get here, the drag is only in player inventory - allow it
     }
 
     @EventHandler

@@ -436,7 +436,7 @@ public class StorageManager {
         }
     }
 
-    private String serializeItemStack(ItemStack item) {
+    public String serializeItemStack(ItemStack item) {
         try {
             java.io.ByteArrayOutputStream outputStream = new java.io.ByteArrayOutputStream();
             org.bukkit.util.io.BukkitObjectOutputStream dataOutput = new org.bukkit.util.io.BukkitObjectOutputStream(outputStream);
@@ -449,7 +449,7 @@ public class StorageManager {
         }
     }
 
-    private ItemStack deserializeItemStack(String data) {
+    public ItemStack deserializeItemStack(String data) {
         try {
             byte[] bytes = Base64.getDecoder().decode(data);
             java.io.ByteArrayInputStream inputStream = new java.io.ByteArrayInputStream(bytes);

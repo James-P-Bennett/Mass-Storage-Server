@@ -423,6 +423,33 @@ public class BlockListener implements Listener {
             return;
         }
 
+        // Handle Storage Server interactions (only custom ones)
+        if (isCustomStorageServer(block)) {
+            event.setCancelled(true);
+
+            if (plugin.getConfigManager().isRequireUsePermission() && !player.hasPermission("massstorageserver.use")) {
+                player.sendMessage(Component.text("You don't have permission to view storage server info.", NamedTextColor.RED));
+                return;
+            }
+
+            try {
+                String networkId = networkManager.getNetworkId(block.getLocation());
+                
+                if (networkId == null || !networkManager.isNetworkValid(networkId)) {
+                    player.sendMessage(Component.text("This storage server is not connected to a valid network.", NamedTextColor.RED));
+                    return;
+                }
+
+                // Display network information
+                displayStorageServerInfo(player, networkId, block.getLocation());
+
+            } catch (Exception e) {
+                player.sendMessage(Component.text("Error accessing storage server: " + e.getMessage(), NamedTextColor.RED));
+                plugin.getLogger().severe("Error accessing storage server: " + e.getMessage());
+            }
+            return;
+        }
+
         // Handle Drive Bay interactions (only custom ones)
         if (isCustomDriveBay(block)) {
             event.setCancelled(true);
@@ -579,5 +606,99 @@ public class BlockListener implements Listener {
             return itemManager.createExporter();
         }
         return null;
+    }
+
+    /**
+     * Display storage server network information to the player
+     */
+    private void displayStorageServerInfo(Player player, String networkId, Location serverLocation) {
+        try {
+            // Get network statistics
+            int driveBayCount = getNetworkDriveBayCount(networkId);
+            int terminalCount = getNetworkTerminalCount(networkId);
+            int cableCount = getNetworkCableCount(networkId);
+            int totalStorageCapacity = getTotalNetworkStorageCapacity(networkId);
+            int usedStorageCapacity = getUsedNetworkStorageCapacity(networkId);
+
+            // Send network information to player
+            player.sendMessage(Component.text("═══ Storage Server Information ═══", NamedTextColor.AQUA));
+            player.sendMessage(Component.text("Network ID: " + networkId.substring(0, Math.min(16, networkId.length())), NamedTextColor.WHITE));
+            player.sendMessage(Component.text("Drive Bays: " + driveBayCount, NamedTextColor.GREEN));
+            player.sendMessage(Component.text("Terminals: " + terminalCount, NamedTextColor.GREEN));
+            player.sendMessage(Component.text("Cables: " + cableCount, NamedTextColor.YELLOW));
+            
+            if (totalStorageCapacity > 0) {
+                int usagePercent = (int) ((double) usedStorageCapacity / totalStorageCapacity * 100);
+                player.sendMessage(Component.text("Storage: " + usedStorageCapacity + "/" + totalStorageCapacity + " cells (" + usagePercent + "%)", NamedTextColor.BLUE));
+            } else {
+                player.sendMessage(Component.text("Storage: No disks installed", NamedTextColor.GRAY));
+            }
+            
+            player.sendMessage(Component.text("Status: " + (networkManager.isNetworkValid(networkId) ? "Active" : "Inactive"), 
+                networkManager.isNetworkValid(networkId) ? NamedTextColor.GREEN : NamedTextColor.RED));
+
+        } catch (Exception e) {
+            player.sendMessage(Component.text("Error retrieving network information: " + e.getMessage(), NamedTextColor.RED));
+            plugin.getLogger().severe("Error displaying storage server info: " + e.getMessage());
+        }
+    }
+
+    private int getNetworkDriveBayCount(String networkId) throws SQLException {
+        try (Connection conn = plugin.getDatabaseManager().getConnection();
+             PreparedStatement stmt = conn.prepareStatement(
+                     "SELECT COUNT(*) FROM network_blocks WHERE network_id = ? AND block_type = 'DRIVE_BAY'")) {
+            stmt.setString(1, networkId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return rs.next() ? rs.getInt(1) : 0;
+            }
+        }
+    }
+
+    private int getNetworkTerminalCount(String networkId) throws SQLException {
+        try (Connection conn = plugin.getDatabaseManager().getConnection();
+             PreparedStatement stmt = conn.prepareStatement(
+                     "SELECT COUNT(*) FROM network_blocks WHERE network_id = ? AND block_type = 'MSS_TERMINAL'")) {
+            stmt.setString(1, networkId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return rs.next() ? rs.getInt(1) : 0;
+            }
+        }
+    }
+
+    private int getNetworkCableCount(String networkId) throws SQLException {
+        try (Connection conn = plugin.getDatabaseManager().getConnection();
+             PreparedStatement stmt = conn.prepareStatement(
+                     "SELECT COUNT(*) FROM network_blocks WHERE network_id = ? AND block_type = 'NETWORK_CABLE'")) {
+            stmt.setString(1, networkId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return rs.next() ? rs.getInt(1) : 0;
+            }
+        }
+    }
+
+    private int getTotalNetworkStorageCapacity(String networkId) throws SQLException {
+        try (Connection conn = plugin.getDatabaseManager().getConnection();
+             PreparedStatement stmt = conn.prepareStatement(
+                     "SELECT SUM(sd.max_cells) FROM storage_disks sd " +
+                     "JOIN drive_bay_slots dbs ON sd.disk_id = dbs.disk_id " +
+                     "WHERE dbs.network_id = ? AND dbs.disk_id IS NOT NULL")) {
+            stmt.setString(1, networkId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return rs.next() ? rs.getInt(1) : 0;
+            }
+        }
+    }
+
+    private int getUsedNetworkStorageCapacity(String networkId) throws SQLException {
+        try (Connection conn = plugin.getDatabaseManager().getConnection();
+             PreparedStatement stmt = conn.prepareStatement(
+                     "SELECT SUM(sd.used_cells) FROM storage_disks sd " +
+                     "JOIN drive_bay_slots dbs ON sd.disk_id = dbs.disk_id " +
+                     "WHERE dbs.network_id = ? AND dbs.disk_id IS NOT NULL")) {
+            stmt.setString(1, networkId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return rs.next() ? rs.getInt(1) : 0;
+            }
+        }
     }
 }

@@ -13,7 +13,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.ArrayList;
 
 public class RecipeManager {
 
@@ -34,41 +33,23 @@ public class RecipeManager {
 
     /**
      * Data class to store custom recipe information
+     *
+     * @param ingredients Object can be Material or CustomComponent
      */
-    public static class CustomRecipeData {
-        public final String[] shape;
-        public final Map<Character, Object> ingredients; // Object can be Material or CustomComponent
-        public final String resultType;
-        public final int resultAmount;
-        public final String description;
-
-        public CustomRecipeData(String[] shape, Map<Character, Object> ingredients,
-                                String resultType, int resultAmount, String description) {
-            this.shape = shape;
-            this.ingredients = ingredients;
-            this.resultType = resultType;
-            this.resultAmount = resultAmount;
-            this.description = description;
-        }
+        public record CustomRecipeData(String[] shape, Map<Character, Object> ingredients, String resultType,
+                                       int resultAmount, String description) {
     }
 
     /**
-     * Represents a custom MSS component ingredient
-     */
-    public static class CustomComponent {
-        public final String type;
-        public final String tier;
-
-        public CustomComponent(String type, String tier) {
-            this.type = type;
-            this.tier = tier;
-        }
+         * Represents a custom MSS component ingredient
+         */
+        public record CustomComponent(String type, String tier) {
 
         @Override
-        public String toString() {
-            return "mss:" + type + ":" + tier;
+            public String toString() {
+                return "mss:" + type + ":" + tier;
+            }
         }
-    }
 
     public void registerRecipes() {
         if (!configManager.areRecipesEnabled()) {
@@ -95,7 +76,7 @@ public class RecipeManager {
                     registeredRecipeCount++;
                 } catch (Exception e) {
                     plugin.getLogger().severe("Failed to register recipe '" + recipeName + "': " + e.getMessage());
-                    e.printStackTrace();
+                    plugin.getLogger().severe("Stack trace: " + java.util.Arrays.toString(e.getStackTrace()));
                 }
             } else {
                 plugin.getLogger().info("Recipe '" + recipeName + "' is disabled in configuration");
@@ -250,7 +231,7 @@ public class RecipeManager {
     /**
      * Register a display-only recipe for the recipe book using placeholder materials
      */
-    private void registerDisplayRecipe(String recipeName, CustomRecipeData recipeData) throws Exception {
+    private void registerDisplayRecipe(String recipeName, CustomRecipeData recipeData) {
         // Create result item
         ItemStack result = createResultItem(recipeData.resultType, recipeData.resultAmount, recipeName);
         if (result == null) {
@@ -289,21 +270,18 @@ public class RecipeManager {
      * Get placeholder material for custom components in display recipes
      */
     private Material getPlaceholderMaterial(CustomComponent component) {
-        switch (component.type) {
-            case "disk_platter":
+        return switch (component.type) {
+            case "disk_platter" ->
                 // Use the actual material for the disk platter tier so recipe book shows correct item
-                return switch (component.tier != null ? component.tier : "1k") {
-                    case "1k" -> Material.STONE_BUTTON;
-                    case "4k" -> Material.GOLD_NUGGET;
-                    case "16k" -> Material.CONDUIT;
-                    case "64k" -> Material.HEART_OF_THE_SEA;
-                    default -> Material.STONE_BUTTON;
-                };
-            case "storage_disk_housing":
-                return Material.BAMBOO_PRESSURE_PLATE;
-            default:
-                return Material.BARRIER; // Fallback for unknown components
-        }
+                    switch (component.tier != null ? component.tier : "1k") {
+                        case "4k" -> Material.GOLD_NUGGET;
+                        case "16k" -> Material.CONDUIT;
+                        case "64k" -> Material.HEART_OF_THE_SEA;
+                        default -> Material.STONE_BUTTON;
+                    };
+            case "storage_disk_housing" -> Material.BAMBOO_PRESSURE_PLATE;
+            default -> Material.BARRIER; // Fallback for unknown components
+        };
     }
 
     /**
@@ -327,14 +305,11 @@ public class RecipeManager {
      * Create the actual custom component item for recipe choices
      */
     private ItemStack createCustomComponentItem(CustomComponent component) {
-        switch (component.type) {
-            case "disk_platter":
-                return itemManager.createDiskPlatter(component.tier != null ? component.tier : "1k");
-            case "storage_disk_housing":
-                return itemManager.createStorageDiskHousing();
-            default:
-                return null;
-        }
+        return switch (component.type) {
+            case "disk_platter" -> itemManager.createDiskPlatter(component.tier != null ? component.tier : "1k");
+            case "storage_disk_housing" -> itemManager.createStorageDiskHousing();
+            default -> null;
+        };
     }
     private CustomComponent parseCustomComponent(String componentString, String recipeName, String ingredientKey) throws Exception {
         String[] parts = componentString.split(":");
@@ -435,15 +410,12 @@ public class RecipeManager {
      * Check if an item matches a custom component specification
      */
     private boolean matchesCustomComponent(ItemStack item, CustomComponent component) {
-        switch (component.type) {
-            case "disk_platter":
-                return itemManager.isDiskPlatter(item) &&
-                        (component.tier == null || component.tier.equals(itemManager.getDiskPlatterTier(item)));
-            case "storage_disk_housing":
-                return itemManager.isStorageDiskHousing(item);
-            default:
-                return false;
-        }
+        return switch (component.type) {
+            case "disk_platter" -> itemManager.isDiskPlatter(item) &&
+                    (component.tier == null || component.tier.equals(itemManager.getDiskPlatterTier(item)));
+            case "storage_disk_housing" -> itemManager.isStorageDiskHousing(item);
+            default -> false;
+        };
     }
 
     /**

@@ -80,7 +80,7 @@ public class BlockListener implements Listener {
         if (itemManager.isExporter(item)) {
             // Check if exporter is being placed against (attached to) an MSS block
             Block blockAgainst = event.getBlockAgainst();
-            if (blockAgainst != null && isCustomMSSBlock(blockAgainst)) {
+            if (isCustomMSSBlock(blockAgainst)) {
                 event.setCancelled(true);
                 player.sendMessage(Component.text("You cannot attach an exporter directly to the network!", NamedTextColor.RED));
                 return;
@@ -89,7 +89,7 @@ public class BlockListener implements Listener {
             // Check if there's a valid network nearby to connect to (optional)
             String nearbyNetworkId = null;
             for (Location adjacent : getAdjacentLocations(location)) {
-                if (isCustomNetworkBlock(adjacent.getBlock()) || cableManager.isCustomNetworkCable(adjacent.getBlock())) {
+                if (isCustomNetworkBlock(adjacent.getBlock()) || cableManager.isCustomNetworkCable(adjacent.getBlock()) || isCustomExporter(adjacent.getBlock())) {
                     nearbyNetworkId = networkManager.getNetworkId(adjacent);
                     if (nearbyNetworkId != null) {
                         break;
@@ -110,7 +110,7 @@ public class BlockListener implements Listener {
                 markLocationAsCustomBlock(location, "EXPORTER");
 
                 // Create the exporter in the manager
-                String exporterId = plugin.getExporterManager().createExporter(location, nearbyNetworkId, player);
+                String exporterId = plugin.getExporterManager().createExporter(location, nearbyNetworkId);
                 plugin.getLogger().info("Created exporter " + exporterId + " for player " + player.getName() + " at " + location +
                         (nearbyNetworkId.equals("UNCONNECTED") ? " (unconnected)" : " (connected to " + nearbyNetworkId + ")"));
 
@@ -218,7 +218,6 @@ public class BlockListener implements Listener {
                     }
                 }
 
-                // FIXED: Update exporter network assignments after network changes
                 plugin.getExporterManager().updateExporterNetworkAssignments();
 
             } catch (Exception e) {
@@ -270,7 +269,6 @@ public class BlockListener implements Listener {
                 return; // Exporters don't affect network topology, so return early
             }
 
-            // ENHANCED: Always drop drive bay contents, whether part of network or not
             if (isCustomDriveBay(block)) {
                 if (networkId != null) {
                     // Drive bay is part of a network - use network-aware dropping
@@ -300,7 +298,7 @@ public class BlockListener implements Listener {
                         boolean networkStillValid = false;
 
                         for (Location adjacent : getAdjacentLocations(location)) {
-                            if (isCustomNetworkBlockOrCable(adjacent.getBlock())) {
+                            if (isCustomNetworkBlockOrCableOrExporter(adjacent.getBlock())) {
                                 NetworkInfo updatedNetwork = networkManager.detectNetwork(adjacent);
                                 if (updatedNetwork != null && updatedNetwork.isValid()) {
                                     networkManager.registerNetwork(updatedNetwork, player.getUniqueId());
@@ -321,7 +319,6 @@ public class BlockListener implements Listener {
                             }
                         }
 
-                        // FIXED: Update exporter network assignments after any network changes
                         plugin.getExporterManager().updateExporterNetworkAssignments();
 
                     } catch (Exception e) {
@@ -364,7 +361,7 @@ public class BlockListener implements Listener {
             return;
         }
 
-        // CRITICAL: Only handle main hand interactions to prevent duplicate events
+        // Only handle main hand interactions to prevent duplicate events
         if (event.getHand() != org.bukkit.inventory.EquipmentSlot.HAND) {
             return;
         }
@@ -372,7 +369,7 @@ public class BlockListener implements Listener {
         Block block = event.getClickedBlock();
         Player player = event.getPlayer();
 
-        // CRITICAL: Check if player is awaiting search input and cancel ALL interactions
+        // Check if player is awaiting search input and cancel ALL interactions
         if (plugin.getGUIManager().isAwaitingSearchInput(player)) {
             // Player is in search mode - cancel the search and the interaction
             event.setCancelled(true);
@@ -459,7 +456,7 @@ public class BlockListener implements Listener {
                 }
 
                 // Display network information
-                displayStorageServerInfo(player, networkId, block.getLocation());
+                displayStorageServerInfo(player, networkId);
 
             } catch (Exception e) {
                 player.sendMessage(Component.text("Error accessing storage server: " + e.getMessage(), NamedTextColor.RED));
@@ -480,7 +477,7 @@ public class BlockListener implements Listener {
             try {
                 String networkId = networkManager.getNetworkId(block.getLocation());
 
-                // UPDATED: Allow access even without network, show status message
+                // Allow access even without network, show status message
                 if (networkId == null) {
                     player.sendMessage(Component.text("Opening drive bay (no network connection).", NamedTextColor.YELLOW));
                 } else if (!networkManager.isNetworkValid(networkId)) {
@@ -500,10 +497,6 @@ public class BlockListener implements Listener {
     // Helper methods to check if blocks are OUR custom blocks or cables
     private boolean isCustomNetworkBlockOrCableOrExporter(Block block) {
         return isCustomNetworkBlock(block) || cableManager.isCustomNetworkCable(block) || isCustomExporter(block);
-    }
-
-    private boolean isCustomNetworkBlockOrCable(Block block) {
-        return isCustomNetworkBlock(block) || cableManager.isCustomNetworkCable(block);
     }
 
     private boolean isCustomNetworkBlock(Block block) {
@@ -555,7 +548,7 @@ public class BlockListener implements Listener {
             
             // Check if there's an exporter at this adjacent location
             if (isCustomExporter(adjacentBlock)) {
-                // Check if this exporter would be wall/floor mounted on the MSS block we're placing
+                // Check if this exporter would be a wall/floor mounted on the MSS block we're placing
                 if (isExporterAttachedToBlock(adjacent, mssBlockLocation)) {
                     return "You cannot attach an exporter directly to the network!";
                 }
@@ -574,9 +567,7 @@ public class BlockListener implements Listener {
         if (exporterBlock.getType() == Material.PLAYER_HEAD) {
             // Floor mounted head - check if it's sitting on top of the block
             Location below = exporterLocation.clone().add(0, -1, 0);
-            if (below.equals(blockLocation)) {
-                return true;
-            }
+            return below.equals(blockLocation);
         } else if (exporterBlock.getType() == Material.PLAYER_WALL_HEAD) {
             // Wall mounted head - check if it's attached to any face of the block
             // Player wall heads are attached to the block they're facing away from
@@ -585,9 +576,7 @@ public class BlockListener implements Listener {
             
             // The block the wall head is attached to is in the opposite direction
             Location attachedTo = exporterLocation.clone().add(facing.getOppositeFace().getDirection());
-            if (attachedTo.equals(blockLocation)) {
-                return true;
-            }
+            return attachedTo.equals(blockLocation);
         }
         
         return false;
@@ -692,7 +681,7 @@ public class BlockListener implements Listener {
     /**
      * Display storage server network information to the player
      */
-    private void displayStorageServerInfo(Player player, String networkId, Location serverLocation) {
+    private void displayStorageServerInfo(Player player, String networkId) {
         try {
             // Get network statistics
             int driveBayCount = getNetworkDriveBayCount(networkId);

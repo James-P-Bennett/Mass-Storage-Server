@@ -297,8 +297,6 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
         }
 
         try {
-            // Clean up expired cooldowns
-            plugin.getCooldownManager().cleanupExpiredCooldowns();
 
             // Clean up orphaned storage items (items without valid disks)
             try (Connection conn = plugin.getDatabaseManager().getConnection();

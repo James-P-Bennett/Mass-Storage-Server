@@ -3,6 +3,7 @@ package org.jamesphbennett.massstorageserver.database;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.jamesphbennett.massstorageserver.MassStorageServer;
+import org.jetbrains.annotations.NotNull;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -20,7 +21,7 @@ public class DatabaseManager {
         initializeDatabase();
         createTables();
 
-        // CRITICAL: Run migration to fix storage constraints and update cell counts
+        // Run migration to fix storage constraints and update cell counts
         migrateDatabaseSchema();
     }
 
@@ -28,29 +29,14 @@ public class DatabaseManager {
         try {
             // Create plugin data folder if it doesn't exist
             if (!plugin.getDataFolder().exists()) {
-                plugin.getDataFolder().mkdirs();
+                if (!plugin.getDataFolder().mkdirs()) {
+                    throw new RuntimeException("Failed to create plugin data directory: " + plugin.getDataFolder().getAbsolutePath());
+                }
             }
 
             String databasePath = plugin.getDataFolder().getAbsolutePath() + "/storage.db";
 
-            HikariConfig config = new HikariConfig();
-            config.setJdbcUrl("jdbc:sqlite:" + databasePath);
-            config.setDriverClassName("org.sqlite.JDBC");
-
-            // Connection pool settings (use config values once ConfigManager is available)
-            config.setMaximumPoolSize(10);
-            config.setMinimumIdle(2);
-            config.setConnectionTimeout(30000);
-            config.setIdleTimeout(600000);
-            config.setMaxLifetime(1800000);
-
-            // SQLite specific settings
-            config.addDataSourceProperty("cachePrepStmts", "true");
-            config.addDataSourceProperty("prepStmtCacheSize", "250");
-            config.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
-            config.addDataSourceProperty("journal_mode", "WAL");
-            config.addDataSourceProperty("synchronous", "NORMAL");
-            config.addDataSourceProperty("busy_timeout", "30000");
+            HikariConfig config = getHikariConfig(databasePath);
 
             dataSource = new HikariDataSource(config);
 
@@ -60,6 +46,28 @@ public class DatabaseManager {
             plugin.getLogger().log(Level.SEVERE, "Failed to initialize database!", e);
             throw new SQLException("Database initialization failed", e);
         }
+    }
+
+    private static @NotNull HikariConfig getHikariConfig(String databasePath) {
+        HikariConfig config = new HikariConfig();
+        config.setJdbcUrl("jdbc:sqlite:" + databasePath);
+        config.setDriverClassName("org.sqlite.JDBC");
+
+        // Connection pool settings (use config values once ConfigManager is available)
+        config.setMaximumPoolSize(10);
+        config.setMinimumIdle(2);
+        config.setConnectionTimeout(30000);
+        config.setIdleTimeout(600000);
+        config.setMaxLifetime(1800000);
+
+        // SQLite specific settings
+        config.addDataSourceProperty("cachePrepStmts", "true");
+        config.addDataSourceProperty("prepStmtCacheSize", "250");
+        config.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
+        config.addDataSourceProperty("journal_mode", "WAL");
+        config.addDataSourceProperty("synchronous", "NORMAL");
+        config.addDataSourceProperty("busy_timeout", "30000");
+        return config;
     }
 
     /**
@@ -146,6 +154,58 @@ public class DatabaseManager {
         }
     }
 
+
+    /**
+     * Migrate exporter_filters table to include slot_target column for furnace slot routing
+     */
+    private void migrateSlotTargeting() throws SQLException {
+        try (Connection conn = getConnection()) {
+            // Check if slot_target column exists in exporter_filters
+            boolean needsMigration = false;
+
+            try (var stmt = conn.createStatement();
+                 var rs = stmt.executeQuery("PRAGMA table_info(exporter_filters)")) {
+                boolean hasSlotTargetColumn = false;
+                while (rs.next()) {
+                    String columnName = rs.getString("name");
+                    if ("slot_target".equals(columnName)) {
+                        hasSlotTargetColumn = true;
+                        break;
+                    }
+                }
+
+                if (!hasSlotTargetColumn) {
+                    needsMigration = true;
+                    plugin.getLogger().info("Database migration needed - adding slot_target column to exporter_filters");
+                }
+            }
+
+            if (needsMigration) {
+                conn.setAutoCommit(false);
+
+                try {
+                    // Add slot_target column with default value 'generic'
+                    try (var stmt = conn.createStatement()) {
+                        stmt.execute("ALTER TABLE exporter_filters ADD COLUMN slot_target TEXT DEFAULT 'generic'");
+                    }
+
+                    // Update existing filters to 'generic' (safe default for backward compatibility)
+                    try (var stmt = conn.createStatement()) {
+                        stmt.execute("UPDATE exporter_filters SET slot_target = 'generic' WHERE slot_target IS NULL");
+                    }
+
+                    conn.commit();
+                    plugin.getLogger().info("Successfully added slot_target column to exporter_filters table");
+
+                } catch (Exception e) {
+                    conn.rollback();
+                    throw new SQLException("Failed to migrate slot targeting support", e);
+                } finally {
+                    conn.setAutoCommit(true);
+                }
+            }
+        }
+    }
 
     /**
      * Migrate exporter_filters table to include item_data column
@@ -236,7 +296,7 @@ public class DatabaseManager {
             )
             """,
 
-                // Storage disks table - UPDATED with tier column and 64 default cells
+                // Storage disks table
                 """
             CREATE TABLE IF NOT EXISTS storage_disks (
                 disk_id TEXT PRIMARY KEY,
@@ -271,7 +331,7 @@ public class DatabaseManager {
             )
             """,
 
-                // Storage items table - UPDATED with higher quantity limit for 64K disks
+                // Storage items table
                 """
                 CREATE TABLE IF NOT EXISTS storage_items (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -387,6 +447,12 @@ public class DatabaseManager {
 
             // Then run cell count migration
             migrateCellCounts();
+
+            // Run exporter filters migration
+            migrateExporterFilters();
+
+            // Run slot targeting migration
+            migrateSlotTargeting();
 
             // Check if we need to migrate storage_items table constraint
             boolean needsMigration = false;

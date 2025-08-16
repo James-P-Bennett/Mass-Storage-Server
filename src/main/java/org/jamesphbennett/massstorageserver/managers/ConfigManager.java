@@ -22,7 +22,6 @@ public class ConfigManager {
     // Cached configuration values
     private int maxNetworkBlocks;
     private int maxNetworkCables;
-    private long operationCooldown;
     private int maxDriveBaySlots;
     private int exportTickInterval;
     private Set<Material> blacklistedItems;
@@ -100,7 +99,6 @@ public class ConfigManager {
     private void loadNetworkSettings() {
         maxNetworkBlocks = config.getInt("network.max_blocks", 128);
         maxNetworkCables = config.getInt("network.max_cables", 800);
-        operationCooldown = config.getLong("network.operation_cooldown", 100);
     }
 
     private void loadStorageSettings() {
@@ -153,10 +151,6 @@ public class ConfigManager {
 
     public int getMaxNetworkCables() {
         return maxNetworkCables;
-    }
-
-    public long getOperationCooldown() {
-        return operationCooldown;
     }
 
     /*

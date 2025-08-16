@@ -5,7 +5,6 @@ import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.Container;
-import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.jamesphbennett.massstorageserver.MassStorageServer;
@@ -121,9 +120,7 @@ public class ExporterManager {
         }, tickInterval, tickInterval);
 
         // ADDED: Periodic validation of exporter network assignments (every 30 seconds)
-        plugin.getServer().getScheduler().runTaskTimer(plugin, () -> {
-            updateExporterNetworkAssignments();
-        }, 600L, 600L); // 600 ticks = 30 seconds
+        plugin.getServer().getScheduler().runTaskTimer(plugin, this::updateExporterNetworkAssignments, 600L, 600L); // 600 ticks = 30 seconds
 
         plugin.getLogger().info("Export task started with " + tickInterval + " tick interval");
         plugin.getLogger().info("Exporter network validation task started (30 second interval)");
@@ -135,7 +132,7 @@ public class ExporterManager {
     private boolean isExporterConnectedToNetwork(ExporterData exporter) {
         // First check if network exists at all
         if (!plugin.getNetworkManager().isNetworkValid(exporter.networkId)) {
-            return false;
+            return true;
         }
 
         // AGGRESSIVE CHECK: Look for any adjacent network blocks or cables
@@ -155,11 +152,11 @@ public class ExporterManager {
             String networkId = plugin.getNetworkManager().getNetworkId(loc);
 
             if (exporter.networkId.equals(networkId)) {
-                return true; // Found matching network at adjacent location
+                return false; // Found matching network at adjacent location
             }
         }
 
-        return false; // No adjacent network blocks found
+        return true; // No adjacent network blocks found
     }
     /**
      * Refresh any open exporter GUIs for a specific exporter
@@ -177,8 +174,8 @@ public class ExporterManager {
      */
     private void processExport(ExporterData exporter) {
         try {
-            // ENHANCED: Check if exporter is physically connected to its network
-            if (!isExporterConnectedToNetwork(exporter)) {
+            // Check if exporter is physically connected to its network
+            if (isExporterConnectedToNetwork(exporter)) {
                 plugin.getLogger().info("Exporter " + exporter.exporterId + " is no longer connected to network " + exporter.networkId + " - auto-disabling");
 
                 // AUTO-DISABLE: Set exporter as disabled when disconnected
@@ -211,7 +208,7 @@ public class ExporterManager {
 
             Inventory targetInventory = targetContainer.getInventory();
 
-            // FIXED: Check if inventory has space (including partial stacks)
+            // Check if inventory has space (including partial stacks)
             if (!hasInventorySpace(targetInventory)) {
                 return; // Inventory is completely full
             }
@@ -222,8 +219,8 @@ public class ExporterManager {
                 return; // No items to export
             }
 
-            // Try to export the item
-            exportItem(exporter, itemHashToExport, targetInventory);
+            // Try to export the item with slot-specific routing
+            exportItemWithSlotRouting(exporter, itemHashToExport, targetContainer);
 
         } catch (Exception e) {
             plugin.getLogger().severe("Error processing export for " + exporter.exporterId + ": " + e.getMessage());
@@ -260,7 +257,6 @@ public class ExporterManager {
         int remainingAmount = itemToAdd.getAmount();
         int maxStackSize = itemToAdd.getMaxStackSize();
 
-        // Phase 1: Fill existing partial stacks of the same item type
         for (int slot = 0; slot < targetInventory.getSize(); slot++) {
             ItemStack existing = targetInventory.getItem(slot);
             if (existing != null && existing.isSimilar(itemToAdd)) {
@@ -277,7 +273,6 @@ public class ExporterManager {
             }
         }
 
-        // Phase 2: Fill empty slots with remaining items
         for (int slot = 0; slot < targetInventory.getSize() && remainingAmount > 0; slot++) {
             ItemStack existing = targetInventory.getItem(slot);
             if (existing == null || existing.getType() == Material.AIR) {
@@ -330,7 +325,7 @@ public class ExporterManager {
     private boolean isItemAvailableInNetwork(String networkId, String itemHash) throws Exception {
         List<StoredItem> networkItems = plugin.getStorageManager().getNetworkItems(networkId);
         for (StoredItem item : networkItems) {
-            if (item.getItemHash().equals(itemHash) && item.getQuantity() > 0) {
+            if (item.itemHash().equals(itemHash) && item.quantity() > 0) {
                 return true;
             }
         }
@@ -338,7 +333,166 @@ public class ExporterManager {
     }
 
     /**
-     * FIXED: Export an item to the target inventory with stack optimization
+     * Export specific item with slot-specific routing for furnaces
+     */
+    private void exportItemWithSlotRouting(ExporterData exporter, String itemHash, Container targetContainer) {
+        try {
+            // Check if this is a furnace-type container
+            Material containerType = targetContainer.getBlock().getType();
+            boolean isFurnace = containerType == Material.FURNACE || 
+                               containerType == Material.BLAST_FURNACE || 
+                               containerType == Material.SMOKER;
+
+            if (isFurnace) {
+                // Handle furnace slot routing
+                exportItemToFurnace(exporter, itemHash, targetContainer);
+            } else {
+                // Use generic export for non-furnaces
+                exportItem(exporter, itemHash, targetContainer.getInventory());
+            }
+
+        } catch (Exception e) {
+            plugin.getLogger().severe("Error in slot routing export: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Export item to specific furnace slots based on filter slot targeting
+     */
+    private void exportItemToFurnace(ExporterData exporter, String itemHash, Container furnaceContainer) {
+        try {
+            // Get slot targeting information for this item
+            String slotTarget = getSlotTargetForItem(exporter.exporterId, itemHash);
+            
+            // Retrieve up to one stack from the network
+            ItemStack retrievedItem = plugin.getStorageManager().retrieveItems(exporter.networkId, itemHash, 64);
+            
+            if (retrievedItem == null || retrievedItem.getAmount() == 0) {
+                return; // Nothing retrieved
+            }
+
+            Inventory furnaceInventory = furnaceContainer.getInventory();
+            int targetSlot;
+            String slotName;
+
+            // Determine target slot based on filter type
+            if ("fuel".equals(slotTarget)) {
+                targetSlot = 1; // Fuel slot (bottom)
+                slotName = "fuel";
+            } else {
+                targetSlot = 0; // Input slot (top) - default for material and generic
+                slotName = "input";
+            }
+
+            // Try to add to the specific furnace slot
+            int leftoverAmount = addItemToSpecificSlot(furnaceInventory, retrievedItem, targetSlot);
+
+            // Handle leftovers and logging
+            handleExportCompletion(exporter, retrievedItem, leftoverAmount, 
+                                 slotName + " slot");
+
+        } catch (Exception e) {
+            plugin.getLogger().severe("Error exporting to furnace: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Get the slot target for a specific item from the database
+     */
+    private String getSlotTargetForItem(String exporterId, String itemHash) {
+        try (Connection conn = plugin.getDatabaseManager().getConnection();
+             PreparedStatement stmt = conn.prepareStatement(
+                     "SELECT slot_target FROM exporter_filters WHERE exporter_id = ? AND item_hash = ? LIMIT 1")) {
+
+            stmt.setString(1, exporterId);
+            stmt.setString(2, itemHash);
+            
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    String slotTarget = rs.getString("slot_target");
+                    return slotTarget != null ? slotTarget : "generic";
+                }
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Error getting slot target for item: " + e.getMessage());
+        }
+        
+        return "generic"; // Default fallback
+    }
+
+    /**
+     * Add item to a specific inventory slot (for furnace slot targeting)
+     */
+    private int addItemToSpecificSlot(Inventory inventory, ItemStack itemToAdd, int targetSlot) {
+        if (targetSlot < 0 || targetSlot >= inventory.getSize()) {
+            return itemToAdd.getAmount(); // Invalid slot, return all as leftover
+        }
+
+        ItemStack slotItem = inventory.getItem(targetSlot);
+        
+        if (slotItem == null || slotItem.getType() == Material.AIR) {
+            // Slot is empty, place the entire stack
+            inventory.setItem(targetSlot, itemToAdd.clone());
+            return 0; // No leftovers
+        } else if (slotItem.isSimilar(itemToAdd)) {
+            // Slot has similar item, try to merge
+            int maxStackSize = slotItem.getMaxStackSize();
+            int currentAmount = slotItem.getAmount();
+            int spaceAvailable = maxStackSize - currentAmount;
+            
+            if (spaceAvailable > 0) {
+                int amountToAdd = Math.min(spaceAvailable, itemToAdd.getAmount());
+                slotItem.setAmount(currentAmount + amountToAdd);
+                inventory.setItem(targetSlot, slotItem);
+                return itemToAdd.getAmount() - amountToAdd;
+            }
+        }
+        
+        // Slot is full or has different item
+        return itemToAdd.getAmount();
+    }
+
+    /**
+     * Handle export completion (leftovers, logging, etc.)
+     */
+    private void handleExportCompletion(ExporterData exporter, ItemStack retrievedItem, 
+                                       int leftoverAmount, String destination) {
+        try {
+            // If there's leftover, put it back in the network
+            if (leftoverAmount > 0) {
+                ItemStack leftoverStack = retrievedItem.clone();
+                leftoverStack.setAmount(leftoverAmount);
+
+                List<ItemStack> toReturn = new ArrayList<>();
+                toReturn.add(leftoverStack);
+                plugin.getStorageManager().storeItems(exporter.networkId, toReturn);
+
+                // Calculate what was actually exported
+                int exported = retrievedItem.getAmount() - leftoverAmount;
+                if (exported > 0) {
+                    exporter.lastExport = System.currentTimeMillis();
+                    updateLastExport(exporter.exporterId);
+                    plugin.getLogger().info("Exporter " + exporter.exporterId + " exported " + exported + 
+                                          " " + retrievedItem.getType() + " to " + destination);
+                }
+            } else {
+                // Everything was exported successfully
+                exporter.lastExport = System.currentTimeMillis();
+                updateLastExport(exporter.exporterId);
+                plugin.getLogger().info("Exporter " + exporter.exporterId + " exported " + 
+                                      retrievedItem.getAmount() + " " + retrievedItem.getType() + " to " + destination);
+            }
+
+            // Refresh any open terminals
+            plugin.getGUIManager().refreshNetworkTerminals(exporter.networkId);
+
+        } catch (Exception e) {
+            plugin.getLogger().severe("Error handling export completion: " + e.getMessage());
+        }
+    }
+
+    /**
+     * FIXED: Export an item to the target inventory with stack optimization (legacy method for non-furnaces)
      */
     private void exportItem(ExporterData exporter, String itemHash, Inventory targetInventory) {
         try {
@@ -349,7 +503,7 @@ public class ExporterManager {
                 return; // Nothing retrieved
             }
 
-            // FIXED: Try to add to target inventory with stack optimization
+            // Try to add to target inventory with stack optimization
             int leftoverAmount = addItemWithStackOptimization(targetInventory, retrievedItem);
 
             // If there's leftover, put it back in the network
@@ -384,26 +538,61 @@ public class ExporterManager {
     }
 
     /**
-     * Get the target container that the exporter is connected to
+     * Get the target container that the exporter is physically attached to
      */
     private Container getTargetContainer(Block exporterBlock) {
-        // Check each valid direction (N, S, E, W, DOWN)
-        BlockFace[] validFaces = {BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST, BlockFace.DOWN};
+        try {
+            Block attachedBlock = null;
 
-        for (BlockFace face : validFaces) {
-            Block targetBlock = exporterBlock.getRelative(face);
-            if (targetBlock.getState() instanceof Container container) {
-                return container;
+            plugin.getLogger().info("DEBUG: Checking target for exporter at " + exporterBlock.getLocation() + 
+                                  " of type " + exporterBlock.getType());
+
+            if (exporterBlock.getType() == Material.PLAYER_HEAD) {
+                // Floor mounted head - check block below
+                attachedBlock = exporterBlock.getRelative(BlockFace.DOWN);
+                plugin.getLogger().info("DEBUG: Floor mounted head, checking block below: " + 
+                                      attachedBlock.getType() + " at " + attachedBlock.getLocation());
+            } else if (exporterBlock.getType() == Material.PLAYER_WALL_HEAD) {
+                // Wall mounted head - check block it's attached to
+                org.bukkit.block.data.Directional directional = (org.bukkit.block.data.Directional) exporterBlock.getBlockData();
+                BlockFace facing = directional.getFacing();
+                // The block the wall head is attached to is in the opposite direction
+                attachedBlock = exporterBlock.getRelative(facing.getOppositeFace());
+                plugin.getLogger().info("DEBUG: Wall mounted head facing " + facing + 
+                                      ", checking attached block: " + attachedBlock.getType() + 
+                                      " at " + attachedBlock.getLocation());
             }
+
+            // Check if the attached block is a container
+            if (attachedBlock != null) {
+                boolean isContainer = attachedBlock.getState() instanceof Container;
+                plugin.getLogger().info("DEBUG: Attached block " + attachedBlock.getType() + 
+                                      " is container: " + isContainer);
+                
+                if (isContainer) {
+                    Container container = (Container) attachedBlock.getState();
+                    plugin.getLogger().info("DEBUG: Returning container: " + container.getClass().getSimpleName());
+                    return container;
+                } else {
+                    plugin.getLogger().info("DEBUG: Attached block is not a container, returning null");
+                }
+            } else {
+                plugin.getLogger().warning("DEBUG: Could not determine attached block!");
+            }
+
+        } catch (Exception e) {
+            plugin.getLogger().warning("Error checking attached block for exporter: " + e.getMessage());
+            plugin.getLogger().warning("Stack trace: " + java.util.Arrays.toString(e.getStackTrace()));
         }
 
+        plugin.getLogger().info("DEBUG: Returning null - no valid target container");
         return null;
     }
 
     /**
      * Create a new exporter at the given location
      */
-    public String createExporter(Location location, String networkId, Player placer) throws SQLException {
+    public String createExporter(Location location, String networkId) throws SQLException {
         String exporterId = generateExporterId();
 
         plugin.getDatabaseManager().executeTransaction(conn -> {
@@ -475,6 +664,124 @@ public class ExporterManager {
     }
 
     /**
+     * Update slot-specific filters for a furnace exporter
+     */
+    public void updateFurnaceExporterFilters(String exporterId, List<ItemStack> fuelItems, List<ItemStack> materialItems) throws SQLException {
+        ExporterData data = activeExporters.get(exporterId);
+        if (data == null) return;
+
+        plugin.getDatabaseManager().executeTransaction(conn -> {
+            // Clear existing filters
+            try (PreparedStatement stmt = conn.prepareStatement("DELETE FROM exporter_filters WHERE exporter_id = ?")) {
+                stmt.setString(1, exporterId);
+                stmt.executeUpdate();
+            }
+
+            // Add fuel filters
+            if (!fuelItems.isEmpty()) {
+                try (PreparedStatement stmt = conn.prepareStatement(
+                        "INSERT INTO exporter_filters (exporter_id, item_hash, item_data, filter_type, slot_target) VALUES (?, ?, ?, 'whitelist', 'fuel')")) {
+
+                    for (ItemStack item : fuelItems) {
+                        ItemStack template = item.clone();
+                        template.setAmount(1);
+
+                        String itemHash = plugin.getItemManager().generateItemHash(template);
+                        String itemData = plugin.getStorageManager().serializeItemStack(template);
+
+                        stmt.setString(1, exporterId);
+                        stmt.setString(2, itemHash);
+                        stmt.setString(3, itemData);
+                        stmt.addBatch();
+                    }
+                    stmt.executeBatch();
+                }
+            }
+
+            // Add material filters
+            if (!materialItems.isEmpty()) {
+                try (PreparedStatement stmt = conn.prepareStatement(
+                        "INSERT INTO exporter_filters (exporter_id, item_hash, item_data, filter_type, slot_target) VALUES (?, ?, ?, 'whitelist', 'material')")) {
+
+                    for (ItemStack item : materialItems) {
+                        ItemStack template = item.clone();
+                        template.setAmount(1);
+
+                        String itemHash = plugin.getItemManager().generateItemHash(template);
+                        String itemData = plugin.getStorageManager().serializeItemStack(template);
+
+                        stmt.setString(1, exporterId);
+                        stmt.setString(2, itemHash);
+                        stmt.setString(3, itemData);
+                        stmt.addBatch();
+                    }
+                    stmt.executeBatch();
+                }
+            }
+        });
+
+        // Update in-memory data with hashes from single-item templates
+        data.filterItems.clear();
+        for (ItemStack item : fuelItems) {
+            ItemStack template = item.clone();
+            template.setAmount(1);
+            String itemHash = plugin.getItemManager().generateItemHash(template);
+            data.filterItems.add(itemHash);
+        }
+        for (ItemStack item : materialItems) {
+            ItemStack template = item.clone();
+            template.setAmount(1);
+            String itemHash = plugin.getItemManager().generateItemHash(template);
+            data.filterItems.add(itemHash);
+        }
+
+        plugin.getLogger().info("Updated furnace filters for exporter " + exporterId + ": " + 
+                               fuelItems.size() + " fuel items, " + materialItems.size() + " material items");
+    }
+
+    /**
+     * Get slot-specific filter items for a furnace exporter
+     */
+    public Map<String, List<ItemStack>> getFurnaceExporterFilterItems(String exporterId) {
+        Map<String, List<ItemStack>> filters = new HashMap<>();
+        filters.put("fuel", new ArrayList<>());
+        filters.put("material", new ArrayList<>());
+
+        try (Connection conn = plugin.getDatabaseManager().getConnection();
+             PreparedStatement stmt = conn.prepareStatement(
+                     "SELECT item_data, slot_target FROM exporter_filters WHERE exporter_id = ? AND item_data IS NOT NULL")) {
+
+            stmt.setString(1, exporterId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    String itemData = rs.getString("item_data");
+                    String slotTarget = rs.getString("slot_target");
+                    
+                    ItemStack item = plugin.getStorageManager().deserializeItemStack(itemData);
+                    if (item != null) {
+                        item.setAmount(1);
+                        
+                        if ("fuel".equals(slotTarget)) {
+                            filters.get("fuel").add(item);
+                        } else if ("material".equals(slotTarget)) {
+                            filters.get("material").add(item);
+                        } else {
+                            // Backward compatibility - treat generic/null as material
+                            filters.get("material").add(item);
+                        }
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Error loading furnace exporter filters: " + e.getMessage());
+        }
+
+        plugin.getLogger().info("Loaded furnace filters for exporter " + exporterId + ": " + 
+                               filters.get("fuel").size() + " fuel, " + filters.get("material").size() + " material");
+        return filters;
+    }
+
+    /**
      * Update filter for an exporter - FIXED to store actual item data as single-item templates
      */
     public void updateExporterFilter(String exporterId, List<ItemStack> filterItems) throws SQLException {
@@ -494,7 +801,7 @@ public class ExporterManager {
                         "INSERT INTO exporter_filters (exporter_id, item_hash, item_data, filter_type) VALUES (?, ?, ?, 'whitelist')")) {
 
                     for (ItemStack item : filterItems) {
-                        // FIXED: Ensure we store single-item templates
+                        // Ensure we store single-item templates
                         ItemStack template = item.clone();
                         template.setAmount(1);
 
@@ -656,7 +963,7 @@ public class ExporterManager {
                 }
             } else {
                 // Network is valid, but check physical connectivity
-                if (exporter.enabled && !isExporterConnectedToNetwork(exporter)) {
+                if (exporter.enabled && isExporterConnectedToNetwork(exporter)) {
                     // Auto-disable exporters that are enabled but physically disconnected
                     try {
                         toggleExporter(exporter.exporterId, false);
@@ -674,15 +981,6 @@ public class ExporterManager {
             plugin.getLogger().info("Exporter network assignment update: " + reconnectedCount + " reconnected, " +
                     disconnectedCount + " disconnected, " + autoDisabledCount + " auto-disabled");
         }
-    }
-
-    /**
-     * Update network assignments for exporters when networks merge/split
-     * (LEGACY METHOD - kept for compatibility)
-     */
-    public void updateNetworkAssignments() {
-        // Call the new method
-        updateExporterNetworkAssignments();
     }
 
     /**
@@ -713,14 +1011,6 @@ public class ExporterManager {
     }
 
     /**
-     * Get filters for an exporter (legacy method - returns hashes for compatibility)
-     */
-    public List<String> getExporterFilters(String exporterId) {
-        ExporterData data = activeExporters.get(exporterId);
-        return data != null ? new ArrayList<>(data.filterItems) : new ArrayList<>();
-    }
-
-    /**
      * Update last export timestamp
      */
     private void updateLastExport(String exporterId) {
@@ -733,17 +1023,4 @@ public class ExporterManager {
         }
     }
 
-    /**
-     * Get all active exporters
-     */
-    public Collection<ExporterData> getActiveExporters() {
-        return activeExporters.values();
-    }
-
-    /**
-     * Get exporter by ID
-     */
-    public ExporterData getExporter(String exporterId) {
-        return activeExporters.get(exporterId);
-    }
 }

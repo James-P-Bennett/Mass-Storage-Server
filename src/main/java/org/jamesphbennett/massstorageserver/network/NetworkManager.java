@@ -72,6 +72,9 @@ public class NetworkManager {
 
             if (plugin.getCableManager().isCustomNetworkCable(block)) {
                 networkCables.add(current);
+            } else if (isExporter(block)) {
+                // Exporters count as network blocks and extend connectivity
+                networkBlocks.add(current);
             } else {
                 networkBlocks.add(current);
 
@@ -232,7 +235,7 @@ public class NetworkManager {
                 stmt.executeUpdate();
             }
 
-            // UPDATED: Don't delete drive bay slots - preserve them for recovery
+            // Don't delete drive bay slots - preserve them for recovery
             // Instead, mark them as orphaned by setting network_id to a special value
             try (PreparedStatement stmt = conn.prepareStatement(
                     "UPDATE drive_bay_slots SET network_id = ? WHERE network_id = ?")) {
@@ -256,7 +259,7 @@ public class NetworkManager {
             }
         });
 
-        // CRITICAL: Notify GUI manager about network invalidation
+        // Notify GUI manager about network invalidation
         plugin.getGUIManager().handleNetworkInvalidated(networkId);
 
         // Remove network lock and restoration flag
@@ -379,7 +382,7 @@ public class NetworkManager {
     }
 
     private boolean isNetworkBlockOrCable(Block block) {
-        return isNetworkBlock(block) || plugin.getCableManager().isCustomNetworkCable(block);
+        return isNetworkBlock(block) || plugin.getCableManager().isCustomNetworkCable(block) || isExporter(block);
     }
 
     private boolean isNetworkBlock(Block block) {
@@ -423,6 +426,7 @@ public class NetworkManager {
         if (isDriveBay(block)) return "DRIVE_BAY";
         if (isMSSTerminal(block)) return "MSS_TERMINAL";
         if (plugin.getCableManager().isCustomNetworkCable(block)) return "NETWORK_CABLE";
+        if (isExporter(block)) return "EXPORTER";
         return "UNKNOWN";
     }
 

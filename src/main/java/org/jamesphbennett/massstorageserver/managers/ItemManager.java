@@ -18,6 +18,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 public class ItemManager {
@@ -74,14 +75,13 @@ public class ItemManager {
         ItemMeta meta = item.getItemMeta();
 
         Component displayName = miniMessage.deserialize("<gold>Storage Server");
-        meta.setDisplayName(legacySerializer.serialize(displayName));
+        meta.displayName(displayName);
 
-        List<String> lore = new ArrayList<>();
-        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>The core of the Mass Storage Network")));
-        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Place adjacent to Drive Bays and Terminals")));
-        meta.setLore(lore);
+        List<Component> lore = new ArrayList<>();
+        lore.add(miniMessage.deserialize("<gray>The core of the Mass Storage Network"));
+        lore.add(miniMessage.deserialize("<gray>Place adjacent to Drive Bays and Terminals"));
+        meta.lore(lore);
 
-        meta.setCustomModelData(1001);
         meta.getPersistentDataContainer().set(STORAGE_SERVER_KEY, PersistentDataType.BOOLEAN, true);
 
         item.setItemMeta(meta);
@@ -93,14 +93,13 @@ public class ItemManager {
         ItemMeta meta = item.getItemMeta();
 
         Component displayName = miniMessage.deserialize("<aqua>Drive Bay");
-        meta.setDisplayName(legacySerializer.serialize(displayName));
+        meta.displayName(displayName);
 
-        List<String> lore = new ArrayList<>();
-        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Holds up to 7 storage disks")));
-        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Must be connected to a Storage Server")));
-        meta.setLore(lore);
+        List<Component> lore = new ArrayList<>();
+        lore.add(miniMessage.deserialize("<gray>Holds up to 7 storage disks"));
+        lore.add(miniMessage.deserialize("<gray>Must be connected to a Storage Server"));
+        meta.lore(lore);
 
-        meta.setCustomModelData(1002);
         meta.getPersistentDataContainer().set(DRIVE_BAY_KEY, PersistentDataType.BOOLEAN, true);
 
         item.setItemMeta(meta);
@@ -112,14 +111,13 @@ public class ItemManager {
         ItemMeta meta = item.getItemMeta();
 
         Component displayName = miniMessage.deserialize("<green>MSS Terminal");
-        meta.setDisplayName(legacySerializer.serialize(displayName));
+        meta.displayName(displayName);
 
-        List<String> lore = new ArrayList<>();
-        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Access items stored in the network")));
-        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Right-click to open storage interface")));
-        meta.setLore(lore);
+        List<Component> lore = new ArrayList<>();
+        lore.add(miniMessage.deserialize("<gray>Access items stored in the network"));
+        lore.add(miniMessage.deserialize("<gray>Right-click to open storage interface"));
+        meta.lore(lore);
 
-        meta.setCustomModelData(1003);
         meta.getPersistentDataContainer().set(MSS_TERMINAL_KEY, PersistentDataType.BOOLEAN, true);
 
         item.setItemMeta(meta);
@@ -131,15 +129,14 @@ public class ItemManager {
         ItemMeta meta = item.getItemMeta();
 
         Component displayName = miniMessage.deserialize("<blue>Network Cable");
-        meta.setDisplayName(legacySerializer.serialize(displayName));
+        meta.displayName(displayName);
 
-        List<String> lore = new ArrayList<>();
-        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Connects network components over distance")));
-        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Place to extend your network reach")));
-        lore.add(legacySerializer.serialize(miniMessage.deserialize("<yellow>Does not count toward block limit")));
-        meta.setLore(lore);
+        List<Component> lore = new ArrayList<>();
+        lore.add(miniMessage.deserialize("<gray>Connects network components over distance"));
+        lore.add(miniMessage.deserialize("<gray>Place to extend your network reach"));
+        lore.add(miniMessage.deserialize("<yellow>Does not count toward block limit"));
+        meta.lore(lore);
 
-        meta.setCustomModelData(1005);
         meta.getPersistentDataContainer().set(NETWORK_CABLE_KEY, PersistentDataType.BOOLEAN, true);
 
         item.setItemMeta(meta);
@@ -151,22 +148,20 @@ public class ItemManager {
         ItemMeta meta = item.getItemMeta();
 
         Component displayName = miniMessage.deserialize("<dark_purple>Exporter");
-        meta.setDisplayName(legacySerializer.serialize(displayName));
+        meta.displayName(displayName);
 
-        List<String> lore = new ArrayList<>();
-        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Automatically exports items to containers")));
-        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Place adjacent to any inventory")));
-        lore.add(legacySerializer.serialize(miniMessage.deserialize("<yellow>Connects: North, South, East, West, or Down")));
-        meta.setLore(lore);
+        List<Component> lore = new ArrayList<>();
+        lore.add(miniMessage.deserialize("<gray>Automatically exports items to containers"));
+        lore.add(miniMessage.deserialize("<gray>Place adjacent to any inventory"));
+        lore.add(miniMessage.deserialize("<yellow>Connects: North, South, East, West, or Down"));
+        meta.lore(lore);
 
-        meta.setCustomModelData(1011);
         meta.getPersistentDataContainer().set(EXPORTER_KEY, PersistentDataType.BOOLEAN, true);
 
         item.setItemMeta(meta);
         return item;
     }
 
-    // ==================== COMPONENT CREATION METHODS ====================
 
     /**
      * Create a Disk Platter for the specified tier
@@ -178,22 +173,20 @@ public class ItemManager {
 
         // Set display name with tier color
         Component displayName = switch (tier.toLowerCase()) {
-            case "1k" -> miniMessage.deserialize("<white>Disk Platter [1K]");
             case "4k" -> miniMessage.deserialize("<yellow>Disk Platter [4K]");
             case "16k" -> miniMessage.deserialize("<aqua>Disk Platter [16K]");
             case "64k" -> miniMessage.deserialize("<light_purple>Disk Platter [64K]");
             default -> miniMessage.deserialize("<white>Disk Platter [1K]");
         };
-        meta.setDisplayName(legacySerializer.serialize(displayName));
+        meta.displayName(displayName);
 
-        List<String> lore = new ArrayList<>();
-        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Component for crafting storage disks")));
-        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Tier: " + getTierDisplayName(tier))));
-        lore.add("");
-        lore.add(legacySerializer.serialize(miniMessage.deserialize("<dark_gray>Mass Storage Component")));
-        meta.setLore(lore);
+        List<Component> lore = new ArrayList<>();
+        lore.add(miniMessage.deserialize("<gray>Component for crafting storage disks"));
+        lore.add(miniMessage.deserialize("<gray>Tier: " + getTierDisplayName(tier)));
+        lore.add(Component.empty());
+        lore.add(miniMessage.deserialize("<dark_gray>Mass Storage Component"));
+        meta.lore(lore);
 
-        meta.setCustomModelData(1006 + getDiskPlatterModelOffset(tier));
 
         PersistentDataContainer pdc = meta.getPersistentDataContainer();
         pdc.set(DISK_PLATTER_KEY, PersistentDataType.BOOLEAN, true);
@@ -211,16 +204,15 @@ public class ItemManager {
         ItemMeta meta = item.getItemMeta();
 
         Component displayName = miniMessage.deserialize("<gray>Storage Disk Housing");
-        meta.setDisplayName(legacySerializer.serialize(displayName));
+        meta.displayName(displayName);
 
-        List<String> lore = new ArrayList<>();
-        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Component for crafting storage disks")));
-        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Houses the disk platter and circuitry")));
-        lore.add("");
-        lore.add(legacySerializer.serialize(miniMessage.deserialize("<dark_gray>Mass Storage Component")));
-        meta.setLore(lore);
+        List<Component> lore = new ArrayList<>();
+        lore.add(miniMessage.deserialize("<gray>Component for crafting storage disks"));
+        lore.add(miniMessage.deserialize("<gray>Houses the disk platter and circuitry"));
+        lore.add(Component.empty());
+        lore.add(miniMessage.deserialize("<dark_gray>Mass Storage Component"));
+        meta.lore(lore);
 
-        meta.setCustomModelData(1010);
         meta.getPersistentDataContainer().set(STORAGE_DISK_HOUSING_KEY, PersistentDataType.BOOLEAN, true);
 
         item.setItemMeta(meta);
@@ -232,7 +224,6 @@ public class ItemManager {
      */
     private Material getDiskPlatterMaterial(String tier) {
         return switch (tier.toLowerCase()) {
-            case "1k" -> Material.STONE_BUTTON;
             case "4k" -> Material.GOLD_NUGGET;
             case "16k" -> Material.CONDUIT;
             case "64k" -> Material.HEART_OF_THE_SEA;
@@ -240,20 +231,6 @@ public class ItemManager {
         };
     }
 
-    /**
-     * Get model data offset for disk platter based on tier
-     */
-    private int getDiskPlatterModelOffset(String tier) {
-        return switch (tier.toLowerCase()) {
-            case "1k" -> 0;
-            case "4k" -> 1;
-            case "16k" -> 2;
-            case "64k" -> 3;
-            default -> 0;
-        };
-    }
-
-    // ==================== COMPONENT IDENTIFICATION METHODS ====================
 
     /**
      * Check if an item is a disk platter component
@@ -286,16 +263,6 @@ public class ItemManager {
         return item.getItemMeta().getPersistentDataContainer().get(DISK_PLATTER_TIER_KEY, PersistentDataType.STRING);
     }
 
-    /**
-     * Check if an item is a specific tier disk platter
-     */
-    public boolean isDiskPlatterOfTier(ItemStack item, String tier) {
-        if (!isDiskPlatter(item)) return false;
-        String itemTier = getDiskPlatterTier(item);
-        return tier.equalsIgnoreCase(itemTier);
-    }
-
-    // ==================== TIERED DISK CREATION METHODS ====================
 
     /**
      * Create a 1K storage disk (base tier)
@@ -358,30 +325,28 @@ public class ItemManager {
 
         // Set display name with tier color
         Component displayName = switch (tier) {
-            case "1k" -> miniMessage.deserialize("<white>Storage Disk [1K]");
             case "4k" -> miniMessage.deserialize("<yellow>Storage Disk [4K]");
             case "16k" -> miniMessage.deserialize("<aqua>Storage Disk [16K]");
             case "64k" -> miniMessage.deserialize("<light_purple>Storage Disk [64K]");
             default -> miniMessage.deserialize("<white>Storage Disk [1K]");
         };
-        meta.setDisplayName(legacySerializer.serialize(displayName));
+        meta.displayName(displayName);
 
         // Calculate capacity info
         int itemsPerCell = getItemsPerCellForTier(tier);
         int totalCapacity = defaultCells * itemsPerCell;
 
-        List<String> lore = new ArrayList<>();
-        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Capacity: " + String.format("%,d", itemsPerCell) + " items per cell")));
-        lore.add(legacySerializer.serialize(miniMessage.deserialize("<yellow>Cells Used: 0/" + defaultCells)));
-        lore.add(legacySerializer.serialize(miniMessage.deserialize("<aqua>Total Capacity: " + String.format("%,d", totalCapacity) + " items")));
-        lore.add("");
-        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Tier: " + getTierDisplayName(tier))));
-        lore.add("");
-        lore.add(legacySerializer.serialize(miniMessage.deserialize("<dark_gray>Crafted by: " + crafterName)));
-        lore.add(legacySerializer.serialize(miniMessage.deserialize("<dark_gray>ID: " + diskId)));
-        meta.setLore(lore);
+        List<Component> lore = new ArrayList<>();
+        lore.add(miniMessage.deserialize("<gray>Capacity: " + String.format("%,d", itemsPerCell) + " items per cell"));
+        lore.add(miniMessage.deserialize("<yellow>Cells Used: 0/" + defaultCells));
+        lore.add(miniMessage.deserialize("<aqua>Total Capacity: " + String.format("%,d", totalCapacity) + " items"));
+        lore.add(Component.empty());
+        lore.add(miniMessage.deserialize("<gray>Tier: " + getTierDisplayName(tier)));
+        lore.add(Component.empty());
+        lore.add(miniMessage.deserialize("<dark_gray>Crafted by: " + crafterName));
+        lore.add(miniMessage.deserialize("<dark_gray>ID: " + diskId));
+        meta.lore(lore);
 
-        meta.setCustomModelData(1004 + getTierModelOffset(tier));
 
         PersistentDataContainer pdc = meta.getPersistentDataContainer();
         pdc.set(STORAGE_DISK_KEY, PersistentDataType.BOOLEAN, true);
@@ -417,16 +382,16 @@ public class ItemManager {
         String usageColor = (usedCells >= maxCells) ? "<red>" :
                 (usedCells >= maxCells * 0.8) ? "<yellow>" : "<green>";
 
-        List<String> lore = new ArrayList<>();
-        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Capacity: " + String.format("%,d", itemsPerCell) + " items per cell")));
-        lore.add(legacySerializer.serialize(miniMessage.deserialize(usageColor + "Cells Used: " + usedCells + "/" + maxCells)));
-        lore.add(legacySerializer.serialize(miniMessage.deserialize("<aqua>Total Capacity: " + String.format("%,d", totalCapacity) + " items")));
-        lore.add("");
-        lore.add(legacySerializer.serialize(miniMessage.deserialize("<gray>Tier: " + getTierDisplayName(tier))));
-        lore.add("");
-        lore.add(legacySerializer.serialize(miniMessage.deserialize("<dark_gray>Crafted by: " + crafterName)));
-        lore.add(legacySerializer.serialize(miniMessage.deserialize("<dark_gray>ID: " + diskId)));
-        meta.setLore(lore);
+        List<Component> lore = new ArrayList<>();
+        lore.add(miniMessage.deserialize("<gray>Capacity: " + String.format("%,d", itemsPerCell) + " items per cell"));
+        lore.add(miniMessage.deserialize(usageColor + "Cells Used: " + usedCells + "/" + maxCells));
+        lore.add(miniMessage.deserialize("<aqua>Total Capacity: " + String.format("%,d", totalCapacity) + " items"));
+        lore.add(Component.empty());
+        lore.add(miniMessage.deserialize("<gray>Tier: " + getTierDisplayName(tier)));
+        lore.add(Component.empty());
+        lore.add(miniMessage.deserialize("<dark_gray>Crafted by: " + crafterName));
+        lore.add(miniMessage.deserialize("<dark_gray>ID: " + diskId));
+        meta.lore(lore);
 
         // Update persistent data
         meta.getPersistentDataContainer().set(DISK_USED_CELLS_KEY, PersistentDataType.INTEGER, usedCells);
@@ -436,7 +401,6 @@ public class ItemManager {
         return newDisk;
     }
 
-    // ==================== TIER SYSTEM HELPER METHODS ====================
 
     /**
      * Get the tier of a storage disk
@@ -458,7 +422,6 @@ public class ItemManager {
     public int getItemsPerCellForTier(String tier) {
         if (tier == null) return 127;
         return switch (tier.toLowerCase()) {
-            case "1k" -> 127;
             case "4k" -> 508;
             case "16k" -> 2032;
             case "64k" -> 8128;
@@ -471,7 +434,6 @@ public class ItemManager {
      */
     private Material getMaterialForTier(String tier) {
         return switch (tier.toLowerCase()) {
-            case "1k" -> Material.ACACIA_PRESSURE_PLATE;
             case "4k" -> Material.HEAVY_WEIGHTED_PRESSURE_PLATE;
             case "16k" -> Material.LIGHT_WEIGHTED_PRESSURE_PLATE;
             case "64k" -> Material.POLISHED_BLACKSTONE_PRESSURE_PLATE;
@@ -484,24 +446,10 @@ public class ItemManager {
      */
     public String getTierDisplayName(String tier) {
         return switch (tier.toLowerCase()) {
-            case "1k" -> "<white>1K";
             case "4k" -> "<yellow>4K";
             case "16k" -> "<aqua>16K";
             case "64k" -> "<light_purple>64K";
             default -> "<white>1K";
-        };
-    }
-
-    /**
-     * Get model data offset for tier (for custom model data)
-     */
-    private int getTierModelOffset(String tier) {
-        return switch (tier.toLowerCase()) {
-            case "1k" -> 0;
-            case "4k" -> 1;
-            case "16k" -> 2;
-            case "64k" -> 3;
-            default -> 0;
         };
     }
 
@@ -523,50 +471,6 @@ public class ItemManager {
         return null;
     }
 
-    /**
-     * Get maximum items per cell for a disk by checking its tier
-     */
-    public int getMaxItemsPerCell(ItemStack disk) {
-        String tier = getDiskTier(disk);
-        return getItemsPerCellForTier(tier);
-    }
-
-    /**
-     * Get maximum items per cell for a disk ID (for database operations)
-     */
-    public int getMaxItemsPerCellForDiskId(String diskId) throws Exception {
-        String tier = getTierFromDatabase(diskId);
-        return getItemsPerCellForTier(tier);
-    }
-
-    /**
-     * Check if item is a specific tier disk
-     */
-    public boolean isDiskOfTier(ItemStack item, String tier) {
-        if (!isStorageDisk(item)) return false;
-        String diskTier = getDiskTier(item);
-        return tier.equalsIgnoreCase(diskTier);
-    }
-
-    /**
-     * Get all available tiers
-     */
-    public String[] getAllTiers() {
-        return new String[]{"1k", "4k", "16k", "64k"};
-    }
-
-    /**
-     * Check if a tier is valid
-     */
-    public boolean isValidTier(String tier) {
-        if (tier == null) return false;
-        for (String validTier : getAllTiers()) {
-            if (validTier.equalsIgnoreCase(tier)) return true;
-        }
-        return false;
-    }
-
-    // ==================== EXISTING METHODS (UPDATED) ====================
 
     public String getDiskCrafterName(ItemStack disk) {
         if (!isStorageDisk(disk)) return null;
@@ -625,19 +529,6 @@ public class ItemManager {
         return disk.getItemMeta().getPersistentDataContainer().get(DISK_CRAFTER_UUID_KEY, PersistentDataType.STRING);
     }
 
-    public int getDiskUsedCells(ItemStack disk) {
-        if (!isStorageDisk(disk)) return 0;
-        Integer cells = disk.getItemMeta().getPersistentDataContainer().get(DISK_USED_CELLS_KEY, PersistentDataType.INTEGER);
-        return cells != null ? cells : 0;
-    }
-
-    public int getDiskMaxCells(ItemStack disk) {
-        if (!isStorageDisk(disk)) return 0;
-        Integer cells = disk.getItemMeta().getPersistentDataContainer().get(DISK_MAX_CELLS_KEY, PersistentDataType.INTEGER);
-        // HARDCODED: Always return 64 regardless of what's stored - for migration purposes
-        return 64;
-    }
-
     private String generateDiskId() {
         try {
             String input = UUID.randomUUID().toString() + System.currentTimeMillis();
@@ -651,7 +542,7 @@ public class ItemManager {
                 hexString.append(hex);
             }
 
-            return hexString.toString().substring(0, 16).toUpperCase();
+            return hexString.substring(0, 16).toUpperCase();
         } catch (NoSuchAlgorithmException e) {
             // Fallback to UUID if SHA-256 is not available
             return UUID.randomUUID().toString().replace("-", "").substring(0, 16).toUpperCase();
@@ -673,12 +564,22 @@ public class ItemManager {
 
                 // Display name
                 if (meta.hasDisplayName()) {
-                    builder.append("|displayName:").append(meta.getDisplayName());
+                    Component displayName = meta.displayName();
+                    if (displayName != null) {
+                        builder.append("|displayName:").append(legacySerializer.serialize(displayName));
+                    }
                 }
 
                 // Lore
-                if (meta.hasLore()) {
-                    builder.append("|lore:").append(meta.getLore().toString());
+                if (meta.hasLore() && meta.lore() != null) {
+                    // Convert Adventure components back to legacy for hashing consistency
+                    List<String> legacyLore = new ArrayList<>();
+                    for (Component loreComponent : Objects.requireNonNull(meta.lore())) {
+                        if (loreComponent != null) {
+                            legacyLore.add(legacySerializer.serialize(loreComponent));
+                        }
+                    }
+                    builder.append("|lore:").append(legacyLore);
                 }
 
                 // Custom model data
@@ -688,14 +589,14 @@ public class ItemManager {
 
                 // Enchantments
                 if (meta.hasEnchants()) {
-                    builder.append("|enchants:").append(meta.getEnchants().toString());
+                    builder.append("|enchants:").append(meta.getEnchants());
                 }
 
                 // Persistent data (excluding our own MSS keys to prevent issues)
                 PersistentDataContainer pdc = meta.getPersistentDataContainer();
                 for (NamespacedKey key : pdc.getKeys()) {
                     if (!key.getNamespace().equals(plugin.getName().toLowerCase())) {
-                        builder.append("|pdc:").append(key.toString()).append("=");
+                        builder.append("|pdc:").append(key).append("=");
                         // Try different data types
                         if (pdc.has(key, PersistentDataType.STRING)) {
                             builder.append(pdc.get(key, PersistentDataType.STRING));
@@ -710,7 +611,9 @@ public class ItemManager {
 
             // Durability/damage
             if (item.getType().getMaxDurability() > 0) {
-                builder.append("|durability:").append(item.getDurability());
+                if (item.hasItemMeta() && item.getItemMeta() instanceof org.bukkit.inventory.meta.Damageable damageable) {
+                    builder.append("|damage:").append(damageable.getDamage());
+                }
             }
 
             // Generate SHA-256 hash
@@ -738,13 +641,13 @@ public class ItemManager {
     public boolean isItemAllowed(ItemStack item) {
         // Block all MSS items (disks, blocks, and components)
         if (isMSSItem(item)) {
-            return false;
+            return true;
         }
 
         // Check configuration blacklist
         if (plugin.getConfigManager() != null &&
                 plugin.getConfigManager().isItemBlacklisted(item.getType())) {
-            return false;
+            return true;
         }
 
         // Block shulker boxes with contents
@@ -754,7 +657,7 @@ public class ItemManager {
                     // Allow empty shulker boxes only
                     for (ItemStack content : shulkerBox.getInventory().getContents()) {
                         if (content != null && !content.getType().isAir()) {
-                            return false;
+                            return true;
                         }
                     }
                 }
@@ -765,13 +668,11 @@ public class ItemManager {
         if (item.getType().name().contains("BUNDLE")) {
             if (item.hasItemMeta() && item.getItemMeta() instanceof org.bukkit.inventory.meta.BundleMeta bundleMeta) {
                 // Allow empty bundles only
-                if (!bundleMeta.getItems().isEmpty()) {
-                    return false;
-                }
+                return !bundleMeta.getItems().isEmpty();
             }
         }
 
         // All other items are allowed by default unless in config blacklist
-        return true;
+        return false;
     }
 }

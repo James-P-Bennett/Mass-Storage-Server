@@ -1,12 +1,9 @@
 package org.jamesphbennett.massstorageserver.gui;
 
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.enchantments.Enchantment;
@@ -36,7 +33,7 @@ public class TerminalGUI implements Listener {
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
     private List<StoredItem> allItems = new ArrayList<>();
-    private List<StoredItem> filteredItems = new ArrayList<>();
+    private final List<StoredItem> filteredItems = new ArrayList<>();
     private int currentPage = 0;
     private final int itemsPerPage = 36; // 4 rows of 9 slots
 
@@ -45,7 +42,7 @@ public class TerminalGUI implements Listener {
     private boolean isSearchActive = false;
 
     // Sorting functionality
-    private boolean isQuantitySortActive = false; // false = alphabetical, true = quantity
+    private boolean isQuantitySortActive; // false = alphabetical, true = quantity
 
     public TerminalGUI(MassStorageServer plugin, Location terminalLocation, String networkId) {
         this.plugin = plugin;
@@ -53,7 +50,7 @@ public class TerminalGUI implements Listener {
         this.networkId = networkId;
 
         // Create inventory - 6 rows (54 slots)
-        this.inventory = Bukkit.createInventory(null, 54, ChatColor.GREEN + "MSS Terminal");
+        this.inventory = Bukkit.createInventory(null, 54, miniMessage.deserialize("<green>MSS Terminal"));
 
         // Check for saved search term for this terminal location
         String savedSearchTerm = plugin.getGUIManager().getTerminalSearchTerm(terminalLocation);
@@ -77,7 +74,7 @@ public class TerminalGUI implements Listener {
         // Fill bottom two rows with background
         ItemStack background = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
         ItemMeta backgroundMeta = background.getItemMeta();
-        backgroundMeta.setDisplayName(" ");
+        backgroundMeta.displayName(Component.text(" "));
         background.setItemMeta(backgroundMeta);
 
         // Fill bottom two rows (slots 36-53)
@@ -101,25 +98,25 @@ public class TerminalGUI implements Listener {
 
         if (isSearchActive && currentSearchTerm != null) {
             // Search is active - glowing button
-            searchMeta.setDisplayName(legacySerialize("<gold>Search: <yellow>" + currentSearchTerm));
-            List<String> searchLore = new ArrayList<>();
-            searchLore.add(legacySerialize("<gray>Showing items matching: <white>" + currentSearchTerm));
-            searchLore.add(legacySerialize("<gray>Results: " + filteredItems.size() + " item types"));
-            searchLore.add("");
-            searchLore.add(legacySerialize("<yellow>Right-click to clear search"));
-            searchLore.add(legacySerialize("<yellow>Left-click to search again"));
-            searchMeta.setLore(searchLore);
+            searchMeta.displayName(miniMessage.deserialize("<gold>Search: <yellow>" + currentSearchTerm));
+            List<Component> searchLore = new ArrayList<>();
+            searchLore.add(miniMessage.deserialize("<gray>Showing items matching: <white>" + currentSearchTerm));
+            searchLore.add(miniMessage.deserialize("<gray>Results: " + filteredItems.size() + " item types"));
+            searchLore.add(Component.empty());
+            searchLore.add(miniMessage.deserialize("<yellow>Right-click to clear search"));
+            searchLore.add(miniMessage.deserialize("<yellow>Left-click to search again"));
+            searchMeta.lore(searchLore);
 
             // Add glowing effect
             searchMeta.addEnchant(Enchantment.UNBREAKING, 1, true);
             searchMeta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
         } else {
             // No search active - normal button
-            searchMeta.setDisplayName(legacySerialize("<aqua>Search"));
-            List<String> searchLore = new ArrayList<>();
-            searchLore.add("");
-            searchLore.add(legacySerialize("<yellow>Left-click to open search"));
-            searchMeta.setLore(searchLore);
+            searchMeta.displayName(miniMessage.deserialize("<aqua>Search"));
+            List<Component> searchLore = new ArrayList<>();
+            searchLore.add(Component.empty());
+            searchLore.add(miniMessage.deserialize("<yellow>Left-click to open search"));
+            searchMeta.lore(searchLore);
         }
 
         searchButton.setItemMeta(searchMeta);
@@ -132,22 +129,22 @@ public class TerminalGUI implements Listener {
 
         if (isQuantitySortActive) {
             // Quantity sorting is active
-            sortMeta.setDisplayName(legacySerialize("<gold>Sorting: Quantity"));
-            List<String> sortLore = new ArrayList<>();
-            sortLore.add("");
-            sortLore.add(legacySerialize("<yellow>Click to sort alphabetically."));
-            sortMeta.setLore(sortLore);
+            sortMeta.displayName(miniMessage.deserialize("<gold>Sorting: Quantity"));
+            List<Component> sortLore = new ArrayList<>();
+            sortLore.add(Component.empty());
+            sortLore.add(miniMessage.deserialize("<yellow>Click to sort alphabetically."));
+            sortMeta.lore(sortLore);
 
             // Add glowing effect
             sortMeta.addEnchant(Enchantment.UNBREAKING, 1, true);
             sortMeta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
         } else {
             // Alphabetical sorting is active (default)
-            sortMeta.setDisplayName(legacySerialize("<aqua>Sorting: Alphabetically"));
-            List<String> sortLore = new ArrayList<>();
-            sortLore.add("");
-            sortLore.add(legacySerialize("<yellow>Click to sort by quantity"));
-            sortMeta.setLore(sortLore);
+            sortMeta.displayName(miniMessage.deserialize("<aqua>Sorting: Alphabetically"));
+            List<Component> sortLore = new ArrayList<>();
+            sortLore.add(Component.empty());
+            sortLore.add(miniMessage.deserialize("<yellow>Click to sort by quantity"));
+            sortMeta.lore(sortLore);
         }
 
         sortButton.setItemMeta(sortMeta);
@@ -167,66 +164,66 @@ public class TerminalGUI implements Listener {
         // Previous page button
         ItemStack prevPage = new ItemStack(Material.ARROW);
         ItemMeta prevMeta = prevPage.getItemMeta();
-        prevMeta.setDisplayName(legacySerialize("<yellow>Previous Page"));
-        List<String> prevLore = new ArrayList<>();
-        prevLore.add(legacySerialize("<gray>Page: " + (currentPage + 1) + "/" + maxPages));
+        prevMeta.displayName(miniMessage.deserialize("<yellow>Previous Page"));
+        List<Component> prevLore = new ArrayList<>();
+        prevLore.add(miniMessage.deserialize("<gray>Page: " + (currentPage + 1) + "/" + maxPages));
         if (currentPage > 0) {
-            prevLore.add(legacySerialize("<green>Click to go to previous page"));
+            prevLore.add(miniMessage.deserialize("<green>Click to go to previous page"));
         } else {
-            prevLore.add(legacySerialize("<red>Already on first page"));
+            prevLore.add(miniMessage.deserialize("<red>Already on first page"));
         }
-        prevMeta.setLore(prevLore);
+        prevMeta.lore(prevLore);
         prevPage.setItemMeta(prevMeta);
         inventory.setItem(45, prevPage);
 
         // Next page button
         ItemStack nextPage = new ItemStack(Material.ARROW);
         ItemMeta nextMeta = nextPage.getItemMeta();
-        nextMeta.setDisplayName(legacySerialize("<yellow>Next Page"));
-        List<String> nextLore = new ArrayList<>();
-        nextLore.add(legacySerialize("<gray>Page: " + (currentPage + 1) + "/" + maxPages));
+        nextMeta.displayName(miniMessage.deserialize("<yellow>Next Page"));
+        List<Component> nextLore = new ArrayList<>();
+        nextLore.add(miniMessage.deserialize("<gray>Page: " + (currentPage + 1) + "/" + maxPages));
         if (currentPage < maxPages - 1) {
-            nextLore.add(legacySerialize("<green>Click to go to next page"));
+            nextLore.add(miniMessage.deserialize("<green>Click to go to next page"));
         } else {
-            nextLore.add(legacySerialize("<red>Already on last page"));
+            nextLore.add(miniMessage.deserialize("<red>Already on last page"));
         }
-        nextMeta.setLore(nextLore);
+        nextMeta.lore(nextLore);
         nextPage.setItemMeta(nextMeta);
         inventory.setItem(53, nextPage);
 
         // Info item with better feedback (DISPLAY ONLY - NO CLICK FUNCTIONALITY)
         ItemStack info = new ItemStack(Material.BOOK);
         ItemMeta infoMeta = info.getItemMeta();
-        infoMeta.setDisplayName(legacySerialize("<aqua>Storage Info"));
-        List<String> infoLore = new ArrayList<>();
+        infoMeta.displayName(miniMessage.deserialize("<aqua>Storage Info"));
+        List<Component> infoLore = new ArrayList<>();
 
         List<StoredItem> displayItems = isSearchActive ? filteredItems : allItems;
 
         if (isSearchActive) {
-            infoLore.add(legacySerialize("<yellow>Search Results: " + filteredItems.size() + " types"));
-            infoLore.add(legacySerialize("<gray>Total Item Types: " + allItems.size()));
-            infoLore.add(legacySerialize("<gold>Search: '" + currentSearchTerm + "'"));
+            infoLore.add(miniMessage.deserialize("<yellow>Search Results: " + filteredItems.size() + " types"));
+            infoLore.add(miniMessage.deserialize("<gray>Total Item Types: " + allItems.size()));
+            infoLore.add(miniMessage.deserialize("<gold>Search: '" + currentSearchTerm + "'"));
         } else {
-            infoLore.add(legacySerialize("<gray>Total Item Types: " + allItems.size()));
+            infoLore.add(miniMessage.deserialize("<gray>Total Item Types: " + allItems.size()));
         }
 
-        infoLore.add(legacySerialize("<gray>Page: " + (currentPage + 1) + "/" + maxPages));
-        infoLore.add(legacySerialize("<gray>Sort: " + (isQuantitySortActive ? "By Quantity" : "Alphabetical")));
+        infoLore.add(miniMessage.deserialize("<gray>Page: " + (currentPage + 1) + "/" + maxPages));
+        infoLore.add(miniMessage.deserialize("<gray>Sort: " + (isQuantitySortActive ? "By Quantity" : "Alphabetical")));
 
         // Show items on current page
         int startIndex = currentPage * itemsPerPage;
         int endIndex = Math.min(startIndex + itemsPerPage, displayItems.size());
-        if (displayItems.size() > 0) {
-            infoLore.add(legacySerialize("<gray>Showing: " + (startIndex + 1) + "-" + endIndex + " of " + displayItems.size()));
+        if (!displayItems.isEmpty()) {
+            infoLore.add(miniMessage.deserialize("<gray>Showing: " + (startIndex + 1) + "-" + endIndex + " of " + displayItems.size()));
         }
 
         // Calculate total items stored
-        long totalItems = displayItems.stream().mapToLong(StoredItem::getQuantity).sum();
-        infoLore.add(legacySerialize("<gray>" + (isSearchActive ? "Filtered" : "Total") + " Items: " + String.format("%,d", totalItems)));
+        long totalItems = displayItems.stream().mapToLong(StoredItem::quantity).sum();
+        infoLore.add(miniMessage.deserialize("<gray>" + (isSearchActive ? "Filtered" : "Total") + " Items: " + String.format("%,d", totalItems)));
 
-        infoLore.add("");
+        infoLore.add(Component.empty());
 
-        infoMeta.setLore(infoLore);
+        infoMeta.lore(infoLore);
         info.setItemMeta(infoMeta);
         inventory.setItem(49, info);
     }
@@ -267,17 +264,17 @@ public class TerminalGUI implements Listener {
         if (isQuantitySortActive) {
             // Sort by quantity (descending) - most items first
             allItems.sort((a, b) -> {
-                int quantityCompare = Integer.compare(b.getQuantity(), a.getQuantity());
+                int quantityCompare = Integer.compare(b.quantity(), a.quantity());
                 if (quantityCompare != 0) {
                     return quantityCompare;
                 }
                 // If quantities are equal, fall back to alphabetical
-                return a.getItemStack().getType().name().compareTo(b.getItemStack().getType().name());
+                return a.itemStack().getType().name().compareTo(b.itemStack().getType().name());
             });
             plugin.getLogger().info("Applied quantity sorting (most items first)");
         } else {
             // Sort alphabetically by item type name (default)
-            allItems.sort(Comparator.comparing(item -> item.getItemStack().getType().name()));
+            allItems.sort(Comparator.comparing(item -> item.itemStack().getType().name()));
             plugin.getLogger().info("Applied alphabetical sorting");
         }
     }
@@ -297,12 +294,15 @@ public class TerminalGUI implements Listener {
         List<ScoredItem> scoredItems = new ArrayList<>();
 
         for (StoredItem item : allItems) {
-            String itemName = item.getItemStack().getType().name().toLowerCase().replace("_", " ");
+            String itemName = item.itemStack().getType().name().toLowerCase().replace("_", " ");
             String displayName = "";
 
             // Check display name if it exists
-            if (item.getItemStack().hasItemMeta() && item.getItemStack().getItemMeta().hasDisplayName()) {
-                displayName = ChatColor.stripColor(item.getItemStack().getItemMeta().getDisplayName()).toLowerCase();
+            if (item.itemStack().hasItemMeta() && item.itemStack().getItemMeta().hasDisplayName()) {
+                Component displayNameComponent = item.itemStack().getItemMeta().displayName();
+                if (displayNameComponent != null) {
+                    displayName = LegacyComponentSerializer.legacySection().serialize(displayNameComponent).toLowerCase();
+                }
             }
 
             // Calculate relevance score
@@ -321,13 +321,13 @@ public class TerminalGUI implements Listener {
             }
             // If scores are equal, use current sort mode as tiebreaker
             if (isQuantitySortActive) {
-                int quantityCompare = Integer.compare(b.item.getQuantity(), a.item.getQuantity());
+                int quantityCompare = Integer.compare(b.item.quantity(), a.item.quantity());
                 if (quantityCompare != 0) {
                     return quantityCompare;
                 }
             }
             // Final fallback to alphabetical
-            return a.item.getItemStack().getType().name().compareTo(b.item.getItemStack().getType().name());
+            return a.item.itemStack().getType().name().compareTo(b.item.itemStack().getType().name());
         });
 
         // Extract the sorted items
@@ -389,16 +389,9 @@ public class TerminalGUI implements Listener {
     }
 
     /**
-     * Helper class for scored search results
-     */
-    private static class ScoredItem {
-        final StoredItem item;
-        final int score;
-
-        ScoredItem(StoredItem item, int score) {
-            this.item = item;
-            this.score = score;
-        }
+         * Helper class for scored search results
+         */
+        private record ScoredItem(StoredItem item, int score) {
     }
 
     private void updateDisplayedItems() {
@@ -437,37 +430,29 @@ public class TerminalGUI implements Listener {
 
         // NEW BEHAVIOR: Display logic based on quantity and max stack size
         int maxStackSize = displayItem.getMaxStackSize();
-        if (storedItem.getQuantity() > maxStackSize) {
+        if (storedItem.quantity() > maxStackSize) {
             // For items > max stack size, show as single item (no number)
             displayItem.setAmount(1);
         } else {
             // For items ≤ max stack size, show actual quantity
-            displayItem.setAmount(storedItem.getQuantity());
+            displayItem.setAmount(storedItem.quantity());
         }
 
         // Add quantity information to lore
-        List<String> lore = meta.hasLore() ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
-        lore.add("");
-        lore.add(legacySerialize("<yellow>Stored: " + storedItem.getQuantity()));
+        List<Component> lore = (meta.hasLore() && meta.lore() != null) ? new ArrayList<>(Objects.requireNonNull(meta.lore())) : new ArrayList<>();
+        lore.add(Component.empty());
+        lore.add(miniMessage.deserialize("<yellow>Stored: " + storedItem.quantity()));
 
-        // Add interaction hints with UPDATED click behavior
-        lore.add("");
-        lore.add(legacySerialize("<gray>Left Click: Take full stack to cursor"));
-        lore.add(legacySerialize("<gray>Right Click: Take half stack to cursor"));
-        lore.add(legacySerialize("<gray>Shift Click: Take full stack to inventory"));
+        // Add interaction hints with click behavior
+        lore.add(Component.empty());
+        lore.add(miniMessage.deserialize("<gray>Left Click: Take full stack to cursor"));
+        lore.add(miniMessage.deserialize("<gray>Right Click: Take half stack to cursor"));
+        lore.add(miniMessage.deserialize("<gray>Shift Click: Take full stack to inventory"));
 
-        meta.setLore(lore);
+        meta.lore(lore);
         displayItem.setItemMeta(meta);
 
         return displayItem;
-    }
-
-    /**
-     * Helper method to convert MiniMessage to legacy format for ItemMeta
-     */
-    private String legacySerialize(String miniMessage) {
-        Component component = this.miniMessage.deserialize(miniMessage);
-        return LegacyComponentSerializer.legacySection().serialize(component);
     }
 
     /**
@@ -515,13 +500,6 @@ public class TerminalGUI implements Listener {
         updateDisplayedItems();
 
         plugin.getLogger().info("Search applied: " + filteredItems.size() + " results out of " + allItems.size() + " total items");
-    }
-
-    /**
-     * Get the current filtered item count (for result display)
-     */
-    public int getFilteredItemCount() {
-        return isSearchActive ? filteredItems.size() : allItems.size();
     }
 
     /**
@@ -638,7 +616,7 @@ public class TerminalGUI implements Listener {
         // Handle navigation clicks (slots 45, 53) - REMOVED slot 49 (info book)
         if (slot == 45 || slot == 53) {
             event.setCancelled(true);
-            handleNavigationClick(event, player, slot);
+            handleNavigationClick(player, slot);
             return;
         }
 
@@ -660,7 +638,7 @@ public class TerminalGUI implements Listener {
                 event.setCancelled(true);
 
                 // Check if item is allowed to be stored
-                if (!plugin.getItemManager().isItemAllowed(itemToStore)) {
+                if (plugin.getItemManager().isItemAllowed(itemToStore)) {
                     player.sendMessage(miniMessage.deserialize("<red>This item cannot be stored in the network!"));
                     return;
                 }
@@ -682,7 +660,7 @@ public class TerminalGUI implements Listener {
                         refresh();
                     } else {
                         // Some items couldn't be stored
-                        ItemStack remainder = remainders.get(0);
+                        ItemStack remainder = remainders.getFirst();
                         event.setCurrentItem(remainder);
                         int stored = itemToStore.getAmount() - remainder.getAmount();
                         if (stored > 0) {
@@ -710,23 +688,8 @@ public class TerminalGUI implements Listener {
         // Handle clicks in the bottom control area (slots 36-53) that aren't already handled
         if (slot >= 36 && slot < 54) {
             // Cancel all clicks in the control area that we haven't specifically handled
+            // All remaining slots are background/filler - do nothing silently
             event.setCancelled(true);
-
-            // Provide feedback for unhandled control area clicks
-            if (slot >= 36 && slot < 45) {
-                // Background slots - do nothing silently
-                return;
-            } else if (slot >= 46 && slot < 48) {
-                // Background slots near navigation - do nothing silently
-                return;
-            } else if (slot == 51 || slot == 52) {
-                // Background slots - do nothing silently
-                return;
-            } else {
-                // Unknown control slot
-                plugin.getLogger().info("Unhandled click in control area slot: " + slot);
-            }
-            return;
         }
 
         // All other clicks (in player inventory) are allowed for manual item management
@@ -740,7 +703,7 @@ public class TerminalGUI implements Listener {
     private int calculateInventorySpace(Player player, ItemStack item) {
         int totalSpace = 0;
 
-        // Check slots 0-35 (main inventory, excluding hotbar which is 0-8 but we want to include it)
+        // Check slots 0-35 (main inventory, excluding hotbar which is 0-8, but we want to include it)
         for (int i = 0; i < 36; i++) {
             ItemStack invItem = player.getInventory().getItem(i);
 
@@ -764,11 +727,11 @@ public class TerminalGUI implements Listener {
         ItemStack cursorItem = event.getCursor();
 
         // PRIORITY 1: If player has items on cursor, try to store them
-        if (cursorItem != null && !cursorItem.getType().isAir()) {
+        if (!cursorItem.getType().isAir()) {
             plugin.getLogger().info("Player has " + cursorItem.getAmount() + " " + cursorItem.getType() + " on cursor, attempting to store");
 
             // Check if item can be stored
-            if (!plugin.getItemManager().isItemAllowed(cursorItem)) {
+            if (plugin.getItemManager().isItemAllowed(cursorItem)) {
                 player.sendMessage(miniMessage.deserialize("<red>This item cannot be stored in the network!"));
                 return;
             }
@@ -782,14 +745,12 @@ public class TerminalGUI implements Listener {
 
                 if (remainders.isEmpty()) {
                     // All items stored successfully
-                    event.setCursor(null);
-//                    player.sendMessage(miniMessage.deserialize("<green>Stored " + cursorItem.getAmount() + " " +
-//                            cursorItem.getType().name().toLowerCase().replace("_", " ")));
+                    event.getView().setCursor(null);
                     plugin.getLogger().info("Successfully stored all cursor items");
                 } else {
                     // Some items couldn't be stored
-                    ItemStack remainder = remainders.get(0);
-                    event.setCursor(remainder);
+                    ItemStack remainder = remainders.getFirst();
+                    event.getView().setCursor(remainder);
                     int stored = cursorItem.getAmount() - remainder.getAmount();
                     if (stored > 0) {
                         player.sendMessage(miniMessage.deserialize("<yellow>Stored " + stored + " items. " +
@@ -812,7 +773,7 @@ public class TerminalGUI implements Listener {
             }
         }
 
-        // PRIORITY 2: If no cursor items, handle retrieval with FIXED BEHAVIOR
+        // If no cursor items, handle retrieval
         StoredItem storedItem = slotToStoredItem.get(slot);
         if (storedItem == null) {
             plugin.getLogger().info("No stored item found in slot " + slot);
@@ -820,33 +781,33 @@ public class TerminalGUI implements Listener {
         }
 
         ClickType clickType = event.getClick();
-        int amountToRetrieve = 0;
-        boolean directToInventory = false;
+        int amountToRetrieve;
+        boolean directToInventory;
 
         // Get the max stack size for this item type
-        int maxStackSize = storedItem.getItemStack().getMaxStackSize();
+        int maxStackSize = storedItem.itemStack().getMaxStackSize();
 
         switch (clickType) {
             case LEFT:
                 // Take up to max stack size (or less if not available) to cursor
-                amountToRetrieve = Math.min(maxStackSize, storedItem.getQuantity());
+                amountToRetrieve = Math.min(maxStackSize, storedItem.quantity());
                 directToInventory = false;
                 break;
             case RIGHT:
                 // Take half of max stack size (or less if not available) to cursor
                 int halfStack = Math.max(1, maxStackSize / 2);
-                amountToRetrieve = Math.min(halfStack, storedItem.getQuantity());
+                amountToRetrieve = Math.min(halfStack, storedItem.quantity());
                 directToInventory = false;
                 break;
             case SHIFT_LEFT:
                 // Take up to max stack size directly to inventory, but respect available quantity
-                amountToRetrieve = Math.min(maxStackSize, storedItem.getQuantity());
+                amountToRetrieve = Math.min(maxStackSize, storedItem.quantity());
                 directToInventory = true;
 
-                // CRITICAL FIX: Check if player inventory has space BEFORE retrieving
+                // Check if player inventory has space BEFORE retrieving
                 if (amountToRetrieve > 0) {
                     // Create a test item to check space requirements
-                    ItemStack testItem = storedItem.getItemStack().clone();
+                    ItemStack testItem = storedItem.itemStack().clone();
                     testItem.setAmount(amountToRetrieve);
 
                     // Calculate available space WITHOUT modifying inventory
@@ -859,7 +820,7 @@ public class TerminalGUI implements Listener {
                         player.sendMessage(miniMessage.deserialize("<red>Your inventory is full!"));
                         plugin.getLogger().info("Cancelled shift-click retrieval - player inventory full");
                         return;
-                    } else if (amountToRetrieve < Math.min(maxStackSize, storedItem.getQuantity())) {
+                    } else if (amountToRetrieve < Math.min(maxStackSize, storedItem.quantity())) {
                         player.sendMessage(miniMessage.deserialize("<yellow>Only retrieving " + amountToRetrieve + " items due to inventory space"));
                     }
                 }
@@ -870,13 +831,13 @@ public class TerminalGUI implements Listener {
         }
 
         if (amountToRetrieve > 0) {
-            plugin.getLogger().info("Retrieving " + amountToRetrieve + " items of type " + storedItem.getItemStack().getType() +
-                    " (available: " + storedItem.getQuantity() + ", max stack: " + maxStackSize + ")" +
+            plugin.getLogger().info("Retrieving " + amountToRetrieve + " items of type " + storedItem.itemStack().getType() +
+                    " (available: " + storedItem.quantity() + ", max stack: " + maxStackSize + ")" +
                     (directToInventory ? " to inventory" : " to cursor"));
 
             try {
                 ItemStack retrievedItem = plugin.getStorageManager().retrieveItems(
-                        networkId, storedItem.getItemHash(), amountToRetrieve);
+                        networkId, storedItem.itemHash(), amountToRetrieve);
 
                 if (retrievedItem != null) {
                     if (directToInventory) {
@@ -888,8 +849,7 @@ public class TerminalGUI implements Listener {
                             plugin.getLogger().warning("Unexpected: " + leftover.size() + " items didn't fit after pre-check!");
                             // Put the items back in storage
                             try {
-                                List<ItemStack> putBack = new ArrayList<>();
-                                putBack.addAll(leftover.values());
+                                List<ItemStack> putBack = new ArrayList<>(leftover.values());
                                 plugin.getStorageManager().storeItems(networkId, putBack);
 
                                 // Calculate what was actually added
@@ -910,14 +870,12 @@ public class TerminalGUI implements Listener {
                         }
                     } else {
                         // Put on cursor
-                        event.setCursor(retrievedItem);
+                        event.getView().setCursor(retrievedItem);
                     }
 
                     // Refresh the display
                     refresh();
 
-//                    player.sendMessage(miniMessage.deserialize("<green>Retrieved " + amountToRetrieve + " " +
-//                            retrievedItem.getType().name().toLowerCase().replace("_", " ")));
                     plugin.getLogger().info("Successfully retrieved " + amountToRetrieve + " items");
                 } else {
                     player.sendMessage(miniMessage.deserialize("<red>Could not retrieve items - they may have been taken by another player."));
@@ -931,7 +889,7 @@ public class TerminalGUI implements Listener {
         }
     }
 
-    private void handleNavigationClick(InventoryClickEvent event, Player player, int slot) {
+    private void handleNavigationClick(Player player, int slot) {
         plugin.getLogger().info("Navigation click detected in slot " + slot + " by player " + player.getName());
 
         switch (slot) {
@@ -998,12 +956,12 @@ public class TerminalGUI implements Listener {
             if (event.getWhoClicked() instanceof Player player) {
                 ItemStack draggedItem = event.getOldCursor();
 
-                if (draggedItem != null && !draggedItem.getType().isAir()) {
+                if (!draggedItem.getType().isAir()) {
                     plugin.getLogger().info("Player " + player.getName() + " dragging " +
                             draggedItem.getAmount() + " " + draggedItem.getType() + " into terminal");
 
                     // Check if item can be stored
-                    if (!plugin.getItemManager().isItemAllowed(draggedItem)) {
+                    if (plugin.getItemManager().isItemAllowed(draggedItem)) {
                         event.setCancelled(true);
                         player.sendMessage(miniMessage.deserialize("<red>This item cannot be stored in the network!"));
                         plugin.getLogger().info("Cancelled drag - item not allowed: " + draggedItem.getType());
@@ -1038,24 +996,21 @@ public class TerminalGUI implements Listener {
                                 if (remainingOnCursor > 0) {
                                     ItemStack newCursor = draggedItem.clone();
                                     newCursor.setAmount(remainingOnCursor);
-                                    event.setCursor(newCursor);
+                                    event.getView().setCursor(newCursor);
                                 } else {
-                                    event.setCursor(null);
+                                    event.getView().setCursor(null);
                                 }
 
-//                                player.sendMessage(miniMessage.deserialize("<green>Stored " + totalDraggedAmount + " " +
-//                                        draggedItem.getType().name().toLowerCase().replace("_", " ")));
-//                                plugin.getLogger().info("Successfully stored all " + totalDraggedAmount + " dragged items");
                             } else {
                                 // Partial storage
-                                ItemStack remainder = remainders.get(0);
+                                ItemStack remainder = remainders.getFirst();
                                 int stored = totalDraggedAmount - remainder.getAmount();
 
                                 // Calculate new cursor amount
                                 int newCursorAmount = draggedItem.getAmount() - stored;
                                 ItemStack newCursor = draggedItem.clone();
                                 newCursor.setAmount(newCursorAmount);
-                                event.setCursor(newCursor);
+                                event.getView().setCursor(newCursor);
 
                                 if (stored > 0) {
                                     player.sendMessage(miniMessage.deserialize("<yellow>Stored " + stored + " items. " +
@@ -1073,7 +1028,7 @@ public class TerminalGUI implements Listener {
                         } catch (Exception e) {
                             player.sendMessage(miniMessage.deserialize("<red>Error storing items: " + e.getMessage()));
                             plugin.getLogger().severe("Error storing dragged items: " + e.getMessage());
-                            e.printStackTrace();
+                            plugin.getLogger().severe("Stack trace: " + java.util.Arrays.toString(e.getStackTrace()));
                         }
                     }
                 }
@@ -1101,15 +1056,6 @@ public class TerminalGUI implements Listener {
         }
     }
 
-    // Getters for search state (for GUI manager)
-    public boolean isSearchActive() {
-        return isSearchActive;
-    }
-
-    public String getCurrentSearchTerm() {
-        return currentSearchTerm;
-    }
-
     public Location getTerminalLocation() {
         return terminalLocation;
     }
@@ -1118,7 +1064,4 @@ public class TerminalGUI implements Listener {
         return networkId;
     }
 
-    public boolean isQuantitySortActive() {
-        return isQuantitySortActive;
-    }
 }

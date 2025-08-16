@@ -79,7 +79,7 @@ public class DisksManager {
                 }
             }
 
-            // CRITICAL: Refresh all terminals in the network after drive bay destruction
+            // Refresh all terminals in the network after drive bay destruction
             if (!diskIds.isEmpty()) {
                 plugin.getGUIManager().refreshNetworkTerminals(networkId);
                 plugin.getLogger().info("Refreshed terminals after drive bay destruction containing " + diskIds.size() + " disks");
@@ -87,7 +87,7 @@ public class DisksManager {
 
         } catch (Exception e) {
             plugin.getLogger().severe("Error dropping drive bay contents: " + e.getMessage());
-            e.printStackTrace();
+            plugin.getLogger().severe("Stack trace: " + java.util.Arrays.toString(e.getStackTrace()));
         }
     }
 
@@ -152,7 +152,7 @@ public class DisksManager {
 
         } catch (Exception e) {
             plugin.getLogger().severe("Error dropping networkless drive bay contents: " + e.getMessage());
-            e.printStackTrace();
+            plugin.getLogger().severe("Stack trace: " + java.util.Arrays.toString(e.getStackTrace()));
         }
     }
 
@@ -236,13 +236,4 @@ public class DisksManager {
         return false;
     }
 
-    /**
-     * Generate a standalone network ID for orphaned drive bays
-     */
-    public String generateStandaloneNetworkId(Location location) {
-        return "standalone_" + location.getWorld().getName() + "_" +
-                location.getBlockX() + "_" +
-                location.getBlockY() + "_" +
-                location.getBlockZ();
-    }
 }

@@ -8,7 +8,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.CraftItemEvent;
 import org.bukkit.event.inventory.PrepareItemCraftEvent;
-import org.bukkit.event.player.AsyncPlayerChatEvent;
+import io.papermc.paper.event.player.AsyncChatEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.Recipe;
@@ -32,9 +32,9 @@ public class PlayerListener implements Listener {
      * Handle chat events for terminal search input
      */
     @EventHandler(priority = EventPriority.HIGHEST)
-    public void onPlayerChat(AsyncPlayerChatEvent event) {
+    public void onPlayerChat(AsyncChatEvent event) {
         Player player = event.getPlayer();
-        String message = event.getMessage().trim();
+        String message = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
 
         // Check if player is awaiting search input
         if (plugin.getGUIManager().isAwaitingSearchInput(player)) {
@@ -98,7 +98,7 @@ public class PlayerListener implements Listener {
             return; // IMPORTANT: Return here to avoid blocking the recipe
         }
 
-        // CRITICAL: Check if any MSS items (including cables) are being used in non-MSS recipes
+        // Check if any MSS items (including cables) are being used in non-MSS recipes
         if (containsMSSItems(matrix)) {
             Recipe recipe = event.getRecipe();
             if (recipe instanceof ShapedRecipe shapedRecipe) {
@@ -186,7 +186,7 @@ public class PlayerListener implements Listener {
             }
         }
 
-        // CRITICAL: Final check - prevent any MSS items (including cables) from being used in non-MSS recipes
+        // Final check - prevent any MSS items (including cables) from being used in non-MSS recipes
         if (containsMSSItems(event.getInventory().getMatrix())) {
             boolean isMSSRecipe = false;
 
@@ -307,7 +307,7 @@ public class PlayerListener implements Listener {
         String diskTier = itemManager.getDiskTier(disk);
         final String tier = (diskTier != null) ? diskTier : diskType; // Make effectively final
 
-        // CRITICAL FIX: Use 64 cells as the standard for all disks
+        // Use 64 cells as the standard for all disks
         final int maxCells = 64;
 
         plugin.getDatabaseManager().executeTransaction(conn -> {

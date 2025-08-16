@@ -54,7 +54,7 @@ public class PistonListener implements Listener {
         // This handles cases where pistons push other blocks into our custom blocks
         Block pistonBlock = event.getBlock();
 
-        // FIXED: Safe type checking to prevent ClassCastException
+        // Safe type checking to prevent ClassCastException
         if (!(pistonBlock.getBlockData() instanceof org.bukkit.block.data.type.Piston pistonData)) {
             plugin.getLogger().warning("Piston block data is not of type Piston: " + pistonBlock.getBlockData().getClass().getSimpleName());
             return;
@@ -132,7 +132,7 @@ public class PistonListener implements Listener {
         // For sticky pistons, also check if they would pull blocks into custom block spaces
         Block pistonBlock = event.getBlock();
 
-        // FIXED: Safe type checking to prevent ClassCastException
+        // Safe type checking to prevent ClassCastException
         if (!(pistonBlock.getBlockData() instanceof org.bukkit.block.data.type.Piston pistonData)) {
             plugin.getLogger().warning("Piston block data is not of type Piston: " + pistonBlock.getBlockData().getClass().getSimpleName());
             return;

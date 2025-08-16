@@ -66,7 +66,7 @@ public class ExplosionManager {
                 }
             } catch (Exception e) {
                 plugin.getLogger().severe("Error handling drive bay explosion at " + driveBayLoc + ": " + e.getMessage());
-                e.printStackTrace();
+                plugin.getLogger().severe("Stack trace: " + java.util.Arrays.toString(e.getStackTrace()));
             }
         }
 
@@ -74,7 +74,7 @@ public class ExplosionManager {
         for (Block block : blockList) {
             if (isCustomNetworkBlock(block)) {
                 try {
-                    // CRITICAL FIX: Don't remove from explosion list - let vanilla mechanics destroy the block
+                    // Don't remove from explosion list - let vanilla mechanics destroy the block
                     // But prevent vanilla drops by setting the block to air first, then drop our custom item
 
                     // Get our custom item first

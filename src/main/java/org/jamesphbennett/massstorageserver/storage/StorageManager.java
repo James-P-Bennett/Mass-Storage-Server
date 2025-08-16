@@ -54,7 +54,7 @@ public class StorageManager {
                     }
 
                     for (ItemStack item : items) {
-                        if (!itemManager.isItemAllowed(item)) {
+                        if (itemManager.isItemAllowed(item)) {
                             plugin.getLogger().warning("Item not allowed: " + item.getType());
                             remainders.add(item);
                             continue;
@@ -84,7 +84,7 @@ public class StorageManager {
 
             } catch (SQLException e) {
                 plugin.getLogger().severe("Storage transaction failed: " + e.getMessage());
-                e.printStackTrace();
+                plugin.getLogger().severe("Stack trace: " + java.util.Arrays.toString(e.getStackTrace()));
                 throw new RuntimeException("Storage operation failed: " + e.getMessage(), e);
             }
 
@@ -128,7 +128,6 @@ public class StorageManager {
                                 String diskId = rs.getString("disk_id");
                                 String itemData = rs.getString("item_data");
                                 int currentQuantity = rs.getInt("quantity");
-                                int maxStackSize = rs.getInt("max_stack_size");
 
                                 int toRetrieve = Math.min(remainingToRetrieve, currentQuantity);
                                 int newQuantity = currentQuantity - toRetrieve;
@@ -165,7 +164,7 @@ public class StorageManager {
 
                             // Combine all retrieved items into one stack
                             if (!retrievedItems.isEmpty()) {
-                                ItemStack combinedItem = retrievedItems.get(0).clone();
+                                ItemStack combinedItem = retrievedItems.getFirst().clone();
                                 int totalAmount = retrievedItems.stream().mapToInt(ItemStack::getAmount).sum();
                                 combinedItem.setAmount(totalAmount);
                                 result[0] = combinedItem;
@@ -203,7 +202,7 @@ public class StorageManager {
                                  "JOIN storage_disks sd ON si.disk_id = sd.disk_id " +
                                  "JOIN drive_bay_slots dbs ON sd.disk_id = dbs.disk_id " +
                                  "WHERE dbs.network_id = ? AND dbs.disk_id IS NOT NULL " +
-                                 "GROUP BY si.item_hash " + // CRITICAL FIX: Only group by item_hash, not item_data
+                                 "GROUP BY si.item_hash " +
                                  "HAVING total_quantity > 0 " +
                                  "ORDER BY total_quantity DESC")) {
 
@@ -383,11 +382,6 @@ public class StorageManager {
         return 0;
     }
 
-    // Keep the old method for backward compatibility but make it use the new one
-    private boolean hasAvailableCells(Connection conn, String diskId) throws SQLException {
-        return getAvailableCells(conn, diskId) > 0;
-    }
-
     private List<String> getNetworkDiskIds(Connection conn, String networkId) throws SQLException {
         List<String> diskIds = new ArrayList<>();
 
@@ -416,16 +410,6 @@ public class StorageManager {
         }
     }
 
-    private int getUsedCells(Connection conn, String diskId) throws SQLException {
-        try (PreparedStatement stmt = conn.prepareStatement(
-                "SELECT COUNT(*) FROM storage_items WHERE disk_id = ?")) {
-            stmt.setString(1, diskId);
-            try (ResultSet rs = stmt.executeQuery()) {
-                return rs.next() ? rs.getInt(1) : 0;
-            }
-        }
-    }
-
     private int getMaxCells(Connection conn, String diskId) throws SQLException {
         try (PreparedStatement stmt = conn.prepareStatement(
                 "SELECT max_cells FROM storage_disks WHERE disk_id = ?")) {
@@ -438,11 +422,9 @@ public class StorageManager {
 
     public String serializeItemStack(ItemStack item) {
         try {
-            java.io.ByteArrayOutputStream outputStream = new java.io.ByteArrayOutputStream();
-            org.bukkit.util.io.BukkitObjectOutputStream dataOutput = new org.bukkit.util.io.BukkitObjectOutputStream(outputStream);
-            dataOutput.writeObject(item);
-            dataOutput.close();
-            return Base64.getEncoder().encodeToString(outputStream.toByteArray());
+            // Use Paper's modern serialization
+            byte[] serialized = item.serializeAsBytes();
+            return Base64.getEncoder().encodeToString(serialized);
         } catch (Exception e) {
             plugin.getLogger().warning("Failed to serialize item: " + e.getMessage());
             return "";
@@ -452,11 +434,8 @@ public class StorageManager {
     public ItemStack deserializeItemStack(String data) {
         try {
             byte[] bytes = Base64.getDecoder().decode(data);
-            java.io.ByteArrayInputStream inputStream = new java.io.ByteArrayInputStream(bytes);
-            org.bukkit.util.io.BukkitObjectInputStream dataInput = new org.bukkit.util.io.BukkitObjectInputStream(inputStream);
-            ItemStack item = (ItemStack) dataInput.readObject();
-            dataInput.close();
-            return item;
+            // Use Paper's modern deserialization
+            return ItemStack.deserializeBytes(bytes);
         } catch (Exception e) {
             plugin.getLogger().warning("Failed to deserialize item: " + e.getMessage());
             return null;

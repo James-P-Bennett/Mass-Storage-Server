@@ -1,12 +1,13 @@
-// Enhanced GUIManager with comprehensive network change handling and search input
 
 package org.jamesphbennett.massstorageserver.gui;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.entity.Player;
 import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.block.Block;
+import org.bukkit.block.Container;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.jamesphbennett.massstorageserver.MassStorageServer;
 
@@ -20,29 +21,19 @@ import java.util.List;
 public class GUIManager {
 
     private final MassStorageServer plugin;
-    private final MiniMessage miniMessage;
     private final Map<UUID, String> playerCurrentGUI = new ConcurrentHashMap<>();
-    private final Map<UUID, Location> playerGUILocation = new ConcurrentHashMap<>();
     private final Map<UUID, String> playerGUINetworkId = new ConcurrentHashMap<>();
     private final Map<UUID, Object> playerGUIInstance = new ConcurrentHashMap<>();
 
-    // Track when networks have been modified
     private final Set<String> modifiedNetworks = ConcurrentHashMap.newKeySet();
-
-    // Search input handling
     private final Map<UUID, TerminalGUI> playersAwaitingSearchInput = new ConcurrentHashMap<>();
     private final Map<UUID, BukkitRunnable> searchTimeoutTasks = new ConcurrentHashMap<>();
     private static final int SEARCH_TIMEOUT_SECONDS = 10;
-
-    // Terminal-specific search state storage (per location)
     private final Map<String, String> terminalSearchTerms = new ConcurrentHashMap<>();
-
-    // Terminal-specific sorting state storage (per location)
     private final Map<String, Boolean> terminalQuantitySort = new ConcurrentHashMap<>();
 
     public GUIManager(MassStorageServer plugin) {
         this.plugin = plugin;
-        this.miniMessage = MiniMessage.miniMessage();
     }
 
     /**
@@ -69,7 +60,7 @@ public class GUIManager {
     }
 
     /**
-     * Open an Exporter GUI for a player
+     * Open an Exporter GUI for a player (context-aware based on target container)
      */
     public void openExporterGUI(Player player, Location exporterLocation, String exporterId, String networkId) {
         try {
@@ -82,11 +73,26 @@ public class GUIManager {
             plugin.getLogger().info("Opening exporter GUI for player " + player.getName() +
                     " at " + exporterLocation + " with exporter ID: " + exporterId);
 
-            ExporterGUI gui = new ExporterGUI(plugin, exporterLocation, exporterId, networkId);
-            gui.open(player);
+            // Detect target container type and open appropriate GUI
+            Container targetContainer = getTargetContainer(exporterLocation);
+            Object gui;
+            
+            if (targetContainer != null && isFurnaceType(targetContainer)) {
+                // Open furnace-specific GUI
+                plugin.getLogger().info("Detected furnace target - opening FurnaceExporterGUI");
+                FurnaceExporterGUI furnaceGUI = new FurnaceExporterGUI(plugin, exporterLocation, exporterId, networkId);
+                furnaceGUI.open(player);
+                gui = furnaceGUI;
+                playerCurrentGUI.put(player.getUniqueId(), "FURNACE_EXPORTER");
+            } else {
+                // Open generic exporter GUI
+                plugin.getLogger().info("Using generic ExporterGUI");
+                ExporterGUI exporterGUI = new ExporterGUI(plugin, exporterLocation, exporterId, networkId);
+                exporterGUI.open(player);
+                gui = exporterGUI;
+                playerCurrentGUI.put(player.getUniqueId(), "EXPORTER");
+            }
 
-            playerCurrentGUI.put(player.getUniqueId(), "EXPORTER");
-            playerGUILocation.put(player.getUniqueId(), exporterLocation);
             playerGUINetworkId.put(player.getUniqueId(), networkId);
             playerGUIInstance.put(player.getUniqueId(), gui);
 
@@ -94,8 +100,48 @@ public class GUIManager {
         } catch (Exception e) {
             player.sendMessage(Component.text("Error opening Exporter GUI: " + e.getMessage(), NamedTextColor.RED));
             plugin.getLogger().severe("Error opening Exporter GUI: " + e.getMessage());
-            e.printStackTrace();
+            plugin.getLogger().severe("Stack trace: " + java.util.Arrays.toString(e.getStackTrace()));
         }
+    }
+
+    /**
+     * Get the target container that the exporter is physically attached to
+     */
+    private Container getTargetContainer(Location exporterLocation) {
+        try {
+            Block exporterBlock = exporterLocation.getBlock();
+            Block attachedBlock = null;
+
+            if (exporterBlock.getType() == Material.PLAYER_HEAD) {
+                // Floor mounted head - check block below
+                attachedBlock = exporterBlock.getRelative(org.bukkit.block.BlockFace.DOWN);
+            } else if (exporterBlock.getType() == Material.PLAYER_WALL_HEAD) {
+                // Wall mounted head - check block it's attached to
+                org.bukkit.block.data.Directional directional = (org.bukkit.block.data.Directional) exporterBlock.getBlockData();
+                org.bukkit.block.BlockFace facing = directional.getFacing();
+                // The block the wall head is attached to is in the opposite direction
+                attachedBlock = exporterBlock.getRelative(facing.getOppositeFace());
+            }
+
+            // Check if the attached block is a container
+            if (attachedBlock != null && attachedBlock.getState() instanceof Container container) {
+                return container;
+            }
+
+        } catch (Exception e) {
+            plugin.getLogger().warning("Error checking attached block for exporter: " + e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Check if a container is a furnace-type container
+     */
+    private boolean isFurnaceType(Container container) {
+        Material type = container.getBlock().getType();
+        return type == Material.FURNACE || 
+               type == Material.BLAST_FURNACE || 
+               type == Material.SMOKER;
     }
 
     /**
@@ -103,7 +149,7 @@ public class GUIManager {
      */
     public void openDriveBayGUI(Player player, Location driveBayLocation, String networkId) {
         try {
-            // UPDATED: Don't validate network - allow access to drive bays regardless of network status
+            // Don't validate network - allow access to drive bays regardless of network status
             // The drive bay GUI will show the network status and allow disk management
             plugin.getLogger().info("Opening drive bay GUI for player " + player.getName() +
                     " at " + driveBayLocation + " with network ID: " + networkId);
@@ -112,15 +158,16 @@ public class GUIManager {
             gui.open(player);
 
             playerCurrentGUI.put(player.getUniqueId(), "DRIVE_BAY");
-            playerGUILocation.put(player.getUniqueId(), driveBayLocation);
-            playerGUINetworkId.put(player.getUniqueId(), networkId);
+            if (networkId != null) {
+                playerGUINetworkId.put(player.getUniqueId(), networkId);
+            }
             playerGUIInstance.put(player.getUniqueId(), gui);
 
             plugin.getLogger().info("Successfully opened drive bay GUI for player " + player.getName());
         } catch (Exception e) {
             player.sendMessage(Component.text("Error opening Drive Bay GUI: " + e.getMessage(), NamedTextColor.RED));
             plugin.getLogger().severe("Error opening Drive Bay GUI: " + e.getMessage());
-            e.printStackTrace();
+            plugin.getLogger().severe("Stack trace: " + java.util.Arrays.toString(e.getStackTrace()));
         }
     }
 
@@ -175,7 +222,7 @@ public class GUIManager {
 
     public void openTerminalGUI(Player player, Location terminalLocation, String networkId) {
         try {
-            // QUICK FIX: Cancel any pending search input when opening a terminal
+            // Cancel any pending search input when opening a terminal
             if (isAwaitingSearchInput(player)) {
                 cancelSearchInput(player);
                 plugin.getLogger().info("Cancelled pending search input for player " + player.getName() + " when opening terminal");
@@ -199,7 +246,6 @@ public class GUIManager {
             gui.open(player);
 
             playerCurrentGUI.put(player.getUniqueId(), "TERMINAL");
-            playerGUILocation.put(player.getUniqueId(), terminalLocation);
             playerGUINetworkId.put(player.getUniqueId(), networkId);
             playerGUIInstance.put(player.getUniqueId(), gui);
 
@@ -314,7 +360,6 @@ public class GUIManager {
     public void closeGUI(Player player) {
         String guiType = playerCurrentGUI.remove(player.getUniqueId());
         String networkId = playerGUINetworkId.remove(player.getUniqueId());
-        playerGUILocation.remove(player.getUniqueId());
         playerGUIInstance.remove(player.getUniqueId());
 
         // Also cancel any pending search input
@@ -349,32 +394,6 @@ public class GUIManager {
      */
     public String getOpenGUIType(Player player) {
         return playerCurrentGUI.get(player.getUniqueId());
-    }
-
-    /**
-     * Get the location of the block the player's GUI is associated with
-     */
-    public Location getGUILocation(Player player) {
-        return playerGUILocation.get(player.getUniqueId());
-    }
-
-    /**
-     * Get the network ID of the player's currently open GUI
-     */
-    public String getGUINetworkId(Player player) {
-        return playerGUINetworkId.get(player.getUniqueId());
-    }
-
-    /**
-     * Refresh a player's GUI if it's a terminal (used when items are added/removed)
-     */
-    public void refreshPlayerTerminal(Player player) {
-        if ("TERMINAL".equals(getOpenGUIType(player))) {
-            Object guiInstance = playerGUIInstance.get(player.getUniqueId());
-            if (guiInstance instanceof TerminalGUI terminalGUI) {
-                terminalGUI.refresh();
-            }
-        }
     }
 
     /**
@@ -447,51 +466,7 @@ public class GUIManager {
         }
 
         plugin.getLogger().info("Refreshed " + refreshCount + " terminals for network " + networkId +
-                (playersToClose.size() > 0 ? " (closed " + playersToClose.size() + " invalid terminals)" : ""));
-    }
-
-    /**
-     * Refresh all drive bay GUIs for a specific network (UPDATED for standalone support)
-     */
-    public void refreshNetworkDriveBays(String networkId) {
-        plugin.getLogger().info("Starting comprehensive refresh of drive bays for network: " + networkId);
-        int refreshCount = 0;
-        List<Player> playersToNotify = new ArrayList<>();
-
-        // Check if network is still valid
-        boolean networkValid = isNetworkValid(networkId);
-
-        for (Map.Entry<UUID, String> entry : playerCurrentGUI.entrySet()) {
-            if ("DRIVE_BAY".equals(entry.getValue())) {
-                Player player = plugin.getServer().getPlayer(entry.getKey());
-                if (player != null && player.isOnline()) {
-                    String driveBayNetworkId = playerGUINetworkId.get(entry.getKey());
-
-                    if (networkId.equals(driveBayNetworkId)) {
-                        // UPDATED: Always refresh drive bay, don't close for invalid networks
-                        Object guiInstance = playerGUIInstance.get(entry.getKey());
-                        if (guiInstance instanceof DriveBayGUI driveBayGUI) {
-                            driveBayGUI.refreshDiskDisplay();
-                            refreshCount++;
-                            plugin.getLogger().info("Refreshed drive bay for player " + player.getName() + " in network " + networkId);
-
-                            // If network became invalid, notify the player but keep the GUI open
-                            if (!networkValid) {
-                                playersToNotify.add(player);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Notify players about network status change but don't close GUIs
-        for (Player player : playersToNotify) {
-            player.sendMessage(Component.text("Network connection lost - you can still manage disks in this drive bay.", NamedTextColor.YELLOW));
-        }
-
-        plugin.getLogger().info("Refreshed " + refreshCount + " drive bays for network " + networkId +
-                (playersToNotify.size() > 0 ? " (notified " + playersToNotify.size() + " players about network status)" : ""));
+                (!playersToClose.isEmpty() ? " (closed " + playersToClose.size() + " invalid terminals)" : ""));
     }
 
     /**
@@ -534,7 +509,7 @@ public class GUIManager {
             refreshPlayerDriveBay(player);
         }
 
-        // FIXED: Handle exporter disconnections when network is invalidated
+        // Handle exporter disconnections when network is invalidated
         plugin.getExporterManager().handleNetworkInvalidated(networkId);
 
         // Clear the modified flag for this network
@@ -600,8 +575,7 @@ public class GUIManager {
             UUID playerId = entry.getKey();
             Object guiInstance = entry.getValue();
 
-            if (guiInstance instanceof ExporterGUI) {
-                ExporterGUI exporterGUI = (ExporterGUI) guiInstance;
+            if (guiInstance instanceof ExporterGUI exporterGUI) {
                 // Check if this GUI is for the specific exporter
                 if (exporterId.equals(exporterGUI.getExporterId())) {
                     Player player = plugin.getServer().getPlayer(playerId);
@@ -618,12 +592,6 @@ public class GUIManager {
         }
     }
 
-//    // Helper method to get exporter ID from GUI (you may need to add a getter to ExporterGUI)
-//    private String getExporterIdFromGUI(ExporterGUI gui) {
-//        // This assumes you have a getter method in ExporterGUI class
-//        // You may need to add: public String getExporterId() { return exporterId; }
-//        return gui.getExporterId();
-//    }
     /**
      * Force close all GUIs (for plugin shutdown)
      */
@@ -642,7 +610,6 @@ public class GUIManager {
         }
 
         playerCurrentGUI.clear();
-        playerGUILocation.clear();
         playerGUINetworkId.clear();
         playerGUIInstance.clear();
         modifiedNetworks.clear();

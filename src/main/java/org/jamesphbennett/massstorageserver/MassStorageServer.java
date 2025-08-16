@@ -25,14 +25,12 @@ public final class MassStorageServer extends JavaPlugin {
     private CableManager cableManager;
     private ItemManager itemManager;
     private RecipeManager recipeManager;
-    private CooldownManager cooldownManager;
     private StorageManager storageManager;
     private GUIManager guiManager;
     private ExplosionManager explosionManager;
     private ExporterManager exporterManager;
 
     public MassStorageServer() {
-        // Constructor
     }
 
     @Override
@@ -40,15 +38,9 @@ public final class MassStorageServer extends JavaPlugin {
 
         getLogger().info("Starting Mass Storage Server Plugin...");
 
-        // Initialize managers in order
         try {
-            // Load configuration first
             configManager = new ConfigManager(this);
-
-            // Initialize database
             databaseManager = new DatabaseManager(this);
-
-            // Initialize other managers
             networkManager = new NetworkManager(this);
             disksManager = new DisksManager(this);
             cableManager = new CableManager(this);
@@ -57,7 +49,6 @@ public final class MassStorageServer extends JavaPlugin {
             // Initialize recipe manager AFTER config and item managers are ready
             recipeManager = new RecipeManager(this);
 
-            cooldownManager = new CooldownManager(configManager.getOperationCooldown());
             storageManager = new StorageManager(this);
             guiManager = new GUIManager(this);
             explosionManager = new ExplosionManager(this);
@@ -68,14 +59,12 @@ public final class MassStorageServer extends JavaPlugin {
                 if (guiManager != null) {
                     guiManager.validateOpenGUIs();
                 }
-            }, 600L, 600L); // 30 seconds in ticks (20 ticks = 1 second)
+            }, 600L, 600L);
 
-            // Register listeners
             getServer().getPluginManager().registerEvents(new BlockListener(this), this);
             getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
             getServer().getPluginManager().registerEvents(new PistonListener(this), this);
 
-            // Register commands
             Objects.requireNonNull(getCommand("mss")).setExecutor(new MSSCommand(this));
 
             // Register recipes AFTER everything else is initialized
@@ -133,9 +122,6 @@ public final class MassStorageServer extends JavaPlugin {
         return recipeManager;
     }
 
-    public CooldownManager getCooldownManager() {
-        return cooldownManager;
-    }
 
     public StorageManager getStorageManager() {
         return storageManager;

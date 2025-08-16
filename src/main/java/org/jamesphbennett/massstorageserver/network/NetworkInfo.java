@@ -14,11 +14,6 @@ public class NetworkInfo {
     private final Set<Location> networkCables;
 
     public NetworkInfo(String networkId, Location storageServer, Set<Location> driveBays,
-                       Set<Location> terminals, Set<Location> allBlocks) {
-        this(networkId, storageServer, driveBays, terminals, allBlocks, Set.of());
-    }
-
-    public NetworkInfo(String networkId, Location storageServer, Set<Location> driveBays,
                        Set<Location> terminals, Set<Location> allBlocks, Set<Location> networkCables) {
         this.networkId = networkId;
         this.storageServer = storageServer;
@@ -30,10 +25,6 @@ public class NetworkInfo {
 
     public String getNetworkId() {
         return networkId;
-    }
-
-    public Location getStorageServer() {
-        return storageServer;
     }
 
     public Set<Location> getDriveBays() {

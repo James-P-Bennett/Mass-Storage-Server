@@ -1,5 +1,6 @@
 package org.jamesphbennett.massstorageserver.managers;
 
+import net.kyori.adventure.text.Component;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Particle;
@@ -9,6 +10,7 @@ import org.bukkit.block.Container;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.jamesphbennett.massstorageserver.MassStorageServer;
 import org.jamesphbennett.massstorageserver.storage.StoredItem;
 
@@ -217,14 +219,26 @@ public class ExporterManager {
                 return; // Inventory is completely full
             }
 
-            // Get the next item to export based on round-robin
-            String itemHashToExport = getNextItemToExport(exporter);
-            if (itemHashToExport == null) {
-                return; // No items to export
-            }
+            // Check if this is a brewing stand and handle specially
+            Material containerType = targetContainer.getBlock().getType();
+            boolean isBrewingStand = containerType == Material.BREWING_STAND;
+            
+            if (isBrewingStand) {
+                // Use brewing stand specific logic that handles slot selection internally
+                exportBrewingStandWithSlotSelection(exporter, targetContainer);
+            } else {
+                // Use regular round-robin for other containers
+                String itemHashToExport = getNextItemToExport(exporter);
+                plugin.getLogger().info("DEBUG: getNextItemToExport returned: " + itemHashToExport + " for exporter " + exporter.exporterId);
+                
+                if (itemHashToExport == null) {
+                    plugin.getLogger().info("DEBUG: No items to export for exporter " + exporter.exporterId + ", filter items: " + exporter.filterItems.size());
+                    return; // No items to export
+                }
 
-            // Try to export the item with slot-specific routing
-            exportItemWithSlotRouting(exporter, itemHashToExport, targetContainer);
+                // Try to export the item with slot-specific routing
+                exportItemWithSlotRouting(exporter, itemHashToExport, targetContainer);
+            }
 
         } catch (Exception e) {
             plugin.getLogger().severe("Error processing export for " + exporter.exporterId + ": " + e.getMessage());
@@ -292,6 +306,108 @@ public class ExporterManager {
     }
 
     /**
+     * Get the next item to export from a brewing stand by checking actual filter items and slot availability
+     */
+    private String getNextBrewingStandItem(ExporterData exporter) {
+        try {
+            plugin.getLogger().info("DEBUG: getNextBrewingStandItem called for exporter " + exporter.exporterId);
+            
+            // Parse brewing stand filters to get actual items (not markers)
+            BrewingStandFilters brewingFilters = parseBrewingStandFilters(exporter.exporterId);
+            plugin.getLogger().info("DEBUG: Parsed brewing filters - fuel enabled: " + brewingFilters.fuelEnabled + 
+                                  ", ingredient: " + (brewingFilters.ingredientFilter != null ? brewingFilters.ingredientFilter.getType() : "null") +
+                                  ", bottles: " + java.util.Arrays.toString(brewingFilters.bottleFilters));
+            
+            // Get the brewing stand container to check slot availability
+            Container brewingStandContainer = getTargetContainer(exporter.location.getBlock());
+            if (brewingStandContainer == null) {
+                plugin.getLogger().info("DEBUG: No brewing stand container found");
+                return null;
+            }
+            
+            Inventory brewingInventory = brewingStandContainer.getInventory();
+            
+            // Create a list of all possible exports with their priority
+            List<PotentialExport> potentialExports = new ArrayList<>();
+            
+            // Check blaze powder (fuel) - only if fuel slot has space
+            if (brewingFilters.fuelEnabled) {
+                ItemStack blazePowder = new ItemStack(Material.BLAZE_POWDER);
+                String blazeHash = plugin.getItemManager().generateItemHash(blazePowder);
+                if (isItemAvailableInNetwork(exporter.networkId, blazeHash) && 
+                    canPlaceItemInBrewingSlot(brewingInventory, blazePowder, 4)) {
+                    potentialExports.add(new PotentialExport(blazeHash, 4, "fuel"));
+                }
+            }
+            
+            // Check ingredient filter - only if ingredient slot has space
+            if (brewingFilters.ingredientFilter != null) {
+                String ingredientHash = plugin.getItemManager().generateItemHash(brewingFilters.ingredientFilter);
+                if (isItemAvailableInNetwork(exporter.networkId, ingredientHash) && 
+                    canPlaceItemInBrewingSlot(brewingInventory, brewingFilters.ingredientFilter, 3)) {
+                    potentialExports.add(new PotentialExport(ingredientHash, 3, "ingredient"));
+                }
+            }
+            
+            // Check each bottle filter independently - only if their specific slots have space
+            for (int i = 0; i < 3; i++) {
+                if (brewingFilters.bottleFilters[i] != null) {
+                    String bottleHash = plugin.getItemManager().generateItemHash(brewingFilters.bottleFilters[i]);
+                    if (isItemAvailableInNetwork(exporter.networkId, bottleHash) && 
+                        canPlaceItemInBrewingSlot(brewingInventory, brewingFilters.bottleFilters[i], i)) {
+                        potentialExports.add(new PotentialExport(bottleHash, i, "bottle " + (i + 1)));
+                    }
+                }
+            }
+            
+            // If we have potential exports, use round-robin to cycle through them
+            if (!potentialExports.isEmpty()) {
+                // Get current cycle index for this exporter (reuse existing mechanism)
+                int currentIndex = exporterCycleIndex.get(exporter.exporterId);
+                PotentialExport selectedExport = potentialExports.get(currentIndex % potentialExports.size());
+                
+                // Update cycle index for next time
+                exporterCycleIndex.put(exporter.exporterId, (currentIndex + 1) % potentialExports.size());
+                
+                plugin.getLogger().info("DEBUG: Selected " + selectedExport.slotName + " for export: " + selectedExport.itemHash);
+                return selectedExport.itemHash;
+            }
+            
+            plugin.getLogger().info("DEBUG: No brewing stand items available for export (either not in network or slots full)");
+            return null;
+            
+        } catch (Exception e) {
+            plugin.getLogger().severe("Error getting next brewing stand item: " + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Check if an item can be placed in a specific brewing stand slot
+     */
+    private boolean canPlaceItemInBrewingSlot(Inventory brewingInventory, ItemStack itemToPlace, int slot) {
+        if (slot < 0 || slot >= brewingInventory.getSize()) {
+            return false;
+        }
+        
+        ItemStack existingItem = brewingInventory.getItem(slot);
+        
+        // Slot is empty - can place
+        if (existingItem == null || existingItem.getType() == Material.AIR) {
+            return true;
+        }
+        
+        // Slot has same item - check if we can stack
+        if (existingItem.isSimilar(itemToPlace)) {
+            int maxStackSize = getBrewingStandSlotMaxAmount(slot, itemToPlace.getType());
+            return existingItem.getAmount() < maxStackSize;
+        }
+        
+        // Slot has different item - can't place
+        return false;
+    }
+
+    /**
      * Get the next item to export using round-robin
      */
     private String getNextItemToExport(ExporterData exporter) {
@@ -341,17 +457,22 @@ public class ExporterManager {
      */
     private void exportItemWithSlotRouting(ExporterData exporter, String itemHash, Container targetContainer) {
         try {
-            // Check if this is a furnace-type container
+            // Check container type for specialized routing
             Material containerType = targetContainer.getBlock().getType();
             boolean isFurnace = containerType == Material.FURNACE || 
                                containerType == Material.BLAST_FURNACE || 
                                containerType == Material.SMOKER;
+            boolean isBrewingStand = containerType == Material.BREWING_STAND;
 
             if (isFurnace) {
                 // Handle furnace slot routing
                 exportItemToFurnace(exporter, itemHash, targetContainer);
+            } else if (isBrewingStand) {
+                // Handle brewing stand slot routing
+                plugin.getLogger().info("DEBUG: Detected brewing stand, calling exportItemToBrewingStand for exporter " + exporter.exporterId);
+                exportItemToBrewingStand(exporter, itemHash, targetContainer);
             } else {
-                // Use generic export for non-furnaces
+                // Use generic export for other containers
                 exportItem(exporter, itemHash, targetContainer.getInventory());
             }
 
@@ -397,6 +518,346 @@ public class ExporterManager {
 
         } catch (Exception e) {
             plugin.getLogger().severe("Error exporting to furnace: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Export to brewing stand with integrated slot selection and export
+     */
+    private void exportBrewingStandWithSlotSelection(ExporterData exporter, Container brewingStandContainer) {
+        try {
+            plugin.getLogger().info("DEBUG: Starting brewing stand export with slot selection for exporter " + exporter.exporterId);
+            
+            // Parse brewing stand filters from exporter filter items
+            BrewingStandFilters brewingFilters = parseBrewingStandFilters(exporter.exporterId);
+            plugin.getLogger().info("DEBUG: Parsed brewing filters - fuel enabled: " + brewingFilters.fuelEnabled + 
+                                  ", ingredient: " + (brewingFilters.ingredientFilter != null ? brewingFilters.ingredientFilter.getType() : "null") +
+                                  ", bottles: " + java.util.Arrays.toString(brewingFilters.bottleFilters));
+            
+            Inventory brewingInventory = brewingStandContainer.getInventory();
+            
+            // Create a list of all possible exports with their priority
+            List<PotentialExport> potentialExports = new ArrayList<>();
+            
+            // Check blaze powder (fuel) - only if fuel slot has space
+            if (brewingFilters.fuelEnabled) {
+                ItemStack blazePowder = new ItemStack(Material.BLAZE_POWDER);
+                String blazeHash = plugin.getItemManager().generateItemHash(blazePowder);
+                if (isItemAvailableInNetwork(exporter.networkId, blazeHash) && 
+                    canPlaceItemInBrewingSlot(brewingInventory, blazePowder, 4)) {
+                    potentialExports.add(new PotentialExport(blazeHash, 4, "fuel"));
+                }
+            }
+            
+            // Check ingredient filter - only if ingredient slot has space
+            if (brewingFilters.ingredientFilter != null) {
+                String ingredientHash = plugin.getItemManager().generateItemHash(brewingFilters.ingredientFilter);
+                if (isItemAvailableInNetwork(exporter.networkId, ingredientHash) && 
+                    canPlaceItemInBrewingSlot(brewingInventory, brewingFilters.ingredientFilter, 3)) {
+                    potentialExports.add(new PotentialExport(ingredientHash, 3, "ingredient"));
+                }
+            }
+            
+            // Check each bottle filter independently - only if their specific slots have space
+            for (int i = 0; i < 3; i++) {
+                if (brewingFilters.bottleFilters[i] != null) {
+                    String bottleHash = plugin.getItemManager().generateItemHash(brewingFilters.bottleFilters[i]);
+                    if (isItemAvailableInNetwork(exporter.networkId, bottleHash) && 
+                        canPlaceItemInBrewingSlot(brewingInventory, brewingFilters.bottleFilters[i], i)) {
+                        potentialExports.add(new PotentialExport(bottleHash, i, "bottle " + (i + 1)));
+                    }
+                }
+            }
+            
+            // If we have potential exports, use round-robin to cycle through them
+            if (!potentialExports.isEmpty()) {
+                // Get current cycle index for this exporter (reuse existing mechanism)
+                int currentIndex = exporterCycleIndex.get(exporter.exporterId);
+                PotentialExport selectedExport = potentialExports.get(currentIndex % potentialExports.size());
+                
+                // Update cycle index for next time
+                exporterCycleIndex.put(exporter.exporterId, (currentIndex + 1) % potentialExports.size());
+                
+                plugin.getLogger().info("DEBUG: Selected " + selectedExport.slotName + " (slot " + selectedExport.targetSlot + ") for export");
+                
+                // Now perform the actual export to the specific slot
+                exportItemToSpecificBrewingSlot(exporter, selectedExport.itemHash, selectedExport.targetSlot, selectedExport.slotName, brewingStandContainer);
+            } else {
+                plugin.getLogger().info("DEBUG: No brewing stand items available for export (either not in network or slots full)");
+            }
+            
+        } catch (Exception e) {
+            plugin.getLogger().severe("Error in brewing stand slot selection: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Export item to a specific brewing stand slot (knows the exact slot to target)
+     */
+    private void exportItemToSpecificBrewingSlot(ExporterData exporter, String itemHash, int targetSlot, String slotName, Container brewingStandContainer) {
+        try {
+            plugin.getLogger().info("DEBUG: Exporting to specific brewing stand slot " + targetSlot + " (" + slotName + ")");
+            
+            // Retrieve item from network first
+            ItemStack retrievedItem = plugin.getStorageManager().retrieveItems(exporter.networkId, itemHash, 64);
+            
+            if (retrievedItem == null || retrievedItem.getAmount() == 0) {
+                plugin.getLogger().info("DEBUG: No items retrieved for hash " + itemHash);
+                return;
+            }
+
+            plugin.getLogger().info("DEBUG: Retrieved item: " + retrievedItem.getType() + " (amount: " + retrievedItem.getAmount() + ") for slot " + targetSlot);
+
+            // Limit item amount to slot-appropriate stack size
+            int maxAmount = getBrewingStandSlotMaxAmount(targetSlot, retrievedItem.getType());
+            if (retrievedItem.getAmount() > maxAmount) {
+                // Split the stack - keep what we can use, return the rest
+                ItemStack excess = retrievedItem.clone();
+                excess.setAmount(retrievedItem.getAmount() - maxAmount);
+                retrievedItem.setAmount(maxAmount);
+                
+                List<ItemStack> toReturn = new ArrayList<>();
+                toReturn.add(excess);
+                plugin.getStorageManager().storeItems(exporter.networkId, toReturn);
+            }
+
+            // Try to place in the target slot
+            Inventory brewingInventory = brewingStandContainer.getInventory();
+            ItemStack existingItem = brewingInventory.getItem(targetSlot);
+            
+            int leftoverAmount = 0;
+            if (existingItem == null || existingItem.getType() == Material.AIR) {
+                // Slot is empty, place the item
+                brewingInventory.setItem(targetSlot, retrievedItem);
+                plugin.getLogger().info("DEBUG: Placed " + retrievedItem.getAmount() + " " + retrievedItem.getType() + " in empty slot " + targetSlot);
+            } else if (existingItem.isSimilar(retrievedItem)) {
+                // Slot has same item, try to stack
+                int spaceAvailable = existingItem.getMaxStackSize() - existingItem.getAmount();
+                int amountToAdd = Math.min(spaceAvailable, retrievedItem.getAmount());
+                
+                if (amountToAdd > 0) {
+                    existingItem.setAmount(existingItem.getAmount() + amountToAdd);
+                    leftoverAmount = retrievedItem.getAmount() - amountToAdd;
+                    plugin.getLogger().info("DEBUG: Added " + amountToAdd + " " + retrievedItem.getType() + " to existing stack in slot " + targetSlot + " (leftover: " + leftoverAmount + ")");
+                } else {
+                    leftoverAmount = retrievedItem.getAmount(); // No space
+                    plugin.getLogger().info("DEBUG: No space in slot " + targetSlot + ", returning " + leftoverAmount + " items to network");
+                }
+            } else {
+                // Slot has different item, can't place
+                leftoverAmount = retrievedItem.getAmount();
+                plugin.getLogger().info("DEBUG: Slot " + targetSlot + " has different item, returning " + leftoverAmount + " items to network");
+            }
+
+            // Handle completion and leftovers
+            handleExportCompletion(exporter, retrievedItem, leftoverAmount, "brewing stand " + slotName + " slot");
+
+        } catch (Exception e) {
+            plugin.getLogger().severe("Error exporting to specific brewing stand slot: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Export item to specific brewing stand slots based on brewing stand filter settings
+     */
+    private void exportItemToBrewingStand(ExporterData exporter, String itemHash, Container brewingStandContainer) {
+        try {
+            plugin.getLogger().info("DEBUG: Starting brewing stand export for exporter " + exporter.exporterId + " with item hash " + itemHash);
+            
+            // Parse brewing stand filters from exporter filter items
+            BrewingStandFilters brewingFilters = parseBrewingStandFilters(exporter.exporterId);
+            
+            plugin.getLogger().info("DEBUG: Parsed filters - Fuel enabled: " + brewingFilters.fuelEnabled + 
+                                  ", Ingredient filter: " + (brewingFilters.ingredientFilter != null ? brewingFilters.ingredientFilter.getType() : "null") +
+                                  ", Bottle filters: " + java.util.Arrays.toString(brewingFilters.bottleFilters));
+            
+            // Retrieve item from network first (similar to furnace approach)
+            ItemStack retrievedItem = plugin.getStorageManager().retrieveItems(exporter.networkId, itemHash, 64);
+            
+            if (retrievedItem == null || retrievedItem.getAmount() == 0) {
+                plugin.getLogger().info("DEBUG: No items retrieved for hash " + itemHash);
+                return; // Nothing retrieved
+            }
+
+            Material itemType = retrievedItem.getType();
+            int targetSlot = -1;
+            String slotName = "unknown";
+            
+            plugin.getLogger().info("DEBUG: Retrieved item: " + itemType + " (amount: " + retrievedItem.getAmount() + ")");
+
+            // Determine target slot based on item type and filters
+            if (itemType == Material.BLAZE_POWDER && brewingFilters.fuelEnabled) {
+                targetSlot = 4; // Fuel slot
+                slotName = "fuel";
+                plugin.getLogger().info("DEBUG: Targeting fuel slot (4) for blaze powder");
+            } else if (brewingFilters.ingredientFilter != null && 
+                      itemType == brewingFilters.ingredientFilter.getType()) {
+                targetSlot = 3; // Ingredient slot
+                slotName = "ingredient";
+                plugin.getLogger().info("DEBUG: Targeting ingredient slot (3) for " + itemType);
+            } else {
+                // Check bottle filters (slots 0, 1, 2)
+                for (int i = 0; i < 3; i++) {
+                    if (brewingFilters.bottleFilters[i] != null && 
+                        itemType == brewingFilters.bottleFilters[i].getType()) {
+                        targetSlot = i;
+                        slotName = "bottle " + (i + 1);
+                        plugin.getLogger().info("DEBUG: Targeting bottle slot " + i + " for " + itemType);
+                        break;
+                    }
+                }
+            }
+
+            if (targetSlot == -1) {
+                // No valid target slot - return items to network
+                List<ItemStack> toReturn = new ArrayList<>();
+                toReturn.add(retrievedItem);
+                plugin.getStorageManager().storeItems(exporter.networkId, toReturn);
+                return;
+            }
+
+            // Limit item amount to slot-appropriate stack size
+            int maxAmount = getBrewingStandSlotMaxAmount(targetSlot, itemType);
+            if (retrievedItem.getAmount() > maxAmount) {
+                // Split the stack - keep what we can use, return the rest
+                ItemStack excess = retrievedItem.clone();
+                excess.setAmount(retrievedItem.getAmount() - maxAmount);
+                retrievedItem.setAmount(maxAmount);
+                
+                List<ItemStack> toReturn = new ArrayList<>();
+                toReturn.add(excess);
+                plugin.getStorageManager().storeItems(exporter.networkId, toReturn);
+            }
+            
+            if (retrievedItem == null || retrievedItem.getAmount() == 0) {
+                return; // No items available
+            }
+
+            // Try to place in the target slot
+            Inventory brewingInventory = brewingStandContainer.getInventory();
+            ItemStack existingItem = brewingInventory.getItem(targetSlot);
+            
+            int leftoverAmount = 0;
+            if (existingItem == null || existingItem.getType() == Material.AIR) {
+                // Slot is empty, place the item
+                brewingInventory.setItem(targetSlot, retrievedItem);
+            } else if (existingItem.isSimilar(retrievedItem)) {
+                // Slot has same item, try to stack
+                int spaceAvailable = existingItem.getMaxStackSize() - existingItem.getAmount();
+                int amountToAdd = Math.min(spaceAvailable, retrievedItem.getAmount());
+                
+                if (amountToAdd > 0) {
+                    existingItem.setAmount(existingItem.getAmount() + amountToAdd);
+                    leftoverAmount = retrievedItem.getAmount() - amountToAdd;
+                } else {
+                    leftoverAmount = retrievedItem.getAmount(); // No space
+                }
+            } else {
+                // Slot has different item, can't place
+                leftoverAmount = retrievedItem.getAmount();
+            }
+
+            // Handle completion and leftovers
+            handleExportCompletion(exporter, retrievedItem, leftoverAmount, 
+                                 "brewing stand " + slotName + " slot");
+
+        } catch (Exception e) {
+            plugin.getLogger().severe("Error exporting to brewing stand: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Get maximum stack size for a brewing stand slot
+     */
+    private int getBrewingStandSlotMaxAmount(int slot, Material itemType) {
+        if (slot == 4) {
+            // Fuel slot - blaze powder stacks to 64
+            return Math.min(64, itemType.getMaxStackSize());
+        } else if (slot == 3) {
+            // Ingredient slot - most ingredients stack to 64
+            return Math.min(64, itemType.getMaxStackSize());
+        } else {
+            // Bottle slots (0, 1, 2) - bottles typically stack to 16, potions to 1
+            return Math.min(itemType.getMaxStackSize(), itemType.getMaxStackSize());
+        }
+    }
+
+    /**
+     * Parse brewing stand specific filters from the exporter's filter items
+     */
+    private BrewingStandFilters parseBrewingStandFilters(String exporterId) {
+        BrewingStandFilters filters = new BrewingStandFilters();
+        
+        try {
+            List<ItemStack> filterItems = getExporterFilterItems(exporterId);
+            plugin.getLogger().info("DEBUG: Found " + filterItems.size() + " filter items for exporter " + exporterId);
+            
+            for (ItemStack item : filterItems) {
+                plugin.getLogger().info("DEBUG: Processing filter item: " + item.getType() + " with meta: " + (item.hasItemMeta() ? "yes" : "no"));
+                
+                if (item.hasItemMeta() && item.getItemMeta().hasDisplayName()) {
+                    Component displayName = item.getItemMeta().displayName();
+                    if (displayName == null) continue;
+                    
+                    // Use PlainTextComponentSerializer for reliable text extraction
+                    String nameText = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(displayName);
+                    plugin.getLogger().info("DEBUG: Filter item display name: '" + nameText + "'");
+                    
+                    if ("BREWING_FUEL_ENABLED".equals(nameText)) {
+                        filters.fuelEnabled = true;
+                        plugin.getLogger().info("DEBUG: Found fuel enabled marker");
+                    } else if ("BREWING_INGREDIENT".equals(nameText)) {
+                        filters.ingredientFilter = item.clone();
+                        // Remove the marker name to get the actual item
+                        ItemMeta meta = filters.ingredientFilter.getItemMeta();
+                        meta.displayName(null);
+                        filters.ingredientFilter.setItemMeta(meta);
+                        plugin.getLogger().info("DEBUG: Found ingredient filter: " + filters.ingredientFilter.getType());
+                    } else if (nameText.startsWith("BREWING_BOTTLE_")) {
+                        try {
+                            int bottleIndex = Integer.parseInt(nameText.substring("BREWING_BOTTLE_".length()));
+                            if (bottleIndex >= 0 && bottleIndex < 3) {
+                                filters.bottleFilters[bottleIndex] = item.clone();
+                                // Remove the marker name to get the actual item
+                                ItemMeta meta = filters.bottleFilters[bottleIndex].getItemMeta();
+                                meta.displayName(null);
+                                filters.bottleFilters[bottleIndex].setItemMeta(meta);
+                                plugin.getLogger().info("DEBUG: Found bottle filter " + bottleIndex + ": " + filters.bottleFilters[bottleIndex].getType());
+                            }
+                        } catch (NumberFormatException e) {
+                            // Ignore invalid bottle indices
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            plugin.getLogger().warning("Error parsing brewing stand filters for " + exporterId + ": " + e.getMessage());
+        }
+        
+        return filters;
+    }
+
+    /**
+     * Data class for brewing stand filter settings
+     */
+    private static class BrewingStandFilters {
+        boolean fuelEnabled = false;
+        ItemStack ingredientFilter = null;
+        ItemStack[] bottleFilters = new ItemStack[3];
+    }
+
+    /**
+     * Helper class for potential brewing stand exports
+     */
+    private static class PotentialExport {
+        final String itemHash;
+        final int targetSlot;
+        final String slotName;
+
+        PotentialExport(String itemHash, int targetSlot, String slotName) {
+            this.itemHash = itemHash;
+            this.targetSlot = targetSlot;
+            this.slotName = slotName;
         }
     }
 

@@ -9,6 +9,9 @@ network:
   # Maximum number of network cables allowed in a single network
   max_cables: 800
 
+  # Maximum number of exporters allowed in a single network (bus limit)
+  max_exporters: 200
+
   # Cooldown between operations in milliseconds (prevents spam)
   operation_cooldown: 100
 

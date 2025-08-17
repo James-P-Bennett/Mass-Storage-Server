@@ -27,7 +27,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class BlockListener implements Listener {
 
@@ -448,15 +450,8 @@ public class BlockListener implements Listener {
             }
 
             try {
-                String networkId = networkManager.getNetworkId(block.getLocation());
-                
-                if (networkId == null || !networkManager.isNetworkValid(networkId)) {
-                    player.sendMessage(Component.text("This storage server is not connected to a valid network.", NamedTextColor.RED));
-                    return;
-                }
-
-                // Display network information
-                displayStorageServerInfo(player, networkId);
+                // Always display storage server information, regardless of network validity
+                displayStorageServerInfo(player, block.getLocation());
 
             } catch (Exception e) {
                 player.sendMessage(Component.text("Error accessing storage server: " + e.getMessage(), NamedTextColor.RED));
@@ -679,38 +674,132 @@ public class BlockListener implements Listener {
     }
 
     /**
-     * Display storage server network information to the player
+     * Display storage server information to the player
+     * Enhanced to detect connected blocks even for invalid networks
      */
-    private void displayStorageServerInfo(Player player, String networkId) {
+    private void displayStorageServerInfo(Player player, Location serverLocation) {
         try {
-            // Get network statistics
-            int driveBayCount = getNetworkDriveBayCount(networkId);
-            int terminalCount = getNetworkTerminalCount(networkId);
-            int cableCount = getNetworkCableCount(networkId);
-            int totalStorageCapacity = getTotalNetworkStorageCapacity(networkId);
-            int usedStorageCapacity = getUsedNetworkStorageCapacity(networkId);
-
-            // Send network information to player
-            player.sendMessage(Component.text("═══ Storage Server Information ═══", NamedTextColor.AQUA));
-            player.sendMessage(Component.text("Network ID: " + networkId.substring(0, Math.min(16, networkId.length())), NamedTextColor.WHITE));
-            player.sendMessage(Component.text("Drive Bays: " + driveBayCount, NamedTextColor.GREEN));
-            player.sendMessage(Component.text("Terminals: " + terminalCount, NamedTextColor.GREEN));
-            player.sendMessage(Component.text("Cables: " + cableCount, NamedTextColor.YELLOW));
+            // Get network ID if it exists
+            String networkId = networkManager.getNetworkId(serverLocation);
+            boolean isValidNetwork = networkId != null && networkManager.isNetworkValid(networkId);
             
-            if (totalStorageCapacity > 0) {
-                int usagePercent = (int) ((double) usedStorageCapacity / totalStorageCapacity * 100);
-                player.sendMessage(Component.text("Storage: " + usedStorageCapacity + "/" + totalStorageCapacity + " cells (" + usagePercent + "%)", NamedTextColor.BLUE));
-            } else {
-                player.sendMessage(Component.text("Storage: No disks installed", NamedTextColor.GRAY));
+            // Detect connected blocks manually (including invalid networks)
+            NetworkInfo detectedNetwork = networkManager.detectNetwork(serverLocation);
+            
+            int driveBayCount = 0;
+            int terminalCount = 0;
+            int cableCount = 0;
+            int exporterCount = 0;
+            int totalStorageCapacity = 0;
+            int usedStorageCapacity = 0;
+            
+            if (detectedNetwork != null) {
+                driveBayCount = detectedNetwork.getDriveBays().size();
+                terminalCount = detectedNetwork.getTerminals().size();
+                cableCount = detectedNetwork.getNetworkCables().size();
+                
+                // Count exporters in the detected network
+                exporterCount = getExporterCountInArea(detectedNetwork.getAllBlocks());
+                
+                // Get storage capacity from valid network only
+                if (isValidNetwork) {
+                    totalStorageCapacity = getTotalNetworkStorageCapacity(networkId);
+                    usedStorageCapacity = getUsedNetworkStorageCapacity(networkId);
+                }
             }
             
-            player.sendMessage(Component.text("Status: " + (networkManager.isNetworkValid(networkId) ? "Active" : "Inactive"), 
-                networkManager.isNetworkValid(networkId) ? NamedTextColor.GREEN : NamedTextColor.RED));
+            // Get configuration limits
+            int maxBlocks = plugin.getConfigManager().getMaxNetworkBlocks();
+            int maxCables = plugin.getConfigManager().getMaxNetworkCables();
+            int maxExporters = plugin.getConfigManager().getMaxExporters();
+            
+            // Calculate total connected blocks (excluding cables)
+            int totalBlocks = driveBayCount + terminalCount + exporterCount + 1; // +1 for the server itself
+            
+            // Display comprehensive information
+            player.sendMessage(Component.text("═══ Storage Server Information ═══", NamedTextColor.AQUA));
+            
+            if (networkId != null) {
+                player.sendMessage(Component.text("Network ID: " + networkId.substring(0, Math.min(16, networkId.length())), NamedTextColor.WHITE));
+            } else {
+                player.sendMessage(Component.text("Network ID: Not Assigned", NamedTextColor.GRAY));
+            }
+            
+            // Network Status
+            String status;
+            NamedTextColor statusColor;
+            if (isValidNetwork) {
+                status = "Online";
+                statusColor = NamedTextColor.GREEN;
+            } else if (detectedNetwork != null && detectedNetwork.isValid()) {
+                status = "Offline"; // Detected but not registered
+                statusColor = NamedTextColor.YELLOW;
+            } else {
+                status = "Offline"; // No valid network detected
+                statusColor = NamedTextColor.RED;
+            }
+            player.sendMessage(Component.text("Status: " + status, statusColor));
+            
+            player.sendMessage(Component.text("", NamedTextColor.WHITE)); // Empty line
+            
+            // Connected Components
+            player.sendMessage(Component.text("Connected Components:", NamedTextColor.YELLOW));
+            player.sendMessage(Component.text("  Drive Bays: " + driveBayCount, NamedTextColor.GREEN));
+            player.sendMessage(Component.text("  Terminals: " + terminalCount, NamedTextColor.GREEN));
+            player.sendMessage(Component.text("  Exporters: " + exporterCount, NamedTextColor.GREEN));
+            player.sendMessage(Component.text("  Cables: " + cableCount, NamedTextColor.YELLOW));
+            
+            player.sendMessage(Component.text("", NamedTextColor.WHITE)); // Empty line
+            
+            // Network Limits
+            player.sendMessage(Component.text("Network Limits:", NamedTextColor.YELLOW));
+            NamedTextColor blockLimitColor = totalBlocks > maxBlocks ? NamedTextColor.RED : NamedTextColor.GREEN;
+            NamedTextColor cableLimitColor = cableCount > maxCables ? NamedTextColor.RED : NamedTextColor.GREEN;
+            NamedTextColor exporterLimitColor = exporterCount > maxExporters ? NamedTextColor.RED : NamedTextColor.GREEN;
+            
+            player.sendMessage(Component.text("  Blocks: " + totalBlocks + "/" + maxBlocks, blockLimitColor));
+            player.sendMessage(Component.text("  Cables: " + cableCount + "/" + maxCables, cableLimitColor));
+            player.sendMessage(Component.text("  Bus Limit: " + exporterCount + "/" + maxExporters, exporterLimitColor));
+            
+            // Storage Information (only for valid networks)
+            if (isValidNetwork) {
+                player.sendMessage(Component.text("", NamedTextColor.WHITE)); // Empty line
+                if (totalStorageCapacity > 0) {
+                    int usagePercent = (int) ((double) usedStorageCapacity / totalStorageCapacity * 100);
+                    player.sendMessage(Component.text("Storage: " + usedStorageCapacity + "/" + totalStorageCapacity + " cells (" + usagePercent + "%)", NamedTextColor.BLUE));
+                } else {
+                    player.sendMessage(Component.text("Storage: No disks installed", NamedTextColor.GRAY));
+                }
+            }
 
         } catch (Exception e) {
-            player.sendMessage(Component.text("Error retrieving network information: " + e.getMessage(), NamedTextColor.RED));
+            player.sendMessage(Component.text("Error retrieving storage server information: " + e.getMessage(), NamedTextColor.RED));
             plugin.getLogger().severe("Error displaying storage server info: " + e.getMessage());
         }
+    }
+
+    /**
+     * Count exporters in the detected network area
+     */
+    private int getExporterCountInArea(Set<Location> networkBlocks) {
+        int exporterCount = 0;
+        
+        // Check all adjacent locations to network blocks for exporters
+        Set<Location> checkedLocations = new HashSet<>();
+        
+        for (Location networkBlock : networkBlocks) {
+            for (Location adjacent : getAdjacentLocations(networkBlock)) {
+                if (checkedLocations.contains(adjacent)) continue;
+                checkedLocations.add(adjacent);
+                
+                Block block = adjacent.getBlock();
+                if (isCustomExporter(block)) {
+                    exporterCount++;
+                }
+            }
+        }
+        
+        return exporterCount;
     }
 
     private int getNetworkDriveBayCount(String networkId) throws SQLException {

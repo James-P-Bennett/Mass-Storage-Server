@@ -22,6 +22,7 @@ public class ConfigManager {
     // Cached configuration values
     private int maxNetworkBlocks;
     private int maxNetworkCables;
+    private int maxExporters;
     private int maxDriveBaySlots;
     private int exportTickInterval;
     private Set<Material> blacklistedItems;
@@ -64,6 +65,7 @@ public class ConfigManager {
         plugin.getLogger().info("All storage disks hardcoded to " + HARDCODED_CELLS_PER_DISK + " cells");
         plugin.getLogger().info("Items per cell are tier-specific: 1K=127, 4K=508, 16K=2032, 64K=8128");
         plugin.getLogger().info("Maximum network cables per network: " + maxNetworkCables);
+        plugin.getLogger().info("Maximum exporters per network (bus limit): " + maxExporters);
     }
 
     private void loadRecipesConfig() {
@@ -99,6 +101,7 @@ public class ConfigManager {
     private void loadNetworkSettings() {
         maxNetworkBlocks = config.getInt("network.max_blocks", 128);
         maxNetworkCables = config.getInt("network.max_cables", 800);
+        maxExporters = config.getInt("network.max_exporters", 200);
     }
 
     private void loadStorageSettings() {
@@ -151,6 +154,10 @@ public class ConfigManager {
 
     public int getMaxNetworkCables() {
         return maxNetworkCables;
+    }
+
+    public int getMaxExporters() {
+        return maxExporters;
     }
 
     /*

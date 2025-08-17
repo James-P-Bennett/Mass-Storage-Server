@@ -2,9 +2,11 @@ package org.jamesphbennett.massstorageserver.managers;
 
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.Particle;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.Container;
+import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.jamesphbennett.massstorageserver.MassStorageServer;
@@ -121,6 +123,8 @@ public class ExporterManager {
 
         // ADDED: Periodic validation of exporter network assignments (every 30 seconds)
         plugin.getServer().getScheduler().runTaskTimer(plugin, this::updateExporterNetworkAssignments, 600L, 600L); // 600 ticks = 30 seconds
+
+        // REMOVED: Particle effects disabled for performance
 
         plugin.getLogger().info("Export task started with " + tickInterval + " tick interval");
         plugin.getLogger().info("Exporter network validation task started (30 second interval)");
@@ -1022,5 +1026,6 @@ public class ExporterManager {
             plugin.getLogger().warning("Failed to update last export timestamp: " + e.getMessage());
         }
     }
+
 
 }

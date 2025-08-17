@@ -27,12 +27,18 @@ storage:
   #   16K Disk: 2,032 items per cell (130,048 total capacity)
   #   64K Disk: 8,128 items per cell (520,192 total capacity)
 
-# Item blacklist - Items that cannot be stored in the network
-# Storage disks are always blocked (hardcoded for safety)
-# Empty shulker boxes and bundles are allowed, ones with contents are blocked
-# Add any items you want to prevent from being stored using their Material names
-# Examples: "DIAMOND_SWORD", "NETHERITE_PICKAXE", "CHEST", "BARREL"
-# Full list of materials: https://hub.spigotmc.org/javadocs/bukkit/org/bukkit/Material.html
+# Network Item Blacklist - Items that cannot be stored in networks or added to exporter filters
+# 
+# AUTOMATICALLY BLOCKED (hardcoded for safety):
+#   - All storage disks (any tier) - detected by persistent data
+#   - Shulker boxes with contents - empty shulker boxes are allowed
+#   - Bundles with contents - empty bundles are allowed
+#   - All MSS blocks and components
+# 
+# CUSTOM BLACKLIST:
+# Add any additional items you want to prevent from being stored or filtered
+# Use their exact Material names from: https://hub.spigotmc.org/javadocs/bukkit/org/bukkit/Material.html
+# Examples: containers, tools, weapons, etc.
 blacklisted_items:
 # Example: Uncomment the lines below to block these items
 # - "CHEST"

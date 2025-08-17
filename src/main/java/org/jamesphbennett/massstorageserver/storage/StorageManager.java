@@ -54,7 +54,7 @@ public class StorageManager {
                     }
 
                     for (ItemStack item : items) {
-                        if (itemManager.isItemAllowed(item)) {
+                        if (itemManager.isItemBlacklisted(item)) {
                             plugin.getLogger().warning("Item not allowed: " + item.getType());
                             remainders.add(item);
                             continue;

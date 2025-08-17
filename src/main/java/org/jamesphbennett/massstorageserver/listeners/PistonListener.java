@@ -192,7 +192,9 @@ public class PistonListener implements Listener {
         Material type = block.getType();
         if (type != Material.CHISELED_TUFF &&
                 type != Material.CHISELED_TUFF_BRICKS &&
-                type != Material.CRAFTER) {
+                type != Material.CRAFTER &&
+                type != Material.PLAYER_HEAD &&
+                type != Material.PLAYER_WALL_HEAD) {
             return false;
         }
 

@@ -267,6 +267,12 @@ public class FurnaceExporterGUI implements Listener {
     }
 
     private void handleAddItemToFilter(Player player, ItemStack itemToAdd, int slot) {
+        // Check if item is blacklisted
+        if (plugin.getItemManager().isItemBlacklisted(itemToAdd)) {
+            player.sendMessage(Component.text("You cannot add occupied containers or disks to the network!", NamedTextColor.RED));
+            return;
+        }
+        
         boolean isFuelSlot = Arrays.stream(FUEL_FILTER_SLOTS).anyMatch(s -> s == slot);
         List<ItemStack> targetList = isFuelSlot ? currentFuelFilterItems : currentMaterialFilterItems;
         int maxSlots = isFuelSlot ? FUEL_FILTER_SLOTS.length : MATERIAL_FILTER_SLOTS.length;

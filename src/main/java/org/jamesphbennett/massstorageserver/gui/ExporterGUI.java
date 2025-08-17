@@ -224,6 +224,12 @@ public class ExporterGUI implements Listener {
         ItemStack cursorItem = event.getCursor();
 
         if (cursorItem.getType() != Material.AIR) {
+            // Check if item is blacklisted
+            if (plugin.getItemManager().isItemBlacklisted(cursorItem)) {
+                player.sendMessage(Component.text("You cannot add occupied containers or disks to the network!", NamedTextColor.RED));
+                return;
+            }
+            
             String newItemHash = plugin.getItemManager().generateItemHash(cursorItem);
             for (ItemStack existingItem : currentFilterItems) {
                 String existingHash = plugin.getItemManager().generateItemHash(existingItem);
@@ -271,6 +277,12 @@ public class ExporterGUI implements Listener {
     }
 
     private void handleAddItemToFilter(Player player, ItemStack itemToAdd) {
+        // Check if item is blacklisted
+        if (plugin.getItemManager().isItemBlacklisted(itemToAdd)) {
+            player.sendMessage(Component.text("You cannot add occupied containers or disks to the network!", NamedTextColor.RED));
+            return;
+        }
+        
         String newItemHash = plugin.getItemManager().generateItemHash(itemToAdd);
         for (ItemStack existingItem : currentFilterItems) {
             String existingHash = plugin.getItemManager().generateItemHash(existingItem);
@@ -362,6 +374,12 @@ public class ExporterGUI implements Listener {
                 }
 
                 if (dragIntoFilterArea) {
+                    // Check if item is blacklisted
+                    if (plugin.getItemManager().isItemBlacklisted(draggedItem)) {
+                        player.sendMessage(Component.text("You cannot add occupied containers or disks to the network!", NamedTextColor.RED));
+                        return;
+                    }
+                    
                     String newItemHash = plugin.getItemManager().generateItemHash(draggedItem);
                     for (ItemStack existingItem : currentFilterItems) {
                         String existingHash = plugin.getItemManager().generateItemHash(existingItem);

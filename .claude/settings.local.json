@@ -1,5 +1,9 @@
 {
   "permissions": {
+    "allow": [
+      "Bash(mvn compile:*)",
+      "Bash(mkdir:*)"
+    ],
     "defaultMode": "acceptEdits"
   }
 }

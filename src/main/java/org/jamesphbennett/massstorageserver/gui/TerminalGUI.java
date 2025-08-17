@@ -638,7 +638,7 @@ public class TerminalGUI implements Listener {
                 event.setCancelled(true);
 
                 // Check if item is allowed to be stored
-                if (plugin.getItemManager().isItemAllowed(itemToStore)) {
+                if (plugin.getItemManager().isItemBlacklisted(itemToStore)) {
                     player.sendMessage(miniMessage.deserialize("<red>This item cannot be stored in the network!"));
                     return;
                 }
@@ -731,7 +731,7 @@ public class TerminalGUI implements Listener {
             plugin.getLogger().info("Player has " + cursorItem.getAmount() + " " + cursorItem.getType() + " on cursor, attempting to store");
 
             // Check if item can be stored
-            if (plugin.getItemManager().isItemAllowed(cursorItem)) {
+            if (plugin.getItemManager().isItemBlacklisted(cursorItem)) {
                 player.sendMessage(miniMessage.deserialize("<red>This item cannot be stored in the network!"));
                 return;
             }
@@ -961,7 +961,7 @@ public class TerminalGUI implements Listener {
                             draggedItem.getAmount() + " " + draggedItem.getType() + " into terminal");
 
                     // Check if item can be stored
-                    if (plugin.getItemManager().isItemAllowed(draggedItem)) {
+                    if (plugin.getItemManager().isItemBlacklisted(draggedItem)) {
                         event.setCancelled(true);
                         player.sendMessage(miniMessage.deserialize("<red>This item cannot be stored in the network!"));
                         plugin.getLogger().info("Cancelled drag - item not allowed: " + draggedItem.getType());

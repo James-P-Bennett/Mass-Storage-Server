@@ -221,6 +221,16 @@ public class BlockListener implements Listener {
                 }
 
                 plugin.getExporterManager().updateExporterNetworkAssignments();
+                
+                // Refresh terminals for the network (important for reconnections)
+                if (network != null && network.isValid()) {
+                    String finalNetworkId = networkManager.getNetworkId(location);
+                    if (finalNetworkId != null) {
+                        plugin.getGUIManager().refreshNetworkTerminals(finalNetworkId);
+                        // Update drive bay network associations for reconnections
+                        updateDriveBayNetworkAssociations(finalNetworkId, network.getDriveBays());
+                    }
+                }
 
             } catch (Exception e) {
                 player.sendMessage(Component.text("Error setting up network: " + e.getMessage(), NamedTextColor.RED));
@@ -296,30 +306,51 @@ public class BlockListener implements Listener {
             if (networkId != null) {
                 plugin.getServer().getScheduler().runTask(plugin, () -> {
                     try {
-                        // Try to re-detect the network from remaining blocks
+                        // Try to re-detect the network from remaining blocks and handle fragmentation
                         boolean networkStillValid = false;
+                        Set<Location> processedLocations = new HashSet<>();
 
+                        // Check each adjacent location to see if it forms a valid network segment
                         for (Location adjacent : getAdjacentLocations(location)) {
-                            if (isCustomNetworkBlockOrCableOrExporter(adjacent.getBlock())) {
+                            if (isCustomNetworkBlockOrCableOrExporter(adjacent.getBlock()) && !processedLocations.contains(adjacent)) {
                                 NetworkInfo updatedNetwork = networkManager.detectNetwork(adjacent);
                                 if (updatedNetwork != null && updatedNetwork.isValid()) {
+                                    // Mark all blocks in this network segment as processed
+                                    processedLocations.addAll(updatedNetwork.getAllBlocks());
+                                    processedLocations.addAll(updatedNetwork.getNetworkCables());
+                                    
+                                    // Register this network segment (will get a new ID if different from original)
                                     networkManager.registerNetwork(updatedNetwork, player.getUniqueId());
                                     networkStillValid = true;
-                                    player.sendMessage(Component.text("Network updated after block removal.", NamedTextColor.GREEN));
-                                    break;
+                                    
+                                    // Refresh terminals for this network segment
+                                    String newNetworkId = networkManager.getNetworkId(adjacent);
+                                    if (newNetworkId != null) {
+                                        plugin.getGUIManager().refreshNetworkTerminals(newNetworkId);
+                                    }
+                                    
+                                    plugin.getLogger().info("Detected network segment with " + updatedNetwork.getAllBlocks().size() + " blocks and " + updatedNetwork.getNetworkCables().size() + " cables");
                                 }
                             }
                         }
+                        
+                        if (networkStillValid) {
+                            player.sendMessage(Component.text("Network updated after block removal.", NamedTextColor.GREEN));
+                        }
 
                         if (!networkStillValid) {
-                            // Network was completely broken - unregister it
+                            // Network was completely broken - refresh terminals (to close them) and unregister it
                             try {
+                                plugin.getGUIManager().refreshNetworkTerminals(networkId);
                                 networkManager.unregisterNetwork(networkId);
                                 player.sendMessage(Component.text("Storage network dissolved. Drive bay contents preserved.", NamedTextColor.YELLOW));
                             } catch (Exception e) {
                                 plugin.getLogger().warning("Error unregistering network " + networkId + ": " + e.getMessage());
                             }
                         }
+                        
+                        // Always refresh terminals for the original network ID to handle disconnections
+                        plugin.getGUIManager().refreshNetworkTerminals(networkId);
 
                         plugin.getExporterManager().updateExporterNetworkAssignments();
 
@@ -635,6 +666,35 @@ public class BlockListener implements Listener {
         if (itemManager.isNetworkCable(item)) return "NETWORK_CABLE";
         if (itemManager.isExporter(item)) return "EXPORTER";
         return "UNKNOWN";
+    }
+
+    /**
+     * Update drive bay network associations when networks change
+     * This ensures that existing disks in drive bays get associated with the correct network
+     */
+    private void updateDriveBayNetworkAssociations(String networkId, Set<Location> driveBayLocations) {
+        try {
+            plugin.getDatabaseManager().executeTransaction(conn -> {
+                for (Location driveBayLoc : driveBayLocations) {
+                    try (PreparedStatement stmt = conn.prepareStatement(
+                            "UPDATE drive_bay_slots SET network_id = ? WHERE world_name = ? AND x = ? AND y = ? AND z = ? AND disk_id IS NOT NULL")) {
+                        
+                        stmt.setString(1, networkId);
+                        stmt.setString(2, driveBayLoc.getWorld().getName());
+                        stmt.setInt(3, driveBayLoc.getBlockX());
+                        stmt.setInt(4, driveBayLoc.getBlockY());
+                        stmt.setInt(5, driveBayLoc.getBlockZ());
+                        
+                        int updated = stmt.executeUpdate();
+                        if (updated > 0) {
+                            plugin.getLogger().info("Updated " + updated + " drive bay slots to network " + networkId + " at " + driveBayLoc);
+                        }
+                    }
+                }
+            });
+        } catch (Exception e) {
+            plugin.getLogger().severe("Error updating drive bay network associations: " + e.getMessage());
+        }
     }
 
     private List<Location> getAdjacentLocations(Location center) {

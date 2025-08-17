@@ -98,7 +98,7 @@ public class DriveBayGUI implements Listener {
      */
     private boolean isNetworkValid() {
         try {
-            return plugin.getNetworkManager().isNetworkValid(networkId);
+            return networkId != null && plugin.getNetworkManager().isNetworkValid(networkId);
         } catch (Exception e) {
             plugin.getLogger().warning("Error checking network validity: " + e.getMessage());
             return false;
@@ -140,7 +140,7 @@ public class DriveBayGUI implements Listener {
                 }
             }
 
-            if (!foundAnyDisks && networkId.startsWith("standalone_")) {
+            if (!foundAnyDisks && networkId != null && networkId.startsWith("standalone_")) {
                 plugin.getLogger().info("No disks found for standalone network, searching by location only");
 
                 PreparedStatement anyNetworkStmt = conn.prepareStatement(
@@ -506,7 +506,7 @@ public class DriveBayGUI implements Listener {
 
                 try (PreparedStatement stmt = conn.prepareStatement(
                         "INSERT OR REPLACE INTO drive_bay_slots (network_id, world_name, x, y, z, slot_number, disk_id) VALUES (?, ?, ?, ?, ?, ?, ?)")) {
-                    stmt.setString(1, networkId);
+                    stmt.setString(1, networkId != null ? networkId : "disconnected_" + System.currentTimeMillis());
                     stmt.setString(2, driveBayLocation.getWorld().getName());
                     stmt.setInt(3, driveBayLocation.getBlockX());
                     stmt.setInt(4, driveBayLocation.getBlockY());
@@ -516,9 +516,9 @@ public class DriveBayGUI implements Listener {
                     stmt.executeUpdate();
                 }
 
-                boolean networkValid = isNetworkValid();
-                boolean isStandaloneNetwork = networkId.startsWith("standalone_");
-                boolean isOrphanedNetwork = networkId.startsWith("orphaned_");
+                boolean networkValid = networkId != null && isNetworkValid();
+                boolean isStandaloneNetwork = networkId != null && networkId.startsWith("standalone_");
+                boolean isOrphanedNetwork = networkId != null && networkId.startsWith("orphaned_");
 
                 if (networkValid && !isStandaloneNetwork && !isOrphanedNetwork) {
                     try (PreparedStatement stmt = conn.prepareStatement(
@@ -550,7 +550,7 @@ public class DriveBayGUI implements Listener {
                 plugin.getGUIManager().refreshNetworkTerminals(networkId);
                 plugin.getLogger().info("Refreshed terminals for valid network " + networkId + " after disk placement");
             } else {
-                plugin.getLogger().info("Network " + networkId + " is not valid, skipping terminal refresh");
+                plugin.getLogger().info("Network " + (networkId != null ? networkId : "null") + " is not valid, skipping terminal refresh");
             }
 
             player.sendMessage(Component.text("Storage disk inserted successfully!", NamedTextColor.GREEN));

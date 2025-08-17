@@ -1,9 +1,11 @@
 package org.jamesphbennett.massstorageserver.storage;
 
+import org.bukkit.Location;
 import org.bukkit.inventory.ItemStack;
 import org.jamesphbennett.massstorageserver.MassStorageServer;
 import org.jamesphbennett.massstorageserver.database.DatabaseManager;
 import org.jamesphbennett.massstorageserver.managers.ItemManager;
+import org.jamesphbennett.massstorageserver.network.NetworkInfo;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -195,41 +197,138 @@ public class StorageManager {
         return plugin.getNetworkManager().withNetworkLock(networkId, () -> {
             List<StoredItem> items = new ArrayList<>();
 
-            try (Connection conn = plugin.getDatabaseManager().getConnection();
-                 PreparedStatement stmt = conn.prepareStatement(
-                         "SELECT si.item_hash, si.item_data, SUM(si.quantity) as total_quantity " +
-                                 "FROM storage_items si " +
-                                 "JOIN storage_disks sd ON si.disk_id = sd.disk_id " +
-                                 "JOIN drive_bay_slots dbs ON sd.disk_id = dbs.disk_id " +
-                                 "WHERE dbs.network_id = ? AND dbs.disk_id IS NOT NULL " +
-                                 "GROUP BY si.item_hash " +
-                                 "HAVING total_quantity > 0 " +
-                                 "ORDER BY total_quantity DESC")) {
+            try {
+                // Get currently connected drive bays for this network (real-time detection)
+                Set<String> connectedDiskIds = getConnectedDiskIdsForNetwork(networkId);
+                
+                if (connectedDiskIds.isEmpty()) {
+                    plugin.getLogger().info("No connected drive bays found for network " + networkId);
+                    return items;
+                }
 
-                stmt.setString(1, networkId);
+                try (Connection conn = plugin.getDatabaseManager().getConnection()) {
+                    // Build a dynamic query based on actually connected disks
+                    StringBuilder queryBuilder = new StringBuilder(
+                            "SELECT si.item_hash, si.item_data, SUM(si.quantity) as total_quantity " +
+                            "FROM storage_items si " +
+                            "JOIN storage_disks sd ON si.disk_id = sd.disk_id " +
+                            "WHERE sd.disk_id IN (");
+                    
+                    // Add placeholders for disk IDs
+                    for (int i = 0; i < connectedDiskIds.size(); i++) {
+                        if (i > 0) queryBuilder.append(", ");
+                        queryBuilder.append("?");
+                    }
+                    
+                    queryBuilder.append(") GROUP BY si.item_hash " +
+                            "HAVING total_quantity > 0 " +
+                            "ORDER BY total_quantity DESC");
 
-                try (ResultSet rs = stmt.executeQuery()) {
-                    while (rs.next()) {
-                        String itemHash = rs.getString("item_hash");
-                        String itemData = rs.getString("item_data"); // Take any item_data (they should be identical for same hash)
-                        int quantity = rs.getInt("total_quantity");
+                    try (PreparedStatement stmt = conn.prepareStatement(queryBuilder.toString())) {
+                        int paramIndex = 1;
+                        for (String diskId : connectedDiskIds) {
+                            stmt.setString(paramIndex++, diskId);
+                        }
 
-                        ItemStack item = deserializeItemStack(itemData);
-                        if (item != null) {
-                            items.add(new StoredItem(itemHash, item, quantity));
+                        try (ResultSet rs = stmt.executeQuery()) {
+                            while (rs.next()) {
+                                String itemHash = rs.getString("item_hash");
+                                String itemData = rs.getString("item_data");
+                                int quantity = rs.getInt("total_quantity");
+
+                                ItemStack item = deserializeItemStack(itemData);
+                                if (item != null) {
+                                    items.add(new StoredItem(itemHash, item, quantity));
+                                }
+                            }
                         }
                     }
                 }
 
-                plugin.getLogger().info("Found " + items.size() + " consolidated item types from active drive bay disks in network " + networkId);
+                plugin.getLogger().info("Found " + items.size() + " consolidated item types from " + connectedDiskIds.size() + " connected disks in network " + networkId);
 
-            } catch (SQLException e) {
+            } catch (Exception e) {
+                plugin.getLogger().severe("Error getting network items for " + networkId + ": " + e.getMessage());
                 throw new RuntimeException(e);
             }
 
             return items;
         });
     }
+
+    /**
+     * Get disk IDs that are currently connected to a network by checking actual connectivity
+     * This ensures terminals only show items from drive bays that are currently part of the network
+     */
+    private Set<String> getConnectedDiskIdsForNetwork(String networkId) throws Exception {
+        Set<String> connectedDiskIds = new HashSet<>();
+        
+        try {
+            // Get network info to find all currently connected drive bays
+            Set<Location> connectedDriveBays = new HashSet<>();
+            
+            // Find any block in this network to detect the full topology
+            try (Connection conn = plugin.getDatabaseManager().getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(
+                         "SELECT world_name, x, y, z FROM network_blocks WHERE network_id = ? LIMIT 1")) {
+                
+                stmt.setString(1, networkId);
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                        Location testLocation = new Location(
+                                plugin.getServer().getWorld(rs.getString("world_name")),
+                                rs.getInt("x"),
+                                rs.getInt("y"),
+                                rs.getInt("z")
+                        );
+                        
+                        // Detect the current network topology from this location
+                        NetworkInfo currentNetwork = plugin.getNetworkManager().detectNetwork(testLocation);
+                        if (currentNetwork != null && currentNetwork.isValid()) {
+                            connectedDriveBays = currentNetwork.getDriveBays();
+                        }
+                    }
+                }
+            }
+            
+            if (connectedDriveBays.isEmpty()) {
+                plugin.getLogger().info("No drive bays detected in current network topology for " + networkId);
+                return connectedDiskIds;
+            }
+            
+            // Now get disk IDs from these connected drive bay locations
+            try (Connection conn = plugin.getDatabaseManager().getConnection()) {
+                for (Location driveBayLocation : connectedDriveBays) {
+                    try (PreparedStatement stmt = conn.prepareStatement(
+                            "SELECT disk_id FROM drive_bay_slots WHERE world_name = ? AND x = ? AND y = ? AND z = ? AND disk_id IS NOT NULL")) {
+                        
+                        stmt.setString(1, driveBayLocation.getWorld().getName());
+                        stmt.setInt(2, driveBayLocation.getBlockX());
+                        stmt.setInt(3, driveBayLocation.getBlockY());
+                        stmt.setInt(4, driveBayLocation.getBlockZ());
+                        
+                        try (ResultSet rs = stmt.executeQuery()) {
+                            while (rs.next()) {
+                                String diskId = rs.getString("disk_id");
+                                if (diskId != null) {
+                                    connectedDiskIds.add(diskId);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            plugin.getLogger().info("Found " + connectedDiskIds.size() + " disks in " + connectedDriveBays.size() + " connected drive bays for network " + networkId);
+            
+        } catch (Exception e) {
+            plugin.getLogger().severe("Error detecting connected disks for network " + networkId + ": " + e.getMessage());
+            throw e;
+        }
+        
+        return connectedDiskIds;
+    }
+
     private ItemStack storeItemInNetwork(Connection conn, List<String> diskIds, ItemStack item) throws SQLException {
         String itemHash = itemManager.generateItemHash(item);
         String itemData = serializeItemStack(item);

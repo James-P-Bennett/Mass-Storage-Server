@@ -3,11 +3,9 @@ package org.jamesphbennett.massstorageserver.managers;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.Particle;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.Container;
-import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -303,83 +301,6 @@ public class ExporterManager {
         }
 
         return remainingAmount; // Return how many items couldn't be placed
-    }
-
-    /**
-     * Get the next item to export from a brewing stand by checking actual filter items and slot availability
-     */
-    private String getNextBrewingStandItem(ExporterData exporter) {
-        try {
-            plugin.getLogger().info("DEBUG: getNextBrewingStandItem called for exporter " + exporter.exporterId);
-            
-            // Parse brewing stand filters to get actual items (not markers)
-            BrewingStandFilters brewingFilters = parseBrewingStandFilters(exporter.exporterId);
-            plugin.getLogger().info("DEBUG: Parsed brewing filters - fuel enabled: " + brewingFilters.fuelEnabled + 
-                                  ", ingredient: " + (brewingFilters.ingredientFilter != null ? brewingFilters.ingredientFilter.getType() : "null") +
-                                  ", bottles: " + java.util.Arrays.toString(brewingFilters.bottleFilters));
-            
-            // Get the brewing stand container to check slot availability
-            Container brewingStandContainer = getTargetContainer(exporter.location.getBlock());
-            if (brewingStandContainer == null) {
-                plugin.getLogger().info("DEBUG: No brewing stand container found");
-                return null;
-            }
-            
-            Inventory brewingInventory = brewingStandContainer.getInventory();
-            
-            // Create a list of all possible exports with their priority
-            List<PotentialExport> potentialExports = new ArrayList<>();
-            
-            // Check blaze powder (fuel) - only if fuel slot has space
-            if (brewingFilters.fuelEnabled) {
-                ItemStack blazePowder = new ItemStack(Material.BLAZE_POWDER);
-                String blazeHash = plugin.getItemManager().generateItemHash(blazePowder);
-                if (isItemAvailableInNetwork(exporter.networkId, blazeHash) && 
-                    canPlaceItemInBrewingSlot(brewingInventory, blazePowder, 4)) {
-                    potentialExports.add(new PotentialExport(blazeHash, 4, "fuel"));
-                }
-            }
-            
-            // Check ingredient filter - only if ingredient slot has space
-            if (brewingFilters.ingredientFilter != null) {
-                String ingredientHash = plugin.getItemManager().generateItemHash(brewingFilters.ingredientFilter);
-                if (isItemAvailableInNetwork(exporter.networkId, ingredientHash) && 
-                    canPlaceItemInBrewingSlot(brewingInventory, brewingFilters.ingredientFilter, 3)) {
-                    potentialExports.add(new PotentialExport(ingredientHash, 3, "ingredient"));
-                }
-            }
-            
-            // Check each bottle filter independently - only if their specific slots have space
-            for (int i = 0; i < 3; i++) {
-                if (brewingFilters.bottleFilters[i] != null) {
-                    String bottleHash = plugin.getItemManager().generateItemHash(brewingFilters.bottleFilters[i]);
-                    if (isItemAvailableInNetwork(exporter.networkId, bottleHash) && 
-                        canPlaceItemInBrewingSlot(brewingInventory, brewingFilters.bottleFilters[i], i)) {
-                        potentialExports.add(new PotentialExport(bottleHash, i, "bottle " + (i + 1)));
-                    }
-                }
-            }
-            
-            // If we have potential exports, use round-robin to cycle through them
-            if (!potentialExports.isEmpty()) {
-                // Get current cycle index for this exporter (reuse existing mechanism)
-                int currentIndex = exporterCycleIndex.get(exporter.exporterId);
-                PotentialExport selectedExport = potentialExports.get(currentIndex % potentialExports.size());
-                
-                // Update cycle index for next time
-                exporterCycleIndex.put(exporter.exporterId, (currentIndex + 1) % potentialExports.size());
-                
-                plugin.getLogger().info("DEBUG: Selected " + selectedExport.slotName + " for export: " + selectedExport.itemHash);
-                return selectedExport.itemHash;
-            }
-            
-            plugin.getLogger().info("DEBUG: No brewing stand items available for export (either not in network or slots full)");
-            return null;
-            
-        } catch (Exception e) {
-            plugin.getLogger().severe("Error getting next brewing stand item: " + e.getMessage());
-            return null;
-        }
     }
 
     /**
@@ -729,7 +650,7 @@ public class ExporterManager {
                 plugin.getStorageManager().storeItems(exporter.networkId, toReturn);
             }
             
-            if (retrievedItem == null || retrievedItem.getAmount() == 0) {
+            if (retrievedItem.getAmount() == 0) {
                 return; // No items available
             }
 
@@ -778,7 +699,7 @@ public class ExporterManager {
             return Math.min(64, itemType.getMaxStackSize());
         } else {
             // Bottle slots (0, 1, 2) - bottles typically stack to 16, potions to 1
-            return Math.min(itemType.getMaxStackSize(), itemType.getMaxStackSize());
+            return itemType.getMaxStackSize();
         }
     }
 
@@ -847,18 +768,9 @@ public class ExporterManager {
     }
 
     /**
-     * Helper class for potential brewing stand exports
-     */
-    private static class PotentialExport {
-        final String itemHash;
-        final int targetSlot;
-        final String slotName;
-
-        PotentialExport(String itemHash, int targetSlot, String slotName) {
-            this.itemHash = itemHash;
-            this.targetSlot = targetSlot;
-            this.slotName = slotName;
-        }
+         * Helper class for potential brewing stand exports
+         */
+        private record PotentialExport(String itemHash, int targetSlot, String slotName) {
     }
 
     /**

@@ -8,7 +8,6 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
-import org.bukkit.block.BrewingStand;
 import org.bukkit.block.Container;
 import org.bukkit.block.data.Directional;
 import org.bukkit.enchantments.Enchantment;
@@ -471,7 +470,7 @@ public class ExporterGUI implements Listener {
 
             // Handle ingredient slot (slot 4)
             if (slot == 4) {
-                if (cursorItem != null && !cursorItem.getType().isAir()) {
+                if (!cursorItem.getType().isAir()) {
                     // Set ingredient filter
                     if (!plugin.getItemManager().isItemBlacklisted(cursorItem)) {
                         ingredientFilter = cursorItem.clone();
@@ -496,7 +495,7 @@ public class ExporterGUI implements Listener {
             int[] bottleSlots = {21, 22, 23};
             for (int i = 0; i < 3; i++) {
                 if (slot == bottleSlots[i]) {
-                    if (cursorItem != null && !cursorItem.getType().isAir()) {
+                    if (!cursorItem.getType().isAir()) {
                         // Set bottle filter
                         if (!plugin.getItemManager().isItemBlacklisted(cursorItem)) {
                             bottleFilters[i] = cursorItem.clone();

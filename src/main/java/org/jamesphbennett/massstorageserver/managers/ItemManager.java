@@ -7,6 +7,7 @@ import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.jamesphbennett.massstorageserver.MassStorageServer;
@@ -160,7 +161,7 @@ public class ItemManager {
 
         // Apply BurningFurnace player skin texture
         try {
-            applyPlayerSkinTexture(meta, "BurningFurnace");
+            applyPlayerSkinTexture(meta);
             plugin.getLogger().info("Successfully applied BurningFurnace player texture to exporter");
         } catch (Exception e) {
             plugin.getLogger().warning("Failed to apply BurningFurnace player texture to exporter: " + e.getMessage());
@@ -175,9 +176,9 @@ public class ItemManager {
     /**
      * Apply player skin texture to skull meta by player name
      */
-    private void applyPlayerSkinTexture(org.bukkit.inventory.meta.SkullMeta skullMeta, String playerName) throws Exception {
+    private void applyPlayerSkinTexture(SkullMeta skullMeta) {
         // Create PlayerProfile for the specific player name
-        org.bukkit.profile.PlayerProfile profile = plugin.getServer().createPlayerProfile(playerName);
+        org.bukkit.profile.PlayerProfile profile = plugin.getServer().createPlayerProfile("BurningFurnace");
         
         // Apply to skull meta - Bukkit will automatically fetch the skin texture
         skullMeta.setOwnerProfile(profile);

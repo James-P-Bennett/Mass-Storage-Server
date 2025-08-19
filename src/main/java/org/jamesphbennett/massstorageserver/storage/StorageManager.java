@@ -6,6 +6,7 @@ import org.jamesphbennett.massstorageserver.MassStorageServer;
 import org.jamesphbennett.massstorageserver.database.DatabaseManager;
 import org.jamesphbennett.massstorageserver.managers.ItemManager;
 import org.jamesphbennett.massstorageserver.network.NetworkInfo;
+import org.jetbrains.annotations.NotNull;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -208,21 +209,7 @@ public class StorageManager {
 
                 try (Connection conn = plugin.getDatabaseManager().getConnection()) {
                     // Build a dynamic query based on actually connected disks
-                    StringBuilder queryBuilder = new StringBuilder(
-                            "SELECT si.item_hash, si.item_data, SUM(si.quantity) as total_quantity " +
-                            "FROM storage_items si " +
-                            "JOIN storage_disks sd ON si.disk_id = sd.disk_id " +
-                            "WHERE sd.disk_id IN (");
-                    
-                    // Add placeholders for disk IDs
-                    for (int i = 0; i < connectedDiskIds.size(); i++) {
-                        if (i > 0) queryBuilder.append(", ");
-                        queryBuilder.append("?");
-                    }
-                    
-                    queryBuilder.append(") GROUP BY si.item_hash " +
-                            "HAVING total_quantity > 0 " +
-                            "ORDER BY total_quantity DESC");
+                    StringBuilder queryBuilder = getStringBuilder(connectedDiskIds);
 
                     try (PreparedStatement stmt = conn.prepareStatement(queryBuilder.toString())) {
                         int paramIndex = 1;
@@ -254,6 +241,25 @@ public class StorageManager {
 
             return items;
         });
+    }
+
+    private static @NotNull StringBuilder getStringBuilder(Set<String> connectedDiskIds) {
+        StringBuilder queryBuilder = new StringBuilder(
+                "SELECT si.item_hash, si.item_data, SUM(si.quantity) as total_quantity " +
+                "FROM storage_items si " +
+                "JOIN storage_disks sd ON si.disk_id = sd.disk_id " +
+                "WHERE sd.disk_id IN (");
+
+        // Add placeholders for disk IDs
+        for (int i = 0; i < connectedDiskIds.size(); i++) {
+            if (i > 0) queryBuilder.append(", ");
+            queryBuilder.append("?");
+        }
+
+        queryBuilder.append(") GROUP BY si.item_hash " +
+                "HAVING total_quantity > 0 " +
+                "ORDER BY total_quantity DESC");
+        return queryBuilder;
     }
 
     /**

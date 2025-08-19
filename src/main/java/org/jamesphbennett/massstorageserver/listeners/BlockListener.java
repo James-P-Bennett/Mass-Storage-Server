@@ -862,39 +862,6 @@ public class BlockListener implements Listener {
         return exporterCount;
     }
 
-    private int getNetworkDriveBayCount(String networkId) throws SQLException {
-        try (Connection conn = plugin.getDatabaseManager().getConnection();
-             PreparedStatement stmt = conn.prepareStatement(
-                     "SELECT COUNT(*) FROM network_blocks WHERE network_id = ? AND block_type = 'DRIVE_BAY'")) {
-            stmt.setString(1, networkId);
-            try (ResultSet rs = stmt.executeQuery()) {
-                return rs.next() ? rs.getInt(1) : 0;
-            }
-        }
-    }
-
-    private int getNetworkTerminalCount(String networkId) throws SQLException {
-        try (Connection conn = plugin.getDatabaseManager().getConnection();
-             PreparedStatement stmt = conn.prepareStatement(
-                     "SELECT COUNT(*) FROM network_blocks WHERE network_id = ? AND block_type = 'MSS_TERMINAL'")) {
-            stmt.setString(1, networkId);
-            try (ResultSet rs = stmt.executeQuery()) {
-                return rs.next() ? rs.getInt(1) : 0;
-            }
-        }
-    }
-
-    private int getNetworkCableCount(String networkId) throws SQLException {
-        try (Connection conn = plugin.getDatabaseManager().getConnection();
-             PreparedStatement stmt = conn.prepareStatement(
-                     "SELECT COUNT(*) FROM network_blocks WHERE network_id = ? AND block_type = 'NETWORK_CABLE'")) {
-            stmt.setString(1, networkId);
-            try (ResultSet rs = stmt.executeQuery()) {
-                return rs.next() ? rs.getInt(1) : 0;
-            }
-        }
-    }
-
     private int getTotalNetworkStorageCapacity(String networkId) throws SQLException {
         try (Connection conn = plugin.getDatabaseManager().getConnection();
              PreparedStatement stmt = conn.prepareStatement(

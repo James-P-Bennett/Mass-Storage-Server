@@ -289,6 +289,7 @@ public class ImporterManager {
         }
     }
 
+
     /**
      * Import from brewing stand bottom potion slots (slots 0, 1, 2)
      */
@@ -305,15 +306,10 @@ public class ImporterManager {
                     continue; // No item in this slot
                 }
 
-                // Check filter if enabled
+                // Check filter if enabled - special handling for brewing stands
                 if (!importer.filterItems.isEmpty()) {
-                    String itemHash = plugin.getItemManager().generateItemHash(potionItem);
-                    plugin.getLogger().info("DEBUG: Brewing stand filtering - item: " + potionItem.getType() + 
-                                          ", generated hash: " + itemHash + 
-                                          ", filter contains: " + importer.filterItems.contains(itemHash) +
-                                          ", filter hashes: " + importer.filterItems);
-                    if (!importer.filterItems.contains(itemHash)) {
-                        continue; // Item not in filter
+                    if (!isBrewingStandItemAllowed(importer.importerId, potionItem, slot)) {
+                        continue; // Item not in filter for this slot
                     }
                 }
 
@@ -788,5 +784,77 @@ public class ImporterManager {
         } catch (SQLException e) {
             plugin.getLogger().warning("Failed to update last import timestamp: " + e.getMessage());
         }
+    }
+
+    /**
+     * Check if an item is allowed for import from a specific brewing stand slot
+     */
+    private boolean isBrewingStandItemAllowed(String importerId, ItemStack item, int slot) {
+        try {
+            // Parse brewing stand filters
+            BrewingStandFilters filters = parseBrewingStandFilters(importerId);
+            
+            // Check if there's a filter for this specific bottle slot
+            if (slot >= 0 && slot < 3 && filters.bottleFilters[slot] != null) {
+                String itemHash = plugin.getItemManager().generateItemHash(item);
+                String filterHash = plugin.getItemManager().generateItemHash(filters.bottleFilters[slot]);
+                return itemHash.equals(filterHash);
+            }
+            
+            // If no specific filter for this slot, don't import
+            return false;
+            
+        } catch (Exception e) {
+            plugin.getLogger().warning("Error checking brewing stand filter for " + importerId + ": " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Parse brewing stand specific filters from the importer's filter items
+     */
+    private BrewingStandFilters parseBrewingStandFilters(String importerId) {
+        BrewingStandFilters filters = new BrewingStandFilters();
+        
+        try {
+            List<ItemStack> filterItems = getImporterFilterItems(importerId);
+            
+            for (ItemStack item : filterItems) {
+                if (item.hasItemMeta() && item.getItemMeta().hasDisplayName()) {
+                    Component displayName = item.getItemMeta().displayName();
+                    if (displayName == null) continue;
+                    
+                    // Use PlainTextComponentSerializer for reliable text extraction
+                    String nameText = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(displayName);
+                    
+                    if (nameText.startsWith("BREWING_BOTTLE_")) {
+                        try {
+                            int bottleIndex = Integer.parseInt(nameText.substring("BREWING_BOTTLE_".length()));
+                            if (bottleIndex >= 0 && bottleIndex < 3) {
+                                // Remove the marker and store the actual filter item
+                                ItemStack filterItem = item.clone();
+                                ItemMeta meta = filterItem.getItemMeta();
+                                meta.displayName(null); // Remove the marker name
+                                filterItem.setItemMeta(meta);
+                                filters.bottleFilters[bottleIndex] = filterItem;
+                            }
+                        } catch (NumberFormatException e) {
+                            plugin.getLogger().warning("Invalid bottle index in brewing filter: " + nameText);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            plugin.getLogger().warning("Error parsing brewing stand filters for " + importerId + ": " + e.getMessage());
+        }
+        
+        return filters;
+    }
+
+    /**
+     * Data class for brewing stand filter settings
+     */
+    private static class BrewingStandFilters {
+        ItemStack[] bottleFilters = new ItemStack[3]; // For slots 0, 1, 2
     }
 }

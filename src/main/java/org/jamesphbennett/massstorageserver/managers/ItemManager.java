@@ -625,6 +625,7 @@ public class ItemManager {
         try {
             StringBuilder builder = new StringBuilder();
 
+
             // Material type
             builder.append(item.getType().name());
 
@@ -659,6 +660,24 @@ public class ItemManager {
                 // Enchantments
                 if (meta.hasEnchants()) {
                     builder.append("|enchants:").append(meta.getEnchants());
+                }
+
+                // Potion-specific metadata
+                if (meta instanceof org.bukkit.inventory.meta.PotionMeta potionMeta) {
+                    // Base potion type
+                    if (potionMeta.getBasePotionType() != null) {
+                        builder.append("|basePotionType:").append(potionMeta.getBasePotionType());
+                    }
+                    
+                    // Custom effects
+                    if (potionMeta.hasCustomEffects()) {
+                        builder.append("|customEffects:").append(potionMeta.getCustomEffects());
+                    }
+                    
+                    // Color (for custom potions)
+                    if (potionMeta.hasColor()) {
+                        builder.append("|potionColor:").append(potionMeta.getColor());
+                    }
                 }
 
                 // Persistent data (excluding our own MSS keys to prevent issues)

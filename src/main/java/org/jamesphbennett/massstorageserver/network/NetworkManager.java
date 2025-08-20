@@ -279,7 +279,7 @@ public class NetworkManager {
         networkLocks.remove(networkId);
         restorationLoggedNetworks.remove(networkId);
 
-        plugin.getLogger().info("Unregistered network " + networkId + " and preserved drive bay contents");
+        plugin.debugLog("Unregistered network " + networkId + " and preserved drive bay contents");
     }
 
     /**
@@ -292,7 +292,7 @@ public class NetworkManager {
         boolean shouldLog = !restorationLoggedNetworks.contains(newNetworkId);
 
         if (shouldLog) {
-            plugin.getLogger().info("Starting drive bay restoration for network " + newNetworkId +
+            plugin.debugLog("Starting drive bay restoration for network " + newNetworkId +
                     " with " + driveBayLocations.size() + " drive bays");
         }
 
@@ -340,7 +340,7 @@ public class NetworkManager {
         }
 
         if (shouldLog) {
-            plugin.getLogger().info("Restoration complete for network " + newNetworkId + ": " +
+            plugin.debugLog("Restoration complete for network " + newNetworkId + ": " +
                     totalRestoredSlots + " slots and " + totalRestoredDisks + " disks restored");
             restorationLoggedNetworks.add(newNetworkId);
         }

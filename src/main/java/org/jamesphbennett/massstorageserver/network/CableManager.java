@@ -113,7 +113,7 @@ public class CableManager {
                     return false;
                 }
 
-                plugin.getLogger().info("Cable placement: Network " + targetNetworkId + " will have " + (currentCableCount + 1) + "/" + maxCables + " cables");
+                plugin.debugLog("Cable placement: Network " + targetNetworkId + " will have " + (currentCableCount + 1) + "/" + maxCables + " cables");
             }
 
             return true;

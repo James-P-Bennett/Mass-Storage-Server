@@ -144,4 +144,13 @@ public final class MassStorageServer extends JavaPlugin {
     public ImporterManager getImporterManager() {
         return importerManager;
     }
+
+    /**
+     * Log debug message only if debug mode is enabled
+     */
+    public void debugLog(String message) {
+        if (configManager != null && configManager.isDebugMode()) {
+            getLogger().info("[DEBUG] " + message);
+        }
+    }
 }

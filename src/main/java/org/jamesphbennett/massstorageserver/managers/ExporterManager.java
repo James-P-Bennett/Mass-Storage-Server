@@ -115,7 +115,7 @@ public class ExporterManager {
 
         plugin.getServer().getScheduler().runTaskTimer(plugin, () -> {
             for (ExporterData exporter : activeExporters.values()) {
-                if (exporter.enabled && !exporter.filterItems.isEmpty()) {
+                if (exporter.enabled) {
                     processExport(exporter);
                 }
             }
@@ -130,16 +130,15 @@ public class ExporterManager {
         plugin.getLogger().info("Exporter network validation task started (30 second interval)");
     }
     /**
-     * ENHANCED: Check if exporter is physically connected to its assigned network
-     * This checks adjacent blocks directly instead of relying on network detection at exporter location
+     * Check if exporter is physically connected to its assigned network
      */
     private boolean isExporterConnectedToNetwork(ExporterData exporter) {
         // First check if network exists at all
         if (!plugin.getNetworkManager().isNetworkValid(exporter.networkId)) {
-            return true;
+            return true; // Return true when network doesn't exist - means disconnected
         }
 
-        // AGGRESSIVE CHECK: Look for any adjacent network blocks or cables
+        // Look for any adjacent network blocks or cables
         Location exporterLoc = exporter.location;
 
         // Check all 6 adjacent faces for network connectivity
@@ -162,6 +161,22 @@ public class ExporterManager {
 
         return true; // No adjacent network blocks found
     }
+
+    /**
+     * Public method to check if an exporter is connected to any network (for GUI access)
+     * Used by GUI manager for access control
+     */
+    public boolean isExporterConnectedToItsNetwork(String exporterId) {
+        ExporterData exporter = activeExporters.get(exporterId);
+        if (exporter == null) {
+            return false; // Exporter not found - consider disconnected
+        }
+        
+        // Just check if there's any adjacent network - don't require a specific one
+        String adjacentNetworkId = findAdjacentNetwork(exporter.location);
+        return adjacentNetworkId != null; // Connected if any adjacent network found
+    }
+
     /**
      * Refresh any open exporter GUIs for a specific exporter
      */
@@ -178,14 +193,15 @@ public class ExporterManager {
      */
     private void processExport(ExporterData exporter) {
         try {
-            // Check if exporter is physically connected to its network
-            if (isExporterConnectedToNetwork(exporter)) {
-                plugin.getLogger().info("Exporter " + exporter.exporterId + " is no longer connected to network " + exporter.networkId + " - auto-disabling");
+            // Check if exporter is physically connected to any network
+            String adjacentNetworkId = findAdjacentNetwork(exporter.location);
+            if (adjacentNetworkId == null) {
+                plugin.debugLog("Exporter " + exporter.exporterId + " is not connected to any network - auto-disabling");
 
                 // AUTO-DISABLE: Set exporter as disabled when disconnected
                 try {
                     toggleExporter(exporter.exporterId, false);
-                    plugin.getLogger().info("Auto-disabled exporter " + exporter.exporterId + " due to network disconnection");
+                    plugin.debugLog("Auto-disabled exporter " + exporter.exporterId + " - not connected to any network");
 
                     // Refresh any open exporter GUIs to show disabled status
                     refreshExporterGUIs(exporter.exporterId);
@@ -194,6 +210,35 @@ public class ExporterManager {
                     plugin.getLogger().warning("Failed to auto-disable exporter " + exporter.exporterId + ": " + e.getMessage());
                 }
 
+                return;
+            }
+
+            // If connected to a different network than assigned, update the assignment
+            if (!adjacentNetworkId.equals(exporter.networkId)) {
+                plugin.debugLog("Exporter " + exporter.exporterId + " reconnecting from " + exporter.networkId + " to " + adjacentNetworkId);
+                try {
+                    // Update database
+                    plugin.getDatabaseManager().executeUpdate(
+                            "UPDATE exporters SET network_id = ?, updated_at = CURRENT_TIMESTAMP WHERE exporter_id = ?",
+                            adjacentNetworkId, exporter.exporterId);
+                    
+                    // Update in memory - replace the exporter data object
+                    activeExporters.remove(exporter.exporterId);
+                    ExporterData updatedData = new ExporterData(exporter.exporterId, adjacentNetworkId, exporter.location, exporter.enabled);
+                    updatedData.filterItems.addAll(exporter.filterItems);
+                    activeExporters.put(exporter.exporterId, updatedData);
+                    
+                    // Update the reference for the rest of this method
+                    exporter = updatedData;
+                    
+                } catch (SQLException e) {
+                    plugin.getLogger().warning("Failed to update exporter network assignment: " + e.getMessage());
+                    return;
+                }
+            }
+
+            // If exporter has no filters, it shouldn't export anything (but we still needed to check disconnection)
+            if (exporter.filterItems.isEmpty()) {
                 return;
             }
 
@@ -227,10 +272,10 @@ public class ExporterManager {
             } else {
                 // Use regular round-robin for other containers
                 String itemHashToExport = getNextItemToExport(exporter);
-                plugin.getLogger().info("DEBUG: getNextItemToExport returned: " + itemHashToExport + " for exporter " + exporter.exporterId);
+                plugin.debugLog(" getNextItemToExport returned: " + itemHashToExport + " for exporter " + exporter.exporterId);
                 
                 if (itemHashToExport == null) {
-                    plugin.getLogger().info("DEBUG: No items to export for exporter " + exporter.exporterId + ", filter items: " + exporter.filterItems.size());
+                    plugin.debugLog(" No items to export for exporter " + exporter.exporterId + ", filter items: " + exporter.filterItems.size());
                     return; // No items to export
                 }
 
@@ -390,7 +435,7 @@ public class ExporterManager {
                 exportItemToFurnace(exporter, itemHash, targetContainer);
             } else if (isBrewingStand) {
                 // Handle brewing stand slot routing
-                plugin.getLogger().info("DEBUG: Detected brewing stand, calling exportItemToBrewingStand for exporter " + exporter.exporterId);
+                plugin.debugLog("Detected brewing stand, calling exportItemToBrewingStand for exporter " + exporter.exporterId);
                 exportItemToBrewingStand(exporter, itemHash, targetContainer);
             } else {
                 // Use generic export for other containers
@@ -447,11 +492,11 @@ public class ExporterManager {
      */
     private void exportBrewingStandWithSlotSelection(ExporterData exporter, Container brewingStandContainer) {
         try {
-            plugin.getLogger().info("DEBUG: Starting brewing stand export with slot selection for exporter " + exporter.exporterId);
+            plugin.debugLog("Starting brewing stand export with slot selection for exporter " + exporter.exporterId);
             
             // Parse brewing stand filters from exporter filter items
             BrewingStandFilters brewingFilters = parseBrewingStandFilters(exporter.exporterId);
-            plugin.getLogger().info("DEBUG: Parsed brewing filters - fuel enabled: " + brewingFilters.fuelEnabled + 
+            plugin.debugLog("Parsed brewing filters - fuel enabled: " + brewingFilters.fuelEnabled + 
                                   ", ingredient: " + (brewingFilters.ingredientFilter != null ? brewingFilters.ingredientFilter.getType() : "null") +
                                   ", bottles: " + java.util.Arrays.toString(brewingFilters.bottleFilters));
             
@@ -499,12 +544,12 @@ public class ExporterManager {
                 // Update cycle index for next time
                 exporterCycleIndex.put(exporter.exporterId, (currentIndex + 1) % potentialExports.size());
                 
-                plugin.getLogger().info("DEBUG: Selected " + selectedExport.slotName + " (slot " + selectedExport.targetSlot + ") for export");
+                plugin.debugLog(" Selected " + selectedExport.slotName + " (slot " + selectedExport.targetSlot + ") for export");
                 
                 // Now perform the actual export to the specific slot
                 exportItemToSpecificBrewingSlot(exporter, selectedExport.itemHash, selectedExport.targetSlot, selectedExport.slotName, brewingStandContainer);
             } else {
-                plugin.getLogger().info("DEBUG: No brewing stand items available for export (either not in network or slots full)");
+                plugin.debugLog("No brewing stand items available for export (either not in network or slots full)");
             }
             
         } catch (Exception e) {
@@ -517,17 +562,17 @@ public class ExporterManager {
      */
     private void exportItemToSpecificBrewingSlot(ExporterData exporter, String itemHash, int targetSlot, String slotName, Container brewingStandContainer) {
         try {
-            plugin.getLogger().info("DEBUG: Exporting to specific brewing stand slot " + targetSlot + " (" + slotName + ")");
+            plugin.debugLog("Exporting to specific brewing stand slot " + targetSlot + " (" + slotName + ")");
             
             // Retrieve item from network first
             ItemStack retrievedItem = plugin.getStorageManager().retrieveItems(exporter.networkId, itemHash, 64);
             
             if (retrievedItem == null || retrievedItem.getAmount() == 0) {
-                plugin.getLogger().info("DEBUG: No items retrieved for hash " + itemHash);
+                plugin.debugLog("No items retrieved for hash " + itemHash);
                 return;
             }
 
-            plugin.getLogger().info("DEBUG: Retrieved item: " + retrievedItem.getType() + " (amount: " + retrievedItem.getAmount() + ") for slot " + targetSlot);
+            plugin.debugLog(" Retrieved item: " + retrievedItem.getType() + " (amount: " + retrievedItem.getAmount() + ") for slot " + targetSlot);
 
             // Limit item amount to slot-appropriate stack size
             int maxAmount = getBrewingStandSlotMaxAmount(targetSlot, retrievedItem.getType());
@@ -550,7 +595,7 @@ public class ExporterManager {
             if (existingItem == null || existingItem.getType() == Material.AIR) {
                 // Slot is empty, place the item
                 brewingInventory.setItem(targetSlot, retrievedItem);
-                plugin.getLogger().info("DEBUG: Placed " + retrievedItem.getAmount() + " " + retrievedItem.getType() + " in empty slot " + targetSlot);
+                plugin.debugLog(" Placed " + retrievedItem.getAmount() + " " + retrievedItem.getType() + " in empty slot " + targetSlot);
             } else if (existingItem.isSimilar(retrievedItem)) {
                 // Slot has same item, try to stack
                 int spaceAvailable = existingItem.getMaxStackSize() - existingItem.getAmount();
@@ -559,15 +604,15 @@ public class ExporterManager {
                 if (amountToAdd > 0) {
                     existingItem.setAmount(existingItem.getAmount() + amountToAdd);
                     leftoverAmount = retrievedItem.getAmount() - amountToAdd;
-                    plugin.getLogger().info("DEBUG: Added " + amountToAdd + " " + retrievedItem.getType() + " to existing stack in slot " + targetSlot + " (leftover: " + leftoverAmount + ")");
+                    plugin.debugLog(" Added " + amountToAdd + " " + retrievedItem.getType() + " to existing stack in slot " + targetSlot + " (leftover: " + leftoverAmount + ")");
                 } else {
                     leftoverAmount = retrievedItem.getAmount(); // No space
-                    plugin.getLogger().info("DEBUG: No space in slot " + targetSlot + ", returning " + leftoverAmount + " items to network");
+                    plugin.debugLog(" No space in slot " + targetSlot + ", returning " + leftoverAmount + " items to network");
                 }
             } else {
                 // Slot has different item, can't place
                 leftoverAmount = retrievedItem.getAmount();
-                plugin.getLogger().info("DEBUG: Slot " + targetSlot + " has different item, returning " + leftoverAmount + " items to network");
+                plugin.debugLog(" Slot " + targetSlot + " has different item, returning " + leftoverAmount + " items to network");
             }
 
             // Handle completion and leftovers
@@ -583,12 +628,12 @@ public class ExporterManager {
      */
     private void exportItemToBrewingStand(ExporterData exporter, String itemHash, Container brewingStandContainer) {
         try {
-            plugin.getLogger().info("DEBUG: Starting brewing stand export for exporter " + exporter.exporterId + " with item hash " + itemHash);
+            plugin.debugLog("Starting brewing stand export for exporter " + exporter.exporterId + " with item hash " + itemHash);
             
             // Parse brewing stand filters from exporter filter items
             BrewingStandFilters brewingFilters = parseBrewingStandFilters(exporter.exporterId);
             
-            plugin.getLogger().info("DEBUG: Parsed filters - Fuel enabled: " + brewingFilters.fuelEnabled + 
+            plugin.debugLog("Parsed filters - Fuel enabled: " + brewingFilters.fuelEnabled + 
                                   ", Ingredient filter: " + (brewingFilters.ingredientFilter != null ? brewingFilters.ingredientFilter.getType() : "null") +
                                   ", Bottle filters: " + java.util.Arrays.toString(brewingFilters.bottleFilters));
             
@@ -596,7 +641,7 @@ public class ExporterManager {
             ItemStack retrievedItem = plugin.getStorageManager().retrieveItems(exporter.networkId, itemHash, 64);
             
             if (retrievedItem == null || retrievedItem.getAmount() == 0) {
-                plugin.getLogger().info("DEBUG: No items retrieved for hash " + itemHash);
+                plugin.debugLog("No items retrieved for hash " + itemHash);
                 return; // Nothing retrieved
             }
 
@@ -604,18 +649,18 @@ public class ExporterManager {
             int targetSlot = -1;
             String slotName = "unknown";
             
-            plugin.getLogger().info("DEBUG: Retrieved item: " + itemType + " (amount: " + retrievedItem.getAmount() + ")");
+            plugin.debugLog(" Retrieved item: " + itemType + " (amount: " + retrievedItem.getAmount() + ")");
 
             // Determine target slot based on item type and filters
             if (itemType == Material.BLAZE_POWDER && brewingFilters.fuelEnabled) {
                 targetSlot = 4; // Fuel slot
                 slotName = "fuel";
-                plugin.getLogger().info("DEBUG: Targeting fuel slot (4) for blaze powder");
+                plugin.debugLog(" Targeting fuel slot (4) for blaze powder");
             } else if (brewingFilters.ingredientFilter != null && 
                       itemType == brewingFilters.ingredientFilter.getType()) {
                 targetSlot = 3; // Ingredient slot
                 slotName = "ingredient";
-                plugin.getLogger().info("DEBUG: Targeting ingredient slot (3) for " + itemType);
+                plugin.debugLog(" Targeting ingredient slot (3) for " + itemType);
             } else {
                 // Check bottle filters (slots 0, 1, 2)
                 for (int i = 0; i < 3; i++) {
@@ -623,7 +668,7 @@ public class ExporterManager {
                         itemType == brewingFilters.bottleFilters[i].getType()) {
                         targetSlot = i;
                         slotName = "bottle " + (i + 1);
-                        plugin.getLogger().info("DEBUG: Targeting bottle slot " + i + " for " + itemType);
+                        plugin.debugLog(" Targeting bottle slot " + i + " for " + itemType);
                         break;
                     }
                 }
@@ -711,10 +756,10 @@ public class ExporterManager {
         
         try {
             List<ItemStack> filterItems = getExporterFilterItems(exporterId);
-            plugin.getLogger().info("DEBUG: Found " + filterItems.size() + " filter items for exporter " + exporterId);
+            plugin.debugLog("Found " + filterItems.size() + " filter items for exporter " + exporterId);
             
             for (ItemStack item : filterItems) {
-                plugin.getLogger().info("DEBUG: Processing filter item: " + item.getType() + " with meta: " + (item.hasItemMeta() ? "yes" : "no"));
+                plugin.debugLog("Processing filter item: " + item.getType() + " with meta: " + (item.hasItemMeta() ? "yes" : "no"));
                 
                 if (item.hasItemMeta() && item.getItemMeta().hasDisplayName()) {
                     Component displayName = item.getItemMeta().displayName();
@@ -722,18 +767,18 @@ public class ExporterManager {
                     
                     // Use PlainTextComponentSerializer for reliable text extraction
                     String nameText = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(displayName);
-                    plugin.getLogger().info("DEBUG: Filter item display name: '" + nameText + "'");
+                    plugin.debugLog("Filter item display name: '" + nameText + "'");
                     
                     if ("BREWING_FUEL_ENABLED".equals(nameText)) {
                         filters.fuelEnabled = true;
-                        plugin.getLogger().info("DEBUG: Found fuel enabled marker");
+                        plugin.debugLog("Found fuel enabled marker");
                     } else if ("BREWING_INGREDIENT".equals(nameText)) {
                         filters.ingredientFilter = item.clone();
                         // Remove the marker name to get the actual item
                         ItemMeta meta = filters.ingredientFilter.getItemMeta();
                         meta.displayName(null);
                         filters.ingredientFilter.setItemMeta(meta);
-                        plugin.getLogger().info("DEBUG: Found ingredient filter: " + filters.ingredientFilter.getType());
+                        plugin.debugLog("Found ingredient filter: " + filters.ingredientFilter.getType());
                     } else if (nameText.startsWith("BREWING_BOTTLE_")) {
                         try {
                             int bottleIndex = Integer.parseInt(nameText.substring("BREWING_BOTTLE_".length()));
@@ -743,7 +788,7 @@ public class ExporterManager {
                                 ItemMeta meta = filters.bottleFilters[bottleIndex].getItemMeta();
                                 meta.displayName(null);
                                 filters.bottleFilters[bottleIndex].setItemMeta(meta);
-                                plugin.getLogger().info("DEBUG: Found bottle filter " + bottleIndex + ": " + filters.bottleFilters[bottleIndex].getType());
+                                plugin.debugLog("Found bottle filter " + bottleIndex + ": " + filters.bottleFilters[bottleIndex].getType());
                             }
                         } catch (NumberFormatException e) {
                             // Ignore invalid bottle indices
@@ -921,13 +966,13 @@ public class ExporterManager {
         try {
             Block attachedBlock = null;
 
-            plugin.getLogger().info("DEBUG: Checking target for exporter at " + exporterBlock.getLocation() + 
+            plugin.debugLog("Checking target for exporter at " + exporterBlock.getLocation() + 
                                   " of type " + exporterBlock.getType());
 
             if (exporterBlock.getType() == Material.PLAYER_HEAD) {
                 // Floor mounted head - check block below
                 attachedBlock = exporterBlock.getRelative(BlockFace.DOWN);
-                plugin.getLogger().info("DEBUG: Floor mounted head, checking block below: " + 
+                plugin.debugLog("Floor mounted head, checking block below: " + 
                                       attachedBlock.getType() + " at " + attachedBlock.getLocation());
             } else if (exporterBlock.getType() == Material.PLAYER_WALL_HEAD) {
                 // Wall mounted head - check block it's attached to
@@ -935,7 +980,7 @@ public class ExporterManager {
                 BlockFace facing = directional.getFacing();
                 // The block the wall head is attached to is in the opposite direction
                 attachedBlock = exporterBlock.getRelative(facing.getOppositeFace());
-                plugin.getLogger().info("DEBUG: Wall mounted head facing " + facing + 
+                plugin.debugLog(" Wall mounted head facing " + facing + 
                                       ", checking attached block: " + attachedBlock.getType() + 
                                       " at " + attachedBlock.getLocation());
             }
@@ -943,18 +988,18 @@ public class ExporterManager {
             // Check if the attached block is a container
             if (attachedBlock != null) {
                 boolean isContainer = attachedBlock.getState() instanceof Container;
-                plugin.getLogger().info("DEBUG: Attached block " + attachedBlock.getType() + 
+                plugin.debugLog("Attached block " + attachedBlock.getType() + 
                                       " is container: " + isContainer);
                 
                 if (isContainer) {
                     Container container = (Container) attachedBlock.getState();
-                    plugin.getLogger().info("DEBUG: Returning container: " + container.getClass().getSimpleName());
+                    plugin.debugLog("Returning container: " + container.getClass().getSimpleName());
                     return container;
                 } else {
-                    plugin.getLogger().info("DEBUG: Attached block is not a container, returning null");
+                    plugin.debugLog("Attached block is not a container, returning null");
                 }
             } else {
-                plugin.getLogger().warning("DEBUG: Could not determine attached block!");
+                plugin.debugLog("Could not determine attached block!");
             }
 
         } catch (Exception e) {
@@ -962,7 +1007,7 @@ public class ExporterManager {
             plugin.getLogger().warning("Stack trace: " + java.util.Arrays.toString(e.getStackTrace()));
         }
 
-        plugin.getLogger().info("DEBUG: Returning null - no valid target container");
+        plugin.debugLog(" Returning null - no valid target container");
         return null;
     }
 
@@ -1036,7 +1081,7 @@ public class ExporterManager {
                     "UPDATE exporters SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE exporter_id = ?",
                     enabled, exporterId);
 
-            plugin.getLogger().info("Exporter " + exporterId + " set to " + (enabled ? "enabled" : "disabled"));
+            plugin.debugLog("Exporter " + exporterId + " set to " + (enabled ? "enabled" : "disabled"));
         }
     }
 
@@ -1233,7 +1278,7 @@ public class ExporterManager {
             plugin.getLogger().severe("Error loading exporter filters: " + e.getMessage());
         }
 
-        plugin.getLogger().info("Loaded " + items.size() + " filter items for exporter " + exporterId);
+        plugin.debugLog("Loaded " + items.size() + " filter items for exporter " + exporterId);
         return items;
     }
 
@@ -1249,7 +1294,7 @@ public class ExporterManager {
      * This should be called when a network is unregistered/dissolved
      */
     public void handleNetworkInvalidated(String networkId) {
-        plugin.getLogger().info("Handling exporter disconnections for invalidated network: " + networkId);
+        plugin.debugLog("Handling exporter disconnections for invalidated network: " + networkId);
 
         int disconnectedCount = 0;
         for (ExporterData exporter : activeExporters.values()) {
@@ -1266,7 +1311,7 @@ public class ExporterManager {
                     disconnectedData.filterItems.addAll(exporter.filterItems); // Preserve filters
                     activeExporters.put(exporter.exporterId, disconnectedData);
 
-                    plugin.getLogger().info("Disconnected exporter " + exporter.exporterId + " from invalidated network " + networkId);
+                    plugin.debugLog("Disconnected exporter " + exporter.exporterId + " from invalidated network " + networkId);
                     disconnectedCount++;
 
                 } catch (SQLException e) {
@@ -1276,7 +1321,7 @@ public class ExporterManager {
         }
 
         if (disconnectedCount > 0) {
-            plugin.getLogger().info("Disconnected " + disconnectedCount + " exporters from invalidated network " + networkId);
+            plugin.debugLog("Disconnected " + disconnectedCount + " exporters from invalidated network " + networkId);
         }
     }
 
@@ -1312,7 +1357,7 @@ public class ExporterManager {
                         updatedData.filterItems.addAll(exporter.filterItems);
                         activeExporters.put(exporter.exporterId, updatedData);
 
-                        plugin.getLogger().info("Reconnected exporter " + exporter.exporterId + " to network " + newNetworkId);
+                        plugin.debugLog("Reconnected exporter " + exporter.exporterId + " to network " + newNetworkId);
                         reconnectedCount++;
 
                     } catch (SQLException e) {
@@ -1344,7 +1389,7 @@ public class ExporterManager {
                     // Auto-disable exporters that are enabled but physically disconnected
                     try {
                         toggleExporter(exporter.exporterId, false);
-                        plugin.getLogger().info("Auto-disabled exporter " + exporter.exporterId + " during periodic validation - physically disconnected");
+                        plugin.debugLog("Auto-disabled exporter " + exporter.exporterId + " during periodic validation - physically disconnected");
                         refreshExporterGUIs(exporter.exporterId);
                         autoDisabledCount++;
                     } catch (SQLException e) {
@@ -1355,7 +1400,7 @@ public class ExporterManager {
         }
 
         if (reconnectedCount > 0 || disconnectedCount > 0 || autoDisabledCount > 0) {
-            plugin.getLogger().info("Exporter network assignment update: " + reconnectedCount + " reconnected, " +
+            plugin.debugLog("Exporter network assignment update: " + reconnectedCount + " reconnected, " +
                     disconnectedCount + " disconnected, " + autoDisabledCount + " auto-disabled");
         }
     }

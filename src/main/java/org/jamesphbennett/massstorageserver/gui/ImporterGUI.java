@@ -83,7 +83,7 @@ public class ImporterGUI implements Listener {
 
             if (attachedBlock != null && attachedBlock.getType() == Material.BREWING_STAND) {
                 isBrewingStandTarget = true;
-                plugin.getLogger().info("Detected brewing stand target for importer at " + importerLocation);
+                plugin.debugLog("Detected brewing stand target for importer at " + importerLocation);
             }
         } catch (Exception e) {
             plugin.getLogger().warning("Error detecting importer target type: " + e.getMessage());

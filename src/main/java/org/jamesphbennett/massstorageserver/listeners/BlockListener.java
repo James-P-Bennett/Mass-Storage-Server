@@ -247,12 +247,15 @@ public class BlockListener implements Listener {
                     // Check if any drive bay contents were restored
                     boolean hasRestoredContent = plugin.getDisksManager().checkForRestoredContent(network.getDriveBays());
 
-                    player.sendMessage(Component.text("Connected to network with " +
-                            network.getDriveBays().size() + " drive bay(s) and " +
-                            network.getTerminals().size() + " terminal(s).", NamedTextColor.GREEN));
+                    // Only show connection message in debug mode
+                    if (plugin.getConfigManager().isDebugMode()) {
+                        player.sendMessage(Component.text("Connected to network with " +
+                                network.getDriveBays().size() + " drive bay(s) and " +
+                                network.getTerminals().size() + " terminal(s).", NamedTextColor.GREEN));
+                    }
 
-                    // Show restoration message if items were restored
-                    if (hasRestoredContent) {
+                    // Show restoration message only in debug mode - this happens frequently during network building
+                    if (hasRestoredContent && plugin.getConfigManager().isDebugMode()) {
                         plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
                             player.sendMessage(Component.text("Drive bay contents have been restored!", NamedTextColor.AQUA));
                             player.sendMessage(Component.text("Check your terminals to see restored items.", NamedTextColor.YELLOW));
@@ -262,7 +265,7 @@ public class BlockListener implements Listener {
                     if (itemManager.isStorageServer(item)) {
                         player.sendMessage(Component.text("Storage Server requires Drive Bays and Terminals to form a network.", NamedTextColor.YELLOW));
                     } else if (itemManager.isNetworkCable(item)) {
-                        player.sendMessage(Component.text("Cable placed. Connect to network blocks to extend your network.", NamedTextColor.YELLOW));
+                        // Remove cable placement message - too spammy during network construction
                     } else {
                         player.sendMessage(Component.text("This block needs to be connected to a Storage Server to function.", NamedTextColor.YELLOW));
                     }
@@ -406,7 +409,7 @@ public class BlockListener implements Listener {
                                         plugin.getGUIManager().refreshNetworkTerminals(newNetworkId);
                                     }
                                     
-                                    plugin.getLogger().info("Detected network segment with " + updatedNetwork.getAllBlocks().size() + " blocks and " + updatedNetwork.getNetworkCables().size() + " cables");
+                                    plugin.debugLog("Detected network segment with " + updatedNetwork.getAllBlocks().size() + " blocks and " + updatedNetwork.getNetworkCables().size() + " cables");
                                 }
                             }
                         }
@@ -818,7 +821,7 @@ public class BlockListener implements Listener {
                         
                         int updated = stmt.executeUpdate();
                         if (updated > 0) {
-                            plugin.getLogger().info("Updated " + updated + " drive bay slots to network " + networkId + " at " + driveBayLoc);
+                            plugin.debugLog("Updated " + updated + " drive bay slots to network " + networkId + " at " + driveBayLoc);
                         }
                     }
                 }

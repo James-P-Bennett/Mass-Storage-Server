@@ -175,9 +175,9 @@ public class DriveBayGUI implements Listener {
             }
 
             if (foundAnyDisks) {
-                plugin.getLogger().info("Loaded drives for drive bay at " + driveBayLocation + " (network: " + networkId + ")");
+                plugin.debugLog("Loaded drives for drive bay at " + driveBayLocation + " (network: " + networkId + ")");
             } else {
-                plugin.getLogger().info("No drives found for drive bay at " + driveBayLocation + " (network: " + networkId + ")");
+                plugin.debugLog("No drives found for drive bay at " + driveBayLocation + " (network: " + networkId + ")");
             }
 
             stmt.close();
@@ -486,7 +486,7 @@ public class DriveBayGUI implements Listener {
 
                     plugin.getLogger().info("Created new disk record for ID: " + diskId + " with tier: " + tier);
                 } else {
-                    plugin.getLogger().info("Found existing disk record for ID: " + diskId + " by " + existingCrafterName + " (tier: " + existingTier + ")");
+                    plugin.debugLog("Found existing disk record for ID: " + diskId + " by " + existingCrafterName + " (tier: " + existingTier + ")");
                 }
 
                 try (PreparedStatement conflictCheck = conn.prepareStatement(
@@ -530,7 +530,7 @@ public class DriveBayGUI implements Listener {
                         if (rowsUpdated == 0) {
                             throw new SQLException("Failed to update disk network association - disk not found");
                         }
-                        plugin.getLogger().info("Associated disk " + diskId + " with valid network " + networkId);
+                        plugin.debugLog("Associated disk " + diskId + " with valid network " + networkId);
                     }
                 } else if (isOrphanedNetwork) {
                     plugin.getLogger().info("Disk " + diskId + " placed in orphaned network, preserving data for potential restoration");
@@ -548,13 +548,13 @@ public class DriveBayGUI implements Listener {
 
             if (isNetworkValid()) {
                 plugin.getGUIManager().refreshNetworkTerminals(networkId);
-                plugin.getLogger().info("Refreshed terminals for valid network " + networkId + " after disk placement");
+                plugin.debugLog("Refreshed terminals for valid network " + networkId + " after disk placement");
             } else {
                 plugin.getLogger().info("Network " + (networkId != null ? networkId : "null") + " is not valid, skipping terminal refresh");
             }
 
             player.sendMessage(Component.text("Storage disk inserted successfully!", NamedTextColor.GREEN));
-            plugin.getLogger().info("Successfully placed disk " + diskId + " in slot " + slotIndex);
+            plugin.debugLog("Successfully placed disk " + diskId + " in slot " + slotIndex);
             return true;
         } catch (Exception e) {
             player.sendMessage(Component.text("Error inserting disk: " + e.getMessage(), NamedTextColor.RED));

@@ -249,7 +249,7 @@ public class TerminalGUI implements Listener {
 
             updateDisplayedItems();
 
-            plugin.getLogger().info("Loaded " + allItems.size() + " total items" +
+            plugin.debugLog("Loaded " + allItems.size() + " total items" +
                     (isSearchActive ? ", filtered to " + filteredItems.size() + " results" : "") +
                     ", sorted by " + (isQuantitySortActive ? "quantity" : "alphabetical"));
         } catch (Exception e) {
@@ -271,11 +271,11 @@ public class TerminalGUI implements Listener {
                 // If quantities are equal, fall back to alphabetical
                 return a.itemStack().getType().name().compareTo(b.itemStack().getType().name());
             });
-            plugin.getLogger().info("Applied quantity sorting (most items first)");
+            plugin.debugLog("Applied quantity sorting (most items first)");
         } else {
             // Sort alphabetically by item type name (default)
             allItems.sort(Comparator.comparing(item -> item.itemStack().getType().name()));
-            plugin.getLogger().info("Applied alphabetical sorting");
+            plugin.debugLog("Applied alphabetical sorting");
         }
     }
 
@@ -548,7 +548,7 @@ public class TerminalGUI implements Listener {
      * Refresh the terminal display
      */
     public void refresh() {
-        plugin.getLogger().info("Refreshing terminal at " + terminalLocation + " for network " + networkId);
+        plugin.debugLog("Refreshing terminal at " + terminalLocation + " for network " + networkId);
         int itemCountBefore = allItems.size();
 
         // Store current search state and sorting mode
@@ -574,7 +574,7 @@ public class TerminalGUI implements Listener {
         }
 
         int itemCountAfter = allItems.size();
-        plugin.getLogger().info("Terminal refresh complete: " + itemCountBefore + " -> " + itemCountAfter + " item types" +
+        plugin.debugLog("Terminal refresh complete: " + itemCountBefore + " -> " + itemCountAfter + " item types" +
                 (wasSearchActive ? " (search preserved: '" + savedSearchTerm + "')" : "") +
                 " (sorting: " + (isQuantitySortActive ? "quantity" : "alphabetical") + ")");
     }

@@ -41,7 +41,7 @@ public class GUIManager {
      */
     public void markNetworkModified(String networkId) {
         modifiedNetworks.add(networkId);
-        plugin.getLogger().info("Marked network " + networkId + " as modified");
+        plugin.debugLog("Marked network " + networkId + " as modified");
     }
 
     /**
@@ -56,7 +56,7 @@ public class GUIManager {
      */
     public void clearNetworkModified(String networkId) {
         modifiedNetworks.remove(networkId);
-        plugin.getLogger().info("Cleared modified flag for network " + networkId);
+        plugin.debugLog("Cleared modified flag for network " + networkId);
     }
 
     /**
@@ -70,7 +70,13 @@ public class GUIManager {
                 return;
             }
 
-            plugin.getLogger().info("Opening exporter GUI for player " + player.getName() +
+            // Check if exporter is still physically connected to its network
+            if (!plugin.getExporterManager().isExporterConnectedToItsNetwork(exporterId)) {
+                player.sendMessage(Component.text("This exporter is not connected to its assigned network.", NamedTextColor.RED));
+                return;
+            }
+
+            plugin.debugLog("Opening exporter GUI for player " + player.getName() +
                     " at " + exporterLocation + " with exporter ID: " + exporterId);
 
             // Detect target container type and open appropriate GUI
@@ -79,14 +85,14 @@ public class GUIManager {
             
             if (targetContainer != null && isFurnaceType(targetContainer)) {
                 // Open furnace-specific GUI
-                plugin.getLogger().info("Detected furnace target - opening FurnaceExporterGUI");
+                plugin.debugLog("Detected furnace target - opening FurnaceExporterGUI");
                 FurnaceExporterGUI furnaceGUI = new FurnaceExporterGUI(plugin, exporterLocation, exporterId, networkId);
                 furnaceGUI.open(player);
                 gui = furnaceGUI;
                 playerCurrentGUI.put(player.getUniqueId(), "FURNACE_EXPORTER");
             } else {
                 // Open generic exporter GUI
-                plugin.getLogger().info("Using generic ExporterGUI");
+                plugin.debugLog("Using generic ExporterGUI");
                 ExporterGUI exporterGUI = new ExporterGUI(plugin, exporterLocation, exporterId, networkId);
                 exporterGUI.open(player);
                 gui = exporterGUI;
@@ -96,7 +102,7 @@ public class GUIManager {
             playerGUINetworkId.put(player.getUniqueId(), networkId);
             playerGUIInstance.put(player.getUniqueId(), gui);
 
-            plugin.getLogger().info("Successfully opened exporter GUI for player " + player.getName());
+            plugin.debugLog("Successfully opened exporter GUI for player " + player.getName());
         } catch (Exception e) {
             player.sendMessage(Component.text("Error opening Exporter GUI: " + e.getMessage(), NamedTextColor.RED));
             plugin.getLogger().severe("Error opening Exporter GUI: " + e.getMessage());
@@ -115,7 +121,13 @@ public class GUIManager {
                 return;
             }
 
-            plugin.getLogger().info("Opening importer GUI for player " + player.getName() +
+            // Check if importer is still physically connected to any network
+            if (!plugin.getImporterManager().isImporterConnectedToAnyNetwork(importerId)) {
+                player.sendMessage(Component.text("This importer is not connected to any network.", NamedTextColor.RED));
+                return;
+            }
+
+            plugin.debugLog("Opening importer GUI for player " + player.getName() +
                     " at " + importerLocation + " with importer ID: " + importerId);
 
             // For importers, we use the same ImporterGUI for all container types
@@ -128,7 +140,7 @@ public class GUIManager {
             playerGUINetworkId.put(player.getUniqueId(), networkId);
             playerGUIInstance.put(player.getUniqueId(), importerGUI);
 
-            plugin.getLogger().info("Successfully opened importer GUI for player " + player.getName());
+            plugin.debugLog("Successfully opened importer GUI for player " + player.getName());
         } catch (Exception e) {
             player.sendMessage(Component.text("Error opening Importer GUI: " + e.getMessage(), NamedTextColor.RED));
             plugin.getLogger().severe("Error opening Importer GUI: " + e.getMessage());
@@ -183,7 +195,7 @@ public class GUIManager {
         try {
             // Don't validate network - allow access to drive bays regardless of network status
             // The drive bay GUI will show the network status and allow disk management
-            plugin.getLogger().info("Opening drive bay GUI for player " + player.getName() +
+            plugin.debugLog("Opening drive bay GUI for player " + player.getName() +
                     " at " + driveBayLocation + " with network ID: " + networkId);
 
             DriveBayGUI gui = new DriveBayGUI(plugin, driveBayLocation, networkId);
@@ -195,7 +207,7 @@ public class GUIManager {
             }
             playerGUIInstance.put(player.getUniqueId(), gui);
 
-            plugin.getLogger().info("Successfully opened drive bay GUI for player " + player.getName());
+            plugin.debugLog("Successfully opened drive bay GUI for player " + player.getName());
         } catch (Exception e) {
             player.sendMessage(Component.text("Error opening Drive Bay GUI: " + e.getMessage(), NamedTextColor.RED));
             plugin.getLogger().severe("Error opening Drive Bay GUI: " + e.getMessage());
@@ -224,10 +236,10 @@ public class GUIManager {
         String key = getTerminalKey(terminalLocation);
         if (searchTerm == null || searchTerm.trim().isEmpty()) {
             terminalSearchTerms.remove(key);
-            plugin.getLogger().info("Cleared search term for terminal at " + key);
+            plugin.debugLog("Cleared search term for terminal at " + key);
         } else {
             terminalSearchTerms.put(key, searchTerm.trim());
-            plugin.getLogger().info("Saved search term '" + searchTerm + "' for terminal at " + key);
+            plugin.debugLog("Saved search term '" + searchTerm + "' for terminal at " + key);
         }
     }
 
@@ -245,10 +257,10 @@ public class GUIManager {
         String key = getTerminalKey(terminalLocation);
         if (quantitySort) {
             terminalQuantitySort.put(key, true);
-            plugin.getLogger().info("Saved quantity sort setting for terminal at " + key);
+            plugin.debugLog("Saved quantity sort setting for terminal at " + key);
         } else {
             terminalQuantitySort.remove(key);
-            plugin.getLogger().info("Cleared quantity sort setting for terminal at " + key + " (using default alphabetical)");
+            plugin.debugLog("Cleared quantity sort setting for terminal at " + key + " (using default alphabetical)");
         }
     }
 
@@ -257,7 +269,7 @@ public class GUIManager {
             // Cancel any pending search input when opening a terminal
             if (isAwaitingSearchInput(player)) {
                 cancelSearchInput(player);
-                plugin.getLogger().info("Cancelled pending search input for player " + player.getName() + " when opening terminal");
+                plugin.debugLog("Cancelled pending search input for player " + player.getName() + " when opening terminal");
             }
 
             // Validate network is still valid
@@ -270,7 +282,7 @@ public class GUIManager {
 
             // If network was modified while terminal was closed, refresh immediately
             if (isNetworkModified(networkId)) {
-                plugin.getLogger().info("Network " + networkId + " was modified, refreshing terminal on open");
+                plugin.debugLog("Network " + networkId + " was modified, refreshing terminal on open");
                 gui.refresh();
                 clearNetworkModified(networkId);
             }
@@ -281,7 +293,7 @@ public class GUIManager {
             playerGUINetworkId.put(player.getUniqueId(), networkId);
             playerGUIInstance.put(player.getUniqueId(), gui);
 
-            plugin.getLogger().info("Opened terminal GUI for player " + player.getName() + " in network " + networkId);
+            plugin.debugLog("Opened terminal GUI for player " + player.getName() + " in network " + networkId);
         } catch (Exception e) {
             player.sendMessage(Component.text("Error opening Terminal GUI: " + e.getMessage(), NamedTextColor.RED));
             plugin.getLogger().severe("Error opening Terminal GUI: " + e.getMessage());
@@ -320,7 +332,7 @@ public class GUIManager {
         timeoutTask.runTaskLater(plugin, SEARCH_TIMEOUT_SECONDS * 20L);
         searchTimeoutTasks.put(playerId, timeoutTask);
 
-        plugin.getLogger().info("Registered player " + player.getName() + " for search input with " + SEARCH_TIMEOUT_SECONDS + "s timeout");
+        plugin.debugLog("Registered player " + player.getName() + " for search input with " + SEARCH_TIMEOUT_SECONDS + "s timeout");
     }
 
     /**
@@ -340,7 +352,7 @@ public class GUIManager {
             timeoutTask.cancel();
         }
 
-        plugin.getLogger().info("Received search input from player " + player.getName() + ": '" + message + "'");
+        plugin.debugLog("Received search input from player " + player.getName() + ": '" + message + "'");
 
         // Save search term to the specific terminal location
         Location terminalLocation = terminalGUI.getTerminalLocation();
@@ -382,7 +394,7 @@ public class GUIManager {
             if (timeoutTask != null) {
                 timeoutTask.cancel();
             }
-            plugin.getLogger().info("Cancelled search input for player " + player.getName());
+            plugin.debugLog("Cancelled search input for player " + player.getName());
         }
     }
 
@@ -398,7 +410,7 @@ public class GUIManager {
         cancelSearchInput(player);
 
         if (guiType != null) {
-            plugin.getLogger().info("Closed " + guiType + " GUI for player " + player.getName() +
+            plugin.debugLog("Closed " + guiType + " GUI for player " + player.getName() +
                     (networkId != null ? " (was in network " + networkId + ")" : ""));
         }
     }
@@ -444,7 +456,7 @@ public class GUIManager {
      * Refresh all terminal GUIs for a specific network (COMPREHENSIVE VERSION)
      */
     public void refreshNetworkTerminals(String networkId) {
-        plugin.getLogger().info("Starting comprehensive refresh of terminals for network: " + networkId);
+        plugin.debugLog("Starting comprehensive refresh of terminals for network: " + networkId);
         int refreshCount = 0;
         List<Player> playersToClose = new ArrayList<>();
 
@@ -464,14 +476,14 @@ public class GUIManager {
                         if (!networkValid) {
                             // Network is invalid, close the terminal
                             playersToClose.add(player);
-                            plugin.getLogger().info("Closing terminal for player " + player.getName() + " - network invalid");
+                            plugin.debugLog("Closing terminal for player " + player.getName() + " - network invalid");
                         } else {
                             // Network is valid, refresh the terminal
                             Object guiInstance = playerGUIInstance.get(entry.getKey());
                             if (guiInstance instanceof TerminalGUI terminalGUI) {
                                 terminalGUI.refresh();
                                 refreshCount++;
-                                plugin.getLogger().info("Refreshed terminal for player " + player.getName() + " in network " + networkId);
+                                plugin.debugLog("Refreshed terminal for player " + player.getName() + " in network " + networkId);
                             }
                         }
                     }
@@ -497,7 +509,7 @@ public class GUIManager {
             clearNetworkModified(networkId);
         }
 
-        plugin.getLogger().info("Refreshed " + refreshCount + " terminals for network " + networkId +
+        plugin.debugLog("Refreshed " + refreshCount + " terminals for network " + networkId +
                 (!playersToClose.isEmpty() ? " (closed " + playersToClose.size() + " invalid terminals)" : ""));
     }
 
@@ -506,7 +518,7 @@ public class GUIManager {
      * This should be called from NetworkManager when a network is unregistered
      */
     public void handleNetworkInvalidated(String networkId) {
-        plugin.getLogger().info("Handling network invalidation for: " + networkId);
+        plugin.debugLog("Handling network invalidation for: " + networkId);
 
         List<Player> terminalsToClose = new ArrayList<>();
         List<Player> driveBaysToNotify = new ArrayList<>();
@@ -548,7 +560,7 @@ public class GUIManager {
         // Clear the modified flag for this network
         clearNetworkModified(networkId);
 
-        plugin.getLogger().info("Closed " + terminalsToClose.size() + " terminal GUIs and notified " +
+        plugin.debugLog("Closed " + terminalsToClose.size() + " terminal GUIs and notified " +
                 driveBaysToNotify.size() + " drive bay users for invalidated network " + networkId);
     }
 
@@ -594,14 +606,14 @@ public class GUIManager {
         }
 
         if (!terminalsToClose.isEmpty()) {
-            plugin.getLogger().info("Validated and closed " + terminalsToClose.size() + " invalid terminal GUIs");
+            plugin.debugLog("Validated and closed " + terminalsToClose.size() + " invalid terminal GUIs");
         }
     }
     /**
      * Refresh exporter GUIs for a specific exporter
      */
     public void refreshExporterGUIs(String exporterId) {
-        plugin.getLogger().info("Refreshing exporter GUIs for exporter " + exporterId);
+        plugin.debugLog("Refreshing exporter GUIs for exporter " + exporterId);
 
         // Find any players with the exporter GUI open for this specific exporter
         for (Map.Entry<UUID, Object> entry : playerGUIInstance.entrySet()) {
@@ -613,12 +625,12 @@ public class GUIManager {
                 if (exporterId.equals(exporterGUI.getExporterId())) {
                     Player player = plugin.getServer().getPlayer(playerId);
                     if (player != null && player.isOnline()) {
-                        plugin.getLogger().info("Refreshing exporter GUI for player " + player.getName());
+                        plugin.debugLog("Refreshing exporter GUI for player " + player.getName());
 
                         // Call the public setupGUI() method to refresh the display
                         exporterGUI.setupGUI();
 
-                        plugin.getLogger().info("Successfully refreshed exporter GUI for player " + player.getName());
+                        plugin.debugLog("Successfully refreshed exporter GUI for player " + player.getName());
                     }
                 }
             }
@@ -629,7 +641,7 @@ public class GUIManager {
      * Refresh all open importer GUIs for a specific importer
      */
     public void refreshImporterGUIs(String importerId) {
-        plugin.getLogger().info("Refreshing importer GUIs for importer " + importerId);
+        plugin.debugLog("Refreshing importer GUIs for importer " + importerId);
 
         // Find any players with the importer GUI open for this specific importer
         for (Map.Entry<UUID, Object> entry : playerGUIInstance.entrySet()) {
@@ -641,12 +653,12 @@ public class GUIManager {
                 if (importerId.equals(importerGUI.getImporterId())) {
                     Player player = plugin.getServer().getPlayer(playerId);
                     if (player != null && player.isOnline()) {
-                        plugin.getLogger().info("Refreshing importer GUI for player " + player.getName());
+                        plugin.debugLog("Refreshing importer GUI for player " + player.getName());
 
                         // Call the public setupGUI() method to refresh the display
                         importerGUI.setupGUI();
 
-                        plugin.getLogger().info("Successfully refreshed importer GUI for player " + player.getName());
+                        plugin.debugLog("Successfully refreshed importer GUI for player " + player.getName());
                     }
                 }
             }

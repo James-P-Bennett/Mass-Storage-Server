@@ -29,6 +29,9 @@ public class ConfigManager {
     private boolean requireUsePermission;
     private boolean requireCraftPermission;
 
+    // Debug settings
+    private boolean debugMode;
+
     // Recipe configuration values
     private boolean recipesEnabled;
     private boolean showUnlockMessages;
@@ -145,6 +148,7 @@ public class ConfigManager {
     }
 
     private void loadDebugSettings() {
+        debugMode = config.getBoolean("debug.enabled", false);
     }
 
     // Getter methods for configuration values
@@ -195,6 +199,10 @@ public class ConfigManager {
 
     public boolean isRequireCraftPermission() {
         return requireCraftPermission;
+    }
+
+    public boolean isDebugMode() {
+        return debugMode;
     }
 
     // Recipe configuration getters

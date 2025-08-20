@@ -22,7 +22,7 @@ public class DisksManager {
      * Drop drive bay contents when the drive bay is part of a network
      */
     public void dropDriveBayContents(Location location, String networkId) {
-        plugin.getLogger().info("Dropping drive bay contents at " + location + " for network " + networkId);
+        plugin.debugLog("Dropping drive bay contents at " + location + " for network " + networkId);
 
         try (Connection conn = plugin.getDatabaseManager().getConnection();
              PreparedStatement stmt = conn.prepareStatement(
@@ -40,7 +40,7 @@ public class DisksManager {
                 }
             }
 
-            plugin.getLogger().info("Found " + diskIds.size() + " disks to drop from drive bay");
+            plugin.debugLog("Found " + diskIds.size() + " disks to drop from drive bay");
 
             // Drop each disk and remove from database
             for (String diskId : diskIds) {
@@ -111,7 +111,7 @@ public class DisksManager {
                 }
             }
 
-            plugin.getLogger().info("Found " + diskIds.size() + " disks to drop from networkless drive bay");
+            plugin.debugLog("Found " + diskIds.size() + " disks to drop from networkless drive bay");
 
             // Drop each disk and remove from database
             for (String diskId : diskIds) {

@@ -83,7 +83,7 @@ public class ExporterGUI implements Listener {
 
             if (attachedBlock != null && attachedBlock.getType() == Material.BREWING_STAND) {
                 isBrewingStandTarget = true;
-                plugin.getLogger().info("Detected brewing stand target for exporter at " + exporterLocation);
+                plugin.debugLog("Detected brewing stand target for exporter at " + exporterLocation);
             }
         } catch (Exception e) {
             plugin.getLogger().warning("Error detecting exporter target type: " + e.getMessage());

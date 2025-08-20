@@ -64,10 +64,10 @@ public class ExplosionManager {
                 }
 
                 if (networkId != null) {
-                    plugin.getLogger().info("Dropping drive bay contents at " + driveBayLoc + " (network: " + networkId + ") due to explosion");
+                    plugin.debugLog("Dropping drive bay contents at " + driveBayLoc + " (network: " + networkId + ") due to explosion");
                     plugin.getDisksManager().dropDriveBayContents(driveBayLoc, networkId);
                 } else {
-                    plugin.getLogger().info("Drive bay at " + driveBayLoc + " has no network association, checking for orphaned contents");
+                    plugin.debugLog("Drive bay at " + driveBayLoc + " has no network association, checking for orphaned contents");
                     plugin.getDisksManager().dropDriveBayContentsWithoutNetwork(driveBayLoc);
                 }
             } catch (Exception e) {

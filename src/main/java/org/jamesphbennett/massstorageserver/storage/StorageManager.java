@@ -34,14 +34,14 @@ public class StorageManager {
         return plugin.getNetworkManager().withNetworkLock(networkId, () -> {
             List<ItemStack> remainders = new ArrayList<>();
 
-            plugin.getLogger().info("Starting storage operation for " + items.size() + " item stacks in network " + networkId);
+            plugin.debugLog("Starting storage operation for " + items.size() + " item stacks in network " + networkId);
 
             try {
                 DatabaseManager.DatabaseTransaction transaction = (Connection conn) -> {
                     // Get all storage disks in the network
                     List<String> diskIds = getNetworkDiskIds(conn, networkId);
 
-                    plugin.getLogger().info("Found " + diskIds.size() + " storage disks in network " + networkId);
+                    plugin.debugLog("Found " + diskIds.size() + " storage disks in network " + networkId);
 
                     if (diskIds.isEmpty()) {
                         plugin.getLogger().warning("No storage disks found in network " + networkId);
@@ -53,7 +53,7 @@ public class StorageManager {
                     for (String diskId : diskIds) {
                         int availableCells = getAvailableCells(conn, diskId);
                         int maxCells = getMaxCells(conn, diskId);
-                        plugin.getLogger().info("Disk " + diskId + ": " + availableCells + "/" + maxCells + " cells available");
+                        plugin.debugLog("Disk " + diskId + ": " + availableCells + "/" + maxCells + " cells available");
                     }
 
                     for (ItemStack item : items) {
@@ -63,7 +63,7 @@ public class StorageManager {
                             continue;
                         }
 
-                        plugin.getLogger().info("Processing " + item.getAmount() + " " + item.getType());
+                        plugin.debugLog("Processing " + item.getAmount() + " " + item.getType());
                         ItemStack remainder = storeItemInNetwork(conn, diskIds, item);
                         if (remainder != null && remainder.getAmount() > 0) {
                             plugin.getLogger().warning("Could not store " + remainder.getAmount() + " " + remainder.getType());
@@ -78,12 +78,12 @@ public class StorageManager {
                     for (String diskId : diskIds) {
                         int availableCells = getAvailableCells(conn, diskId);
                         int maxCells = getMaxCells(conn, diskId);
-                        plugin.getLogger().info("Final disk " + diskId + ": " + availableCells + "/" + maxCells + " cells available");
+                        plugin.debugLog("Final disk " + diskId + ": " + availableCells + "/" + maxCells + " cells available");
                     }
                 };
 
                 plugin.getDatabaseManager().executeTransaction(transaction);
-                plugin.getLogger().info("Storage transaction completed successfully");
+                plugin.debugLog("Storage transaction completed successfully");
 
             } catch (SQLException e) {
                 plugin.getLogger().severe("Storage transaction failed: " + e.getMessage());
@@ -91,7 +91,7 @@ public class StorageManager {
                 throw new RuntimeException("Storage operation failed: " + e.getMessage(), e);
             }
 
-            plugin.getLogger().info("Storage operation complete. " + remainders.size() + " item stacks could not be stored");
+            plugin.debugLog("Storage operation complete. " + remainders.size() + " item stacks could not be stored");
             return remainders;
         });
     }
@@ -135,7 +135,7 @@ public class StorageManager {
                                 int toRetrieve = Math.min(remainingToRetrieve, currentQuantity);
                                 int newQuantity = currentQuantity - toRetrieve;
 
-                                plugin.getLogger().info("Retrieving " + toRetrieve + " from cell " + cellId + " in disk " + diskId +
+                                plugin.debugLog("Retrieving " + toRetrieve + " from cell " + cellId + " in disk " + diskId +
                                         " (cell had " + currentQuantity + ", will have " + newQuantity + ")");
 
                                 // Update this specific cell
@@ -153,7 +153,7 @@ public class StorageManager {
                                         deleteStmt.setInt(1, cellId);
                                         deleteStmt.executeUpdate();
                                     }
-                                    plugin.getLogger().info("Removed empty cell " + cellId + " from disk " + diskId);
+                                    plugin.debugLog("Removed empty cell " + cellId + " from disk " + diskId);
                                 }
 
                                 // Deserialize item and set amount
@@ -171,7 +171,7 @@ public class StorageManager {
                                 int totalAmount = retrievedItems.stream().mapToInt(ItemStack::getAmount).sum();
                                 combinedItem.setAmount(totalAmount);
                                 result[0] = combinedItem;
-                                plugin.getLogger().info("Successfully combined " + retrievedItems.size() + " retrievals into " + totalAmount + " items");
+                                plugin.debugLog("Successfully combined " + retrievedItems.size() + " retrievals into " + totalAmount + " items");
                             }
                         }
                     }
@@ -203,7 +203,7 @@ public class StorageManager {
                 Set<String> connectedDiskIds = getConnectedDiskIdsForNetwork(networkId);
                 
                 if (connectedDiskIds.isEmpty()) {
-                    plugin.getLogger().info("No connected drive bays found for network " + networkId);
+                    plugin.debugLog("No connected drive bays found for network " + networkId);
                     return items;
                 }
 
@@ -232,7 +232,7 @@ public class StorageManager {
                     }
                 }
 
-                plugin.getLogger().info("Found " + items.size() + " consolidated item types from " + connectedDiskIds.size() + " connected disks in network " + networkId);
+                plugin.debugLog("Found " + items.size() + " consolidated item types from " + connectedDiskIds.size() + " connected disks in network " + networkId);
 
             } catch (Exception e) {
                 plugin.getLogger().severe("Error getting network items for " + networkId + ": " + e.getMessage());
@@ -298,7 +298,7 @@ public class StorageManager {
             }
             
             if (connectedDriveBays.isEmpty()) {
-                plugin.getLogger().info("No drive bays detected in current network topology for " + networkId);
+                plugin.debugLog("No drive bays detected in current network topology for " + networkId);
                 return connectedDiskIds;
             }
             
@@ -325,7 +325,7 @@ public class StorageManager {
                 }
             }
             
-            plugin.getLogger().info("Found " + connectedDiskIds.size() + " disks in " + connectedDriveBays.size() + " connected drive bays for network " + networkId);
+            plugin.debugLog("Found " + connectedDiskIds.size() + " disks in " + connectedDriveBays.size() + " connected drive bays for network " + networkId);
             
         } catch (Exception e) {
             plugin.getLogger().severe("Error detecting connected disks for network " + networkId + ": " + e.getMessage());
@@ -341,7 +341,7 @@ public class StorageManager {
         int amountToStore = item.getAmount();
         int maxStackSize = item.getMaxStackSize();
 
-        plugin.getLogger().info("Storing " + amountToStore + " " + item.getType() + " (hash: " + itemHash.substring(0, 8) + "...)");
+        plugin.debugLog("Storing " + amountToStore + " " + item.getType() + " (hash: " + itemHash.substring(0, 8) + "...)");
 
         // PHASE 1: Fill existing partial cells first (most space-efficient)
         for (String diskId : diskIds) {
@@ -349,7 +349,7 @@ public class StorageManager {
 
             // Get the maximum items per cell for this specific disk
             int MAX_ITEMS_PER_CELL = getDiskMaxItemsPerCell(conn, diskId);
-            plugin.getLogger().info("Disk " + diskId + " has capacity of " + MAX_ITEMS_PER_CELL + " items per cell");
+            plugin.debugLog("Disk " + diskId + " has capacity of " + MAX_ITEMS_PER_CELL + " items per cell");
 
             // Get all partial cells for this item type, ordered by quantity DESC (fill fuller cells first)
             try (PreparedStatement stmt = conn.prepareStatement(
@@ -374,7 +374,7 @@ public class StorageManager {
                             }
 
                             amountToStore -= canAdd;
-                            plugin.getLogger().info("Added " + canAdd + " items to existing cell " + cellId + " in disk " + diskId +
+                            plugin.debugLog("Added " + canAdd + " items to existing cell " + cellId + " in disk " + diskId +
                                     " (now " + (currentQuantity + canAdd) + "/" + MAX_ITEMS_PER_CELL + ")");
                         }
                     }
@@ -391,7 +391,7 @@ public class StorageManager {
 
             // Check available cells
             int availableCells = getAvailableCells(conn, diskId);
-            plugin.getLogger().info("Disk " + diskId + " has " + availableCells + " available cells (capacity: " + MAX_ITEMS_PER_CELL + " per cell)");
+            plugin.debugLog("Disk " + diskId + " has " + availableCells + " available cells (capacity: " + MAX_ITEMS_PER_CELL + " per cell)");
 
             while (availableCells > 0 && amountToStore > 0) {
                 int canStore = Math.min(amountToStore, MAX_ITEMS_PER_CELL);
@@ -408,7 +408,7 @@ public class StorageManager {
 
                     amountToStore -= canStore;
                     availableCells--;
-                    plugin.getLogger().info("Created new cell in disk " + diskId + " with " + canStore + " items (" + availableCells + " cells remaining)");
+                    plugin.debugLog("Created new cell in disk " + diskId + " with " + canStore + " items (" + availableCells + " cells remaining)");
 
                 } catch (SQLException e) {
                     plugin.getLogger().severe("Error creating new storage cell in disk " + diskId + ": " + e.getMessage());
@@ -427,7 +427,7 @@ public class StorageManager {
                     int availableCells = getAvailableCells(conn, diskId);
                     int maxCells = getMaxCells(conn, diskId);
                     int maxItemsPerCell = getDiskMaxItemsPerCell(conn, diskId);
-                    plugin.getLogger().info("Disk " + diskId + " final state: " + availableCells + "/" + maxCells +
+                    plugin.debugLog("Disk " + diskId + " final state: " + availableCells + "/" + maxCells +
                             " cells available (" + maxItemsPerCell + " items per cell)");
                 } catch (SQLException e) {
                     plugin.getLogger().warning("Error getting final disk state: " + e.getMessage());
@@ -439,7 +439,7 @@ public class StorageManager {
             return remainder;
         }
 
-        plugin.getLogger().info("Successfully stored all " + item.getAmount() + " items");
+        plugin.debugLog("Successfully stored all " + item.getAmount() + " items");
         return null;
     }
 

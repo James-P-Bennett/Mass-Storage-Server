@@ -161,6 +161,17 @@ public class ImporterManager {
     }
 
     /**
+     * Public method to check if importer is connected to any network (for GUI access control)
+     */
+    public boolean isImporterConnectedToAnyNetwork(String importerId) {
+        ImporterData data = activeImporters.get(importerId);
+        if (data == null) return false;
+        
+        String adjacentNetworkId = findAdjacentNetwork(data.location);
+        return adjacentNetworkId != null;
+    }
+
+    /**
      * Refresh any open importer GUIs for a specific importer
      */
     private void refreshImporterGUIs(String importerId) {
@@ -177,14 +188,15 @@ public class ImporterManager {
      */
     private void processImport(ImporterData importer) {
         try {
-            // Check if importer is physically connected to its network
-            if (isImporterConnectedToNetwork(importer)) {
-                plugin.getLogger().info("Importer " + importer.importerId + " is no longer connected to network " + importer.networkId + " - auto-disabling");
+            // Check if importer is physically connected to any network
+            String adjacentNetworkId = findAdjacentNetwork(importer.location);
+            if (adjacentNetworkId == null) {
+                plugin.debugLog("Importer " + importer.importerId + " is not connected to any network - auto-disabling");
 
                 // AUTO-DISABLE: Set importer as disabled when disconnected
                 try {
                     toggleImporter(importer.importerId, false);
-                    plugin.getLogger().info("Auto-disabled importer " + importer.importerId + " due to network disconnection");
+                    plugin.debugLog("Auto-disabled importer " + importer.importerId + " - not connected to any network");
 
                     // Refresh any open importer GUIs to show disabled status
                     refreshImporterGUIs(importer.importerId);
@@ -194,6 +206,30 @@ public class ImporterManager {
                 }
 
                 return;
+            }
+
+            // If connected to a different network than assigned, update the assignment
+            if (!adjacentNetworkId.equals(importer.networkId)) {
+                plugin.debugLog("Importer " + importer.importerId + " reconnecting from " + importer.networkId + " to " + adjacentNetworkId);
+                try {
+                    // Update database
+                    plugin.getDatabaseManager().executeUpdate(
+                            "UPDATE importers SET network_id = ?, updated_at = CURRENT_TIMESTAMP WHERE importer_id = ?",
+                            adjacentNetworkId, importer.importerId);
+                    
+                    // Update in memory - replace the importer data object
+                    activeImporters.remove(importer.importerId);
+                    ImporterData updatedData = new ImporterData(importer.importerId, adjacentNetworkId, importer.location, importer.enabled);
+                    updatedData.filterItems.addAll(importer.filterItems);
+                    activeImporters.put(importer.importerId, updatedData);
+                    
+                    // Update the reference for the rest of this method
+                    importer = updatedData;
+                    
+                } catch (SQLException e) {
+                    plugin.getLogger().warning("Failed to update importer network assignment: " + e.getMessage());
+                    return;
+                }
             }
 
             // Find the connected inventory
@@ -277,7 +313,7 @@ public class ImporterManager {
 
                 importer.lastImport = System.currentTimeMillis();
                 updateLastImport(importer.importerId);
-                plugin.getLogger().info("Importer " + importer.importerId + " imported " + importedAmount + 
+                plugin.debugLog("Importer " + importer.importerId + " imported " + importedAmount + 
                                       " " + outputItem.getType() + " from furnace output slot");
 
                 // Refresh any open terminals
@@ -333,7 +369,7 @@ public class ImporterManager {
                         brewingInventory.setItem(slot, potionItem);
                     }
 
-                    plugin.getLogger().info("Importer " + importer.importerId + " imported " + importedAmount + 
+                    plugin.debugLog("Importer " + importer.importerId + " imported " + importedAmount + 
                                           " " + potionItem.getType() + " from brewing stand slot " + slot);
                     anyImported = true;
                 }
@@ -403,7 +439,7 @@ public class ImporterManager {
 
                     importer.lastImport = System.currentTimeMillis();
                     updateLastImport(importer.importerId);
-                    plugin.getLogger().info("Importer " + importer.importerId + " imported " + importedAmount + 
+                    plugin.debugLog("Importer " + importer.importerId + " imported " + importedAmount + 
                                           " " + slotItem.getType() + " from slot " + checkIndex);
 
                     // Refresh any open terminals
@@ -427,13 +463,13 @@ public class ImporterManager {
         try {
             Block attachedBlock = null;
 
-            plugin.getLogger().info("DEBUG: Checking target for importer at " + importerBlock.getLocation() + 
+            plugin.debugLog(" Checking target for importer at " + importerBlock.getLocation() + 
                                   " of type " + importerBlock.getType());
 
             if (importerBlock.getType() == Material.PLAYER_HEAD) {
                 // Floor mounted head - check block below
                 attachedBlock = importerBlock.getRelative(BlockFace.DOWN);
-                plugin.getLogger().info("DEBUG: Floor mounted head, checking block below: " + 
+                plugin.debugLog(" Floor mounted head, checking block below: " + 
                                       attachedBlock.getType() + " at " + attachedBlock.getLocation());
             } else if (importerBlock.getType() == Material.PLAYER_WALL_HEAD) {
                 // Wall mounted head - check block it's attached to
@@ -441,7 +477,7 @@ public class ImporterManager {
                 BlockFace facing = directional.getFacing();
                 // The block the wall head is attached to is in the opposite direction
                 attachedBlock = importerBlock.getRelative(facing.getOppositeFace());
-                plugin.getLogger().info("DEBUG: Wall mounted head facing " + facing + 
+                plugin.debugLog(" Wall mounted head facing " + facing + 
                                       ", checking attached block: " + attachedBlock.getType() + 
                                       " at " + attachedBlock.getLocation());
             }
@@ -449,15 +485,15 @@ public class ImporterManager {
             // Check if the attached block is a container
             if (attachedBlock != null) {
                 boolean isContainer = attachedBlock.getState() instanceof Container;
-                plugin.getLogger().info("DEBUG: Attached block " + attachedBlock.getType() + 
+                plugin.debugLog(" Attached block " + attachedBlock.getType() + 
                                       " is container: " + isContainer);
                 
                 if (isContainer) {
                     Container container = (Container) attachedBlock.getState();
-                    plugin.getLogger().info("DEBUG: Returning container: " + container.getClass().getSimpleName());
+                    plugin.debugLog(" Returning container: " + container.getClass().getSimpleName());
                     return container;
                 } else {
-                    plugin.getLogger().info("DEBUG: Attached block is not a container, returning null");
+                    plugin.debugLog(" Attached block is not a container, returning null");
                 }
             } else {
                 plugin.getLogger().warning("DEBUG: Could not determine attached block!");
@@ -468,7 +504,7 @@ public class ImporterManager {
             plugin.getLogger().warning("Stack trace: " + java.util.Arrays.toString(e.getStackTrace()));
         }
 
-        plugin.getLogger().info("DEBUG: Returning null - no valid target container");
+        plugin.debugLog(" Returning null - no valid target container");
         return null;
     }
 
@@ -487,13 +523,13 @@ public class ImporterManager {
                 stmt.setInt(4, location.getBlockX());
                 stmt.setInt(5, location.getBlockY());
                 stmt.setInt(6, location.getBlockZ());
-                stmt.setBoolean(7, true); // Start enabled by default (no filters required)
+                stmt.setBoolean(7, false); // Start disabled by default
                 stmt.executeUpdate();
             }
         });
 
         // Add to active importers
-        ImporterData data = new ImporterData(importerId, networkId, location, true);
+        ImporterData data = new ImporterData(importerId, networkId, location, false);
         activeImporters.put(importerId, data);
         importerCycleIndex.put(importerId, 0);
 
@@ -542,7 +578,7 @@ public class ImporterManager {
                     "UPDATE importers SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE importer_id = ?",
                     enabled, importerId);
 
-            plugin.getLogger().info("Importer " + importerId + " set to " + (enabled ? "enabled" : "disabled"));
+            plugin.debugLog("Importer " + importerId + " set to " + (enabled ? "enabled" : "disabled"));
         }
     }
 
@@ -621,7 +657,6 @@ public class ImporterManager {
             plugin.getLogger().severe("Error loading importer filters: " + e.getMessage());
         }
 
-        plugin.getLogger().info("Loaded " + items.size() + " filter items for importer " + importerId);
         return items;
     }
 
@@ -636,7 +671,7 @@ public class ImporterManager {
      * Handle network invalidation - disconnect importers from invalid networks
      */
     public void handleNetworkInvalidated(String networkId) {
-        plugin.getLogger().info("Handling importer disconnections for invalidated network: " + networkId);
+        plugin.debugLog("Handling importer disconnections for invalidated network: " + networkId);
 
         int disconnectedCount = 0;
         for (ImporterData importer : activeImporters.values()) {
@@ -653,7 +688,7 @@ public class ImporterManager {
                     disconnectedData.filterItems.addAll(importer.filterItems);
                     activeImporters.put(importer.importerId, disconnectedData);
 
-                    plugin.getLogger().info("Disconnected importer " + importer.importerId + " from invalidated network " + networkId);
+                    plugin.debugLog("Disconnected importer " + importer.importerId + " from invalidated network " + networkId);
                     disconnectedCount++;
 
                 } catch (SQLException e) {
@@ -663,7 +698,7 @@ public class ImporterManager {
         }
 
         if (disconnectedCount > 0) {
-            plugin.getLogger().info("Disconnected " + disconnectedCount + " importers from invalidated network " + networkId);
+            plugin.debugLog("Disconnected " + disconnectedCount + " importers from invalidated network " + networkId);
         }
     }
 
@@ -698,7 +733,7 @@ public class ImporterManager {
                         updatedData.filterItems.addAll(importer.filterItems);
                         activeImporters.put(importer.importerId, updatedData);
 
-                        plugin.getLogger().info("Reconnected importer " + importer.importerId + " to network " + newNetworkId);
+                        plugin.debugLog("Reconnected importer " + importer.importerId + " to network " + newNetworkId);
                         reconnectedCount++;
 
                     } catch (SQLException e) {
@@ -717,7 +752,7 @@ public class ImporterManager {
                         disconnectedData.filterItems.addAll(importer.filterItems);
                         activeImporters.put(importer.importerId, disconnectedData);
 
-                        plugin.getLogger().info("Disconnected importer " + importer.importerId + " - no valid network found");
+                        plugin.debugLog("Disconnected importer " + importer.importerId + " - no valid network found");
                         disconnectedCount++;
 
                     } catch (SQLException e) {
@@ -730,7 +765,7 @@ public class ImporterManager {
                     // Auto-disable importers that are enabled but physically disconnected
                     try {
                         toggleImporter(importer.importerId, false);
-                        plugin.getLogger().info("Auto-disabled importer " + importer.importerId + " during periodic validation - physically disconnected");
+                        plugin.debugLog("Auto-disabled importer " + importer.importerId + " during periodic validation - physically disconnected");
                         refreshImporterGUIs(importer.importerId);
                         autoDisabledCount++;
                     } catch (SQLException e) {
@@ -741,7 +776,7 @@ public class ImporterManager {
         }
 
         if (reconnectedCount > 0 || disconnectedCount > 0 || autoDisabledCount > 0) {
-            plugin.getLogger().info("Importer network assignment update: " + reconnectedCount + " reconnected, " +
+            plugin.debugLog("Importer network assignment update: " + reconnectedCount + " reconnected, " +
                     disconnectedCount + " disconnected, " + autoDisabledCount + " auto-disabled");
         }
     }

@@ -18,6 +18,7 @@ import org.bukkit.inventory.ItemStack;
 import org.jamesphbennett.massstorageserver.MassStorageServer;
 import org.jamesphbennett.massstorageserver.managers.ItemManager;
 import org.jamesphbennett.massstorageserver.managers.ExporterManager;
+import org.jamesphbennett.massstorageserver.managers.ImporterManager;
 import org.jamesphbennett.massstorageserver.network.NetworkManager;
 import org.jamesphbennett.massstorageserver.network.NetworkInfo;
 import org.jamesphbennett.massstorageserver.network.CableManager;
@@ -66,8 +67,8 @@ public class BlockListener implements Listener {
             return;
         }
 
-        // Check if it's one of our CUSTOM network blocks, cables, or exporters
-        if (!itemManager.isNetworkBlock(item) && !itemManager.isNetworkCable(item) && !itemManager.isExporter(item)) {
+        // Check if it's one of our CUSTOM network blocks, cables, exporters, or importers
+        if (!itemManager.isNetworkBlock(item) && !itemManager.isNetworkCable(item) && !itemManager.isExporter(item) && !itemManager.isImporter(item)) {
             return;
         }
 
@@ -123,6 +124,53 @@ public class BlockListener implements Listener {
                 return;
             }
             return; // Don't continue to network detection for exporters
+        }
+
+        // Handle importer placement
+        if (itemManager.isImporter(item)) {
+            // Check if importer is being placed against (attached to) an MSS block
+            Block blockAgainst = event.getBlockAgainst();
+            if (isCustomMSSBlock(blockAgainst)) {
+                event.setCancelled(true);
+                player.sendMessage(Component.text("You cannot attach an importer directly to the network!", NamedTextColor.RED));
+                return;
+            }
+
+            // Check if there's a valid network nearby to connect to (optional)
+            String nearbyNetworkId = null;
+            for (Location adjacent : getAdjacentLocations(location)) {
+                if (isCustomNetworkBlock(adjacent.getBlock()) || cableManager.isCustomNetworkCable(adjacent.getBlock()) || isCustomExporter(adjacent.getBlock()) || isCustomImporter(adjacent.getBlock())) {
+                    nearbyNetworkId = networkManager.getNetworkId(adjacent);
+                    if (nearbyNetworkId != null) {
+                        break;
+                    }
+                }
+            }
+
+            // If no network found, use placeholder - importer will remain inactive until connected
+            if (nearbyNetworkId == null) {
+                nearbyNetworkId = "UNCONNECTED";
+                player.sendMessage(Component.text("Importer placed! Connect it to a network to activate.", NamedTextColor.YELLOW));
+            } else {
+                player.sendMessage(Component.text("Importer created successfully! Right-click to configure.", NamedTextColor.GREEN));
+            }
+
+            // Mark as custom block
+            try {
+                markLocationAsCustomBlock(location, "IMPORTER");
+
+                // Create the importer in the manager
+                String importerId = plugin.getImporterManager().createImporter(location, nearbyNetworkId);
+                plugin.getLogger().info("Created importer " + importerId + " for player " + player.getName() + " at " + location +
+                        (nearbyNetworkId.equals("UNCONNECTED") ? " (unconnected)" : " (connected to " + nearbyNetworkId + ")"));
+
+            } catch (Exception e) {
+                player.sendMessage(Component.text("Error creating importer: " + e.getMessage(), NamedTextColor.RED));
+                plugin.getLogger().severe("Error creating importer: " + e.getMessage());
+                event.setCancelled(true);
+                return;
+            }
+            return; // Don't continue to network detection for importers
         }
 
         // Handle network cable placement
@@ -221,6 +269,7 @@ public class BlockListener implements Listener {
                 }
 
                 plugin.getExporterManager().updateExporterNetworkAssignments();
+                plugin.getImporterManager().updateImporterNetworkAssignments();
                 
                 // Refresh terminals for the network (important for reconnections)
                 if (network != null && network.isValid()) {
@@ -245,8 +294,8 @@ public class BlockListener implements Listener {
         Block block = event.getBlock();
         Location location = block.getLocation();
 
-        // Check if it's one of our CUSTOM network blocks, cables, or exporters
-        if (!isCustomNetworkBlockOrCableOrExporter(block)) {
+        // Check if it's one of our CUSTOM network blocks, cables, exporters, or importers
+        if (!isCustomNetworkBlockOrCableOrExporterOrImporter(block)) {
             return;
         }
 
@@ -281,6 +330,34 @@ public class BlockListener implements Listener {
                 return; // Exporters don't affect network topology, so return early
             }
 
+            // Handle importer removal
+            if (isCustomImporter(block)) {
+                try {
+                    // Get the importer data before removing
+                    ImporterManager.ImporterData importerData = plugin.getImporterManager().getImporterAtLocation(location);
+                    if (importerData != null) {
+                        // Remove from importer manager
+                        plugin.getImporterManager().removeImporter(importerData.importerId);
+                        plugin.getLogger().info("Removed importer " + importerData.importerId + " at " + location);
+                    }
+
+                    // Drop the custom item
+                    event.setDropItems(false);
+                    ItemStack customItem = plugin.getItemManager().createImporter();
+                    if (customItem != null) {
+                        block.getWorld().dropItemNaturally(location, customItem);
+                    }
+
+                    // Remove custom block marker
+                    removeCustomBlockMarker(location);
+
+                } catch (Exception e) {
+                    player.sendMessage(Component.text("Error removing importer: " + e.getMessage(), NamedTextColor.RED));
+                    plugin.getLogger().severe("Error removing importer: " + e.getMessage());
+                }
+                return; // Importers don't affect network topology, so return early
+            }
+
             if (isCustomDriveBay(block)) {
                 if (networkId != null) {
                     // Drive bay is part of a network - use network-aware dropping
@@ -312,7 +389,7 @@ public class BlockListener implements Listener {
 
                         // Check each adjacent location to see if it forms a valid network segment
                         for (Location adjacent : getAdjacentLocations(location)) {
-                            if (isCustomNetworkBlockOrCableOrExporter(adjacent.getBlock()) && !processedLocations.contains(adjacent)) {
+                            if (isCustomNetworkBlockOrCableOrExporterOrImporter(adjacent.getBlock()) && !processedLocations.contains(adjacent)) {
                                 NetworkInfo updatedNetwork = networkManager.detectNetwork(adjacent);
                                 if (updatedNetwork != null && updatedNetwork.isValid()) {
                                     // Mark all blocks in this network segment as processed
@@ -353,6 +430,7 @@ public class BlockListener implements Listener {
                         plugin.getGUIManager().refreshNetworkTerminals(networkId);
 
                         plugin.getExporterManager().updateExporterNetworkAssignments();
+                        plugin.getImporterManager().updateImporterNetworkAssignments();
 
                     } catch (Exception e) {
                         player.sendMessage(Component.text("Error updating network: " + e.getMessage(), NamedTextColor.RED));
@@ -445,6 +523,49 @@ public class BlockListener implements Listener {
             return;
         }
 
+        // Handle Importer interactions (only custom ones)
+        if (isCustomImporter(block)) {
+            event.setCancelled(true);
+
+            if (plugin.getConfigManager().isRequireUsePermission() && !player.hasPermission("massstorageserver.use")) {
+                player.sendMessage(Component.text("You don't have permission to use importers.", NamedTextColor.RED));
+                return;
+            }
+
+            try {
+                // Find network ID from adjacent network blocks/cables (importers should carry network signals like exporters)
+                String networkId = null;
+                for (Location adjacent : getAdjacentLocations(block.getLocation())) {
+                    if (isCustomNetworkBlock(adjacent.getBlock()) || cableManager.isCustomNetworkCable(adjacent.getBlock()) || isCustomExporter(adjacent.getBlock()) || isCustomImporter(adjacent.getBlock())) {
+                        networkId = networkManager.getNetworkId(adjacent);
+                        if (networkId != null) {
+                            break;
+                        }
+                    }
+                }
+                
+                if (networkId == null) {
+                    player.sendMessage(Component.text("This importer is not connected to a valid network.", NamedTextColor.RED));
+                    return;
+                }
+
+                // Get importer data
+                ImporterManager.ImporterData importerData = plugin.getImporterManager().getImporterAtLocation(block.getLocation());
+                if (importerData == null) {
+                    player.sendMessage(Component.text("Importer data not found. Try breaking and replacing the block.", NamedTextColor.RED));
+                    return;
+                }
+
+                // Open the importer GUI
+                plugin.getGUIManager().openImporterGUI(player, block.getLocation(), importerData.importerId, networkId);
+
+            } catch (Exception e) {
+                player.sendMessage(Component.text("Error accessing importer: " + e.getMessage(), NamedTextColor.RED));
+                plugin.getLogger().severe("Error accessing importer: " + e.getMessage());
+            }
+            return;
+        }
+
         // Handle MSS Terminal interactions (only custom ones)
         if (isCustomMSSTerminal(block)) {
             event.setCancelled(true);
@@ -521,6 +642,11 @@ public class BlockListener implements Listener {
     }
 
     // Helper methods to check if blocks are OUR custom blocks or cables
+    private boolean isCustomNetworkBlockOrCableOrExporterOrImporter(Block block) {
+        return isCustomNetworkBlock(block) || cableManager.isCustomNetworkCable(block) || isCustomExporter(block) || isCustomImporter(block);
+    }
+
+    // Helper method for network signal carriers (excludes importers since they don't carry network signals)
     private boolean isCustomNetworkBlockOrCableOrExporter(Block block) {
         return isCustomNetworkBlock(block) || cableManager.isCustomNetworkCable(block) || isCustomExporter(block);
     }
@@ -547,6 +673,11 @@ public class BlockListener implements Listener {
     private boolean isCustomExporter(Block block) {
         if (block.getType() != Material.PLAYER_HEAD && block.getType() != Material.PLAYER_WALL_HEAD) return false;
         return isMarkedAsCustomBlock(block.getLocation(), "EXPORTER");
+    }
+
+    private boolean isCustomImporter(Block block) {
+        if (block.getType() != Material.PLAYER_HEAD && block.getType() != Material.PLAYER_WALL_HEAD) return false;
+        return isMarkedAsCustomBlock(block.getLocation(), "IMPORTER");
     }
 
     /**
@@ -729,6 +860,8 @@ public class BlockListener implements Listener {
             return itemManager.createNetworkCable();
         } else if (isCustomExporter(block)) {
             return itemManager.createExporter();
+        } else if (isCustomImporter(block)) {
+            return itemManager.createImporter();
         }
         return null;
     }
@@ -750,6 +883,7 @@ public class BlockListener implements Listener {
             int terminalCount = 0;
             int cableCount = 0;
             int exporterCount = 0;
+            int importerCount = 0;
             int totalStorageCapacity = 0;
             int usedStorageCapacity = 0;
             
@@ -758,8 +892,9 @@ public class BlockListener implements Listener {
                 terminalCount = detectedNetwork.getTerminals().size();
                 cableCount = detectedNetwork.getNetworkCables().size();
                 
-                // Count exporters in the detected network
+                // Count exporters and importers in the detected network
                 exporterCount = getExporterCountInArea(detectedNetwork.getAllBlocks());
+                importerCount = countNetworkImporters(new ArrayList<>(detectedNetwork.getAllBlocks()));
                 
                 // Get storage capacity from valid network only
                 if (isValidNetwork) {
@@ -807,6 +942,7 @@ public class BlockListener implements Listener {
             player.sendMessage(Component.text("  Drive Bays: " + driveBayCount, NamedTextColor.GREEN));
             player.sendMessage(Component.text("  Terminals: " + terminalCount, NamedTextColor.GREEN));
             player.sendMessage(Component.text("  Exporters: " + exporterCount, NamedTextColor.GREEN));
+            player.sendMessage(Component.text("  Importers: " + importerCount, NamedTextColor.GREEN));
             player.sendMessage(Component.text("  Cables: " + cableCount, NamedTextColor.YELLOW));
             
             player.sendMessage(Component.text("", NamedTextColor.WHITE)); // Empty line
@@ -860,6 +996,25 @@ public class BlockListener implements Listener {
         }
         
         return exporterCount;
+    }
+
+    private int countNetworkImporters(List<Location> networkBlocks) {
+        int importerCount = 0;
+        Set<Location> checkedLocations = new HashSet<>();
+        
+        for (Location networkBlock : networkBlocks) {
+            for (Location adjacent : getAdjacentLocations(networkBlock)) {
+                if (checkedLocations.contains(adjacent)) continue;
+                checkedLocations.add(adjacent);
+                
+                Block block = adjacent.getBlock();
+                if (isCustomImporter(block)) {
+                    importerCount++;
+                }
+            }
+        }
+        
+        return importerCount;
     }
 
     private int getTotalNetworkStorageCapacity(String networkId) throws SQLException {

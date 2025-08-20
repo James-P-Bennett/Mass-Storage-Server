@@ -184,6 +184,7 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
             case "terminal", "mss_terminal" -> plugin.getItemManager().createMSSTerminal();
             case "cable", "network_cable" -> plugin.getItemManager().createNetworkCable();
             case "exporter" -> plugin.getItemManager().createExporter();
+            case "importer" -> plugin.getItemManager().createImporter();
 
             // Storage disks
             case "disk", "storage_disk", "disk1k" -> plugin.getItemManager().createStorageDisk(
@@ -207,7 +208,7 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
 
         if (item == null) {
             sender.sendMessage(Component.text("Invalid item type. Available:", NamedTextColor.RED));
-            sender.sendMessage(Component.text("Blocks: server, bay, terminal, cable, exporter", NamedTextColor.YELLOW));
+            sender.sendMessage(Component.text("Blocks: server, bay, terminal, cable, exporter, importer", NamedTextColor.YELLOW));
             sender.sendMessage(Component.text("Disks: disk1k, disk4k, disk16k, disk64k", NamedTextColor.YELLOW));
             sender.sendMessage(Component.text("Components: housing, platter1k, platter4k, platter16k, platter64k", NamedTextColor.YELLOW));
             return;
@@ -273,6 +274,14 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
                 rs.next();
                 int exporterCount = rs.getInt(1);
                 sender.sendMessage(Component.text("Exporters Placed: " + exporterCount, NamedTextColor.YELLOW));
+            }
+
+            // Count importers
+            try (PreparedStatement stmt = conn.prepareStatement("SELECT COUNT(*) FROM importers");
+                 ResultSet rs = stmt.executeQuery()) {
+                rs.next();
+                int importerCount = rs.getInt(1);
+                sender.sendMessage(Component.text("Importers Placed: " + importerCount, NamedTextColor.YELLOW));
             }
 
             // Recipe information

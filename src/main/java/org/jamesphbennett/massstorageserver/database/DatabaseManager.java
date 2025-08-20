@@ -377,6 +377,38 @@ public class DatabaseManager {
                     FOREIGN KEY (exporter_id) REFERENCES exporters(exporter_id) ON DELETE CASCADE,
                     UNIQUE(exporter_id, item_hash, filter_type)
                 )
+                """,
+
+                // Importers table
+                """
+                CREATE TABLE IF NOT EXISTS importers (
+                    importer_id TEXT PRIMARY KEY,
+                    network_id TEXT NOT NULL,
+                    world_name TEXT NOT NULL,
+                    x INTEGER NOT NULL,
+                    y INTEGER NOT NULL,
+                    z INTEGER NOT NULL,
+                    enabled BOOLEAN NOT NULL DEFAULT true,
+                    last_import TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (network_id) REFERENCES networks(network_id) ON DELETE CASCADE,
+                    UNIQUE(world_name, x, y, z)
+                )
+                """,
+
+                // Importer filters table
+                """
+                CREATE TABLE IF NOT EXISTS importer_filters (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    importer_id TEXT NOT NULL,
+                    item_hash TEXT NOT NULL,
+                    item_data TEXT,
+                    filter_type TEXT NOT NULL DEFAULT 'whitelist',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (importer_id) REFERENCES importers(importer_id) ON DELETE CASCADE,
+                    UNIQUE(importer_id, item_hash, filter_type)
+                )
                 """
         };
 
@@ -397,7 +429,12 @@ public class DatabaseManager {
                 "CREATE INDEX IF NOT EXISTS idx_exporters_network ON exporters(network_id)",
                 "CREATE INDEX IF NOT EXISTS idx_exporters_enabled ON exporters(enabled)",
                 "CREATE INDEX IF NOT EXISTS idx_exporter_filters_exporter ON exporter_filters(exporter_id)",
-                "CREATE INDEX IF NOT EXISTS idx_exporter_filters_hash ON exporter_filters(item_hash)"
+                "CREATE INDEX IF NOT EXISTS idx_exporter_filters_hash ON exporter_filters(item_hash)",
+                "CREATE INDEX IF NOT EXISTS idx_importers_location ON importers(world_name, x, y, z)",
+                "CREATE INDEX IF NOT EXISTS idx_importers_network ON importers(network_id)",
+                "CREATE INDEX IF NOT EXISTS idx_importers_enabled ON importers(enabled)",
+                "CREATE INDEX IF NOT EXISTS idx_importer_filters_importer ON importer_filters(importer_id)",
+                "CREATE INDEX IF NOT EXISTS idx_importer_filters_hash ON importer_filters(item_hash)"
         };
 
         try (Connection conn = getConnection()) {

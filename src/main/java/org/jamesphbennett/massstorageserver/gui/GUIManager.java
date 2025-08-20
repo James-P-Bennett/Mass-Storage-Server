@@ -105,6 +105,38 @@ public class GUIManager {
     }
 
     /**
+     * Open the appropriate importer GUI for a player
+     */
+    public void openImporterGUI(Player player, Location importerLocation, String importerId, String networkId) {
+        try {
+            // Validate network is still valid
+            if (!isNetworkValid(networkId)) {
+                player.sendMessage(Component.text("This importer is not connected to a valid network.", NamedTextColor.RED));
+                return;
+            }
+
+            plugin.getLogger().info("Opening importer GUI for player " + player.getName() +
+                    " at " + importerLocation + " with importer ID: " + importerId);
+
+            // For importers, we use the same ImporterGUI for all container types
+            // The GUI itself detects the target type and adapts accordingly
+            ImporterGUI importerGUI = new ImporterGUI(plugin, importerLocation, importerId, networkId);
+            importerGUI.open(player);
+
+            // Track the GUI
+            playerCurrentGUI.put(player.getUniqueId(), "IMPORTER");
+            playerGUINetworkId.put(player.getUniqueId(), networkId);
+            playerGUIInstance.put(player.getUniqueId(), importerGUI);
+
+            plugin.getLogger().info("Successfully opened importer GUI for player " + player.getName());
+        } catch (Exception e) {
+            player.sendMessage(Component.text("Error opening Importer GUI: " + e.getMessage(), NamedTextColor.RED));
+            plugin.getLogger().severe("Error opening Importer GUI: " + e.getMessage());
+            plugin.getLogger().severe("Stack trace: " + java.util.Arrays.toString(e.getStackTrace()));
+        }
+    }
+
+    /**
      * Get the target container that the exporter is physically attached to
      */
     private Container getTargetContainer(Location exporterLocation) {
@@ -511,6 +543,7 @@ public class GUIManager {
 
         // Handle exporter disconnections when network is invalidated
         plugin.getExporterManager().handleNetworkInvalidated(networkId);
+        plugin.getImporterManager().handleNetworkInvalidated(networkId);
 
         // Clear the modified flag for this network
         clearNetworkModified(networkId);
@@ -586,6 +619,34 @@ public class GUIManager {
                         exporterGUI.setupGUI();
 
                         plugin.getLogger().info("Successfully refreshed exporter GUI for player " + player.getName());
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Refresh all open importer GUIs for a specific importer
+     */
+    public void refreshImporterGUIs(String importerId) {
+        plugin.getLogger().info("Refreshing importer GUIs for importer " + importerId);
+
+        // Find any players with the importer GUI open for this specific importer
+        for (Map.Entry<UUID, Object> entry : playerGUIInstance.entrySet()) {
+            UUID playerId = entry.getKey();
+            Object guiInstance = entry.getValue();
+
+            if (guiInstance instanceof ImporterGUI importerGUI) {
+                // Check if this GUI is for the specific importer
+                if (importerId.equals(importerGUI.getImporterId())) {
+                    Player player = plugin.getServer().getPlayer(playerId);
+                    if (player != null && player.isOnline()) {
+                        plugin.getLogger().info("Refreshing importer GUI for player " + player.getName());
+
+                        // Call the public setupGUI() method to refresh the display
+                        importerGUI.setupGUI();
+
+                        plugin.getLogger().info("Successfully refreshed importer GUI for player " + player.getName());
                     }
                 }
             }

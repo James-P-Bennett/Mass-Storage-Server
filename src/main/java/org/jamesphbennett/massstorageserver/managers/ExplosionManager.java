@@ -29,6 +29,7 @@ public class ExplosionManager {
         List<Block> customBlocksToHandle = new ArrayList<>();
         List<Location> driveBayLocations = new ArrayList<>();
         List<Location> exporterLocations = new ArrayList<>();
+        List<Location> importerLocations = new ArrayList<>();
 
         // First pass: identify our custom blocks in the explosion
         for (Block block : blockList) {
@@ -39,6 +40,8 @@ public class ExplosionManager {
                     driveBayLocations.add(block.getLocation());
                 } else if (isCustomExporter(block)) {
                     exporterLocations.add(block.getLocation());
+                } else if (isCustomImporter(block)) {
+                    importerLocations.add(block.getLocation());
                 }
             }
         }
@@ -86,6 +89,23 @@ public class ExplosionManager {
                 }
             } catch (Exception e) {
                 plugin.getLogger().severe("Error handling exporter explosion at " + exporterLoc + ": " + e.getMessage());
+                plugin.getLogger().severe("Stack trace: " + java.util.Arrays.toString(e.getStackTrace()));
+            }
+        }
+
+        // Handle importer cleanup BEFORE blocks are destroyed
+        for (Location importerLoc : importerLocations) {
+            try {
+                plugin.getLogger().info("Cleaning up importer data at " + importerLoc + " due to explosion");
+                var importerData = plugin.getImporterManager().getImporterAtLocation(importerLoc);
+                if (importerData != null) {
+                    plugin.getImporterManager().removeImporter(importerData.importerId);
+                    plugin.getLogger().info("Removed importer " + importerData.importerId + " due to explosion");
+                } else {
+                    plugin.getLogger().warning("No importer data found at " + importerLoc + " during explosion cleanup");
+                }
+            } catch (Exception e) {
+                plugin.getLogger().severe("Error handling importer explosion at " + importerLoc + ": " + e.getMessage());
                 plugin.getLogger().severe("Stack trace: " + java.util.Arrays.toString(e.getStackTrace()));
             }
         }
@@ -232,7 +252,7 @@ public class ExplosionManager {
      * Check if a block is one of our custom network blocks
      */
     private boolean isCustomNetworkBlock(Block block) {
-        return isCustomStorageServer(block) || isCustomDriveBay(block) || isCustomMSSTerminal(block) || isCustomExporter(block) || isCustomNetworkCable(block);
+        return isCustomStorageServer(block) || isCustomDriveBay(block) || isCustomMSSTerminal(block) || isCustomExporter(block) || isCustomImporter(block) || isCustomNetworkCable(block);
     }
 
     /**
@@ -265,6 +285,11 @@ public class ExplosionManager {
     private boolean isCustomExporter(Block block) {
         if (block.getType() != org.bukkit.Material.PLAYER_HEAD && block.getType() != org.bukkit.Material.PLAYER_WALL_HEAD) return false;
         return isMarkedAsCustomBlock(block.getLocation(), "EXPORTER");
+    }
+
+    private boolean isCustomImporter(Block block) {
+        if (block.getType() != org.bukkit.Material.PLAYER_HEAD && block.getType() != org.bukkit.Material.PLAYER_WALL_HEAD) return false;
+        return isMarkedAsCustomBlock(block.getLocation(), "IMPORTER");
     }
 
     /**
@@ -334,6 +359,8 @@ public class ExplosionManager {
             return plugin.getItemManager().createMSSTerminal();
         } else if (isCustomExporter(block)) {
             return plugin.getItemManager().createExporter();
+        } else if (isCustomImporter(block)) {
+            return plugin.getItemManager().createImporter();
         } else if (isCustomNetworkCable(block)) {
             return plugin.getItemManager().createNetworkCable();
         }
@@ -348,6 +375,7 @@ public class ExplosionManager {
         if (isCustomDriveBay(block)) return "DRIVE_BAY";
         if (isCustomMSSTerminal(block)) return "MSS_TERMINAL";
         if (isCustomExporter(block)) return "EXPORTER";
+        if (isCustomImporter(block)) return "IMPORTER";
         return "UNKNOWN";
     }
 }

@@ -35,6 +35,7 @@ public class ItemManager {
     private final NamespacedKey NETWORK_CABLE_KEY;
     private final NamespacedKey STORAGE_DISK_KEY;
     private final NamespacedKey EXPORTER_KEY;
+    private final NamespacedKey IMPORTER_KEY;
     private final NamespacedKey DISK_ID_KEY;
     private final NamespacedKey DISK_CRAFTER_UUID_KEY;
     private final NamespacedKey DISK_CRAFTER_NAME_KEY;
@@ -58,6 +59,7 @@ public class ItemManager {
         NETWORK_CABLE_KEY = new NamespacedKey(plugin, "network_cable");
         STORAGE_DISK_KEY = new NamespacedKey(plugin, "storage_disk");
         EXPORTER_KEY = new NamespacedKey(plugin, "exporter");
+        IMPORTER_KEY = new NamespacedKey(plugin, "importer");
         DISK_ID_KEY = new NamespacedKey(plugin, "disk_id");
         DISK_CRAFTER_UUID_KEY = new NamespacedKey(plugin, "disk_crafter_uuid");
         DISK_CRAFTER_NAME_KEY = new NamespacedKey(plugin, "disk_crafter_name");
@@ -173,12 +175,53 @@ public class ItemManager {
         return item;
     }
 
+    public ItemStack createImporter() {
+        ItemStack item = new ItemStack(Material.PLAYER_HEAD);
+        org.bukkit.inventory.meta.SkullMeta meta = (org.bukkit.inventory.meta.SkullMeta) item.getItemMeta();
+
+        Component displayName = miniMessage.deserialize("<blue><bold>Importer</bold></blue>");
+        meta.displayName(displayName);
+
+        List<Component> lore = new ArrayList<>();
+        lore.add(miniMessage.deserialize("<gray>Automatically imports items from containers"));
+        lore.add(miniMessage.deserialize("<gray>Place adjacent to any inventory"));
+        lore.add(miniMessage.deserialize("<yellow>Connects: North, South, East, West, or Down"));
+        lore.add(Component.empty());
+        lore.add(miniMessage.deserialize("<dark_gray>Machine Part</dark_gray>"));
+        meta.lore(lore);
+
+        // Apply custom player skin texture using UUID
+        try {
+            applyImporterPlayerSkinTexture(meta);
+            plugin.getLogger().info("Successfully applied custom player texture to importer");
+        } catch (Exception e) {
+            plugin.getLogger().warning("Failed to apply custom player texture to importer: " + e.getMessage());
+        }
+
+        meta.getPersistentDataContainer().set(IMPORTER_KEY, PersistentDataType.BOOLEAN, true);
+
+        item.setItemMeta(meta);
+        return item;
+    }
+
     /**
      * Apply player skin texture to skull meta by player name
      */
     private void applyPlayerSkinTexture(SkullMeta skullMeta) {
         // Create PlayerProfile for the specific player name
         org.bukkit.profile.PlayerProfile profile = plugin.getServer().createPlayerProfile("BurningFurnace");
+        
+        // Apply to skull meta - Bukkit will automatically fetch the skin texture
+        skullMeta.setOwnerProfile(profile);
+    }
+
+    /**
+     * Apply player skin texture to skull meta by UUID for importer
+     */
+    private void applyImporterPlayerSkinTexture(SkullMeta skullMeta) {
+        // Create PlayerProfile for the specific UUID
+        UUID playerUUID = UUID.fromString("d25094d2-e148-4d63-9cac-d42af39bdff1");
+        org.bukkit.profile.PlayerProfile profile = plugin.getServer().createPlayerProfile(playerUUID, null);
         
         // Apply to skull meta - Bukkit will automatically fetch the skin texture
         skullMeta.setOwnerProfile(profile);
@@ -529,8 +572,13 @@ public class ItemManager {
         return item.getItemMeta().getPersistentDataContainer().has(EXPORTER_KEY, PersistentDataType.BOOLEAN);
     }
 
+    public boolean isImporter(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) return false;
+        return item.getItemMeta().getPersistentDataContainer().has(IMPORTER_KEY, PersistentDataType.BOOLEAN);
+    }
+
     public boolean isNetworkBlock(ItemStack item) {
-        return isStorageServer(item) || isDriveBay(item) || isMSSTerminal(item) || isNetworkCable(item) || isExporter(item);
+        return isStorageServer(item) || isDriveBay(item) || isMSSTerminal(item) || isNetworkCable(item) || isExporter(item) || isImporter(item);
     }
 
     /**

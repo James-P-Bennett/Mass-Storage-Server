@@ -75,6 +75,9 @@ public class NetworkManager {
             } else if (isExporter(block)) {
                 // Exporters count as network blocks and extend connectivity
                 networkBlocks.add(current);
+            } else if (isImporter(block)) {
+                // Importers count as network blocks and extend connectivity
+                networkBlocks.add(current);
             } else {
                 networkBlocks.add(current);
 
@@ -180,6 +183,16 @@ public class NetworkManager {
             return false;
         }
         return isMarkedAsCustomBlock(block.getLocation(), "EXPORTER");
+    }
+
+    /**
+     * Check if a block is an importer (for completeness, but importers don't carry network signals)
+     */
+    private boolean isImporter(Block block) {
+        if (block.getType() != Material.PLAYER_HEAD && block.getType() != Material.PLAYER_WALL_HEAD) {
+            return false;
+        }
+        return isMarkedAsCustomBlock(block.getLocation(), "IMPORTER");
     }
 
     /**
@@ -382,7 +395,7 @@ public class NetworkManager {
     }
 
     private boolean isNetworkBlockOrCable(Block block) {
-        return isNetworkBlock(block) || plugin.getCableManager().isCustomNetworkCable(block) || isExporter(block);
+        return isNetworkBlock(block) || plugin.getCableManager().isCustomNetworkCable(block) || isExporter(block) || isImporter(block);
     }
 
     private boolean isNetworkBlock(Block block) {
@@ -427,6 +440,7 @@ public class NetworkManager {
         if (isMSSTerminal(block)) return "MSS_TERMINAL";
         if (plugin.getCableManager().isCustomNetworkCable(block)) return "NETWORK_CABLE";
         if (isExporter(block)) return "EXPORTER";
+        if (isImporter(block)) return "IMPORTER";
         return "UNKNOWN";
     }
 

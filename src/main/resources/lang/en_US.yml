@@ -1,0 +1,522 @@
+# Mass Storage Server - English Language File
+# Version: BETA-1.4.4
+# This file contains all translatable text for the Mass Storage Server plugin
+# 
+# MiniMessage formatting is supported for colors and styling:
+# <red>, <green>, <blue>, <yellow>, <gold>, <gray>, <white>, <black>
+# <bold>, <italic>, <underlined>, <strikethrough>, <obfuscated>
+# Example: "<red><bold>Error:</bold></red> Something went wrong!"
+# Learn more: https://docs.advntr.dev/minimessage/format.html
+
+# Command Messages
+commands:
+  help:
+    header: "<gold>=== Mass Storage Server Commands ===</gold>"
+    main-help: "<yellow>/mss help - Show this help message</yellow>"
+    recovery: "<yellow>/mss recovery <disk_id> - Recover a storage disk by ID</yellow>"
+    give: "<yellow>/mss give <item> [player] - Give MSS items</yellow>"
+    info: "<yellow>/mss info - Show plugin information</yellow>"
+    cleanup: "<yellow>/mss cleanup - Clean up expired data</yellow>"
+    recipes: "<yellow>/mss recipes - List all recipes</yellow>"
+    recipe: "<yellow>/mss recipe <name> - Show detailed recipe info</yellow>"
+    reload: "<yellow>/mss reload [config|recipes] - Reload configurations</yellow>"
+  
+  usage:
+    recovery: "<red>Usage: /mss recovery <disk_id></red>"
+    give: "<red>Usage: /mss give <item_type> [player]</red>"
+    recipe: "<red>Usage: /mss recipe <recipe_name></red>"
+  
+  no-permission: "<red>You don't have permission to use this command.</red>"
+  no-permission-recovery: "<red>You don't have permission to use recovery commands.</red>"
+  players-only: "<red>Only players can use this command.</red>"
+  unknown-command: "<red>Unknown command. Use /mss help for available commands.</red>"
+  reload-success: "<green>Plugin configuration reloaded successfully!</green>"
+  debug-enabled: "<green>Debug mode enabled</green>"
+  debug-disabled: "<yellow>Debug mode disabled</yellow>"
+  
+  recovery:
+    not-found: "<red>Storage disk with ID '{disk_id}' not found.</red>"
+    success-dropped: "<green>Recovery successful! Disk dropped at your location (inventory full).</green>"
+    success-inventory: "<green>Recovery successful! Disk added to your inventory.</green>"
+    disk-info: "<gray>Disk ID: {disk_id}</gray>"
+    crafter-info: "<gray>Original Crafter: {crafter}</gray>"
+    cells-info: "<gray>Cells Used: {used}/{max}</gray>"
+    error: "<red>Error during recovery: {error}</red>"
+  
+  give:
+    no-permission: "<red>You don't have permission to use give commands.</red>"
+    player-not-found: "<red>Player '{player}' not found.</red>"
+    console-needs-player: "<red>You must specify a player when using this command from console.</red>"
+    invalid-item: "<red>Invalid item type. Available:</red>"
+    available-blocks: "<yellow>Blocks: server, bay, terminal, cable, exporter, importer</yellow>"
+    available-disks: "<yellow>Disks: disk1k, disk4k, disk16k, disk64k</yellow>"
+    available-components: "<yellow>Components: housing, platter1k, platter4k, platter16k, platter64k</yellow>"
+    success-dropped: "<green>Item given to {player} (dropped due to full inventory).</green>"
+    success-inventory: "<green>Item given to {player}.</green>"
+    received: "<green>You received a {item} from {sender}.</green>"
+  
+  info:
+    no-permission: "<red>You don't have permission to use info commands.</red>"
+    networks: "<yellow>Active Networks: {count}</yellow>"
+    disks: "<yellow>Total Storage Disks: {count}</yellow>"
+    item-types: "<yellow>Item Types Stored: {types}</yellow>"
+    total-items: "<yellow>Total Items Stored: {total}</yellow>"
+    cables: "<yellow>Network Cables Placed: {count}</yellow>"
+    exporters: "<yellow>Exporters Placed: {count}</yellow>"
+    importers: "<yellow>Importers Placed: {count}</yellow>"
+    recipes-enabled: "<green>Recipes: Enabled ({registered}/{total} registered)</green>"
+    recipes-disabled: "<red>Recipes: Disabled ({registered}/{total} registered)</red>"
+    error: "<red>Error retrieving information: {error}</red>"
+  
+  cleanup:
+    no-permission: "<red>You don't have permission to use cleanup commands.</red>"
+    orphaned-items: "<green>Cleaned up {count} orphaned storage items.</green>"
+    reset-disks: "<green>Reset {count} empty storage disk cell counts.</green>"
+    success: "<green>Cleanup completed successfully!</green>"
+    error: "<red>Error during cleanup: {error}</red>"
+  
+  recipes:
+    no-permission: "<red>You don't have permission to use recipe commands.</red>"
+    players-only: "<red>This command can only be used by players.</red>"
+  
+  reload:
+    no-permission: "<red>You don't have permission to use reload commands.</red>"
+    usage: "<red>Usage: /mss reload [config|recipes|all]</red>"
+    config-success: "<green>Main configuration reloaded successfully!</green>"
+    config-error: "<red>Error reloading config: {error}</red>"
+    recipes-success: "<green>Recipes configuration reloaded successfully!</green>"
+    recipes-note: "<yellow>Note: Server restart may be required for recipe changes to take full effect.</yellow>"
+    recipes-error: "<red>Error reloading recipes: {error}</red>"
+    all-success: "<green>All configurations reloaded successfully!</green>"
+    all-error: "<red>Error reloading configurations: {error}</red>"
+
+# Error Messages
+errors:
+  network:
+    invalid: "This network is no longer valid"
+    not-connected: "Not connected to any network"
+    not-connected-assigned: "This {device} is not connected to its assigned network"
+    not-connected-any: "This {device} is not connected to any network"
+    connection-lost: "Network connection lost - please check your storage system"
+    dissolved: "Storage network dissolved - blocks have been disconnected"
+    dissolved-drive-bay: "Storage network dissolved - you can still manage disks in this drive bay"
+  
+  storage:
+    full: "Storage network is full!"
+    disk-full: "Storage disk is full"
+    item-blacklisted: "Item not allowed: {item}"
+    item-blacklisted-filter: "You cannot add occupied containers or disks to the network!"
+    no-disks: "No storage disks found in network {network}"
+  
+  gui:
+    error-opening: "<red>Error opening {gui} GUI: {error}</red>"
+  
+  search:
+    timeout: "<red>Search timed out.</red>"
+    cancelled: "<red>Search cancelled.</red>"
+    cleared: "<yellow>Search cleared.</yellow>"
+    saved: "<green>Search saved: '{term}'.</green>"
+  
+  network:
+    dissolved-drive-bay: "<yellow>Storage network dissolved - you can still manage disks in this drive bay.</yellow>"
+  
+  general:
+    missing-message: "Missing message: {key}"
+    invalid-item: "Invalid item"
+    no-permission: "You don't have permission to do that"
+
+# Success Messages
+success:
+  storage:
+    item-stored: "Successfully stored {amount} {item}"
+    item-retrieved: "Retrieved {amount} {item}"
+  
+  disk:
+    placed: "Storage disk placed successfully!"
+    removed: "Storage disk removed successfully!"
+    created: "Created {tier} storage disk"
+  
+  device:
+    created: "Created {device} {id}"
+    removed: "Removed {device} {id}"
+    enabled: "{device} enabled"
+    disabled: "{device} disabled"
+  
+  filter:
+    added: "Added {item} to {type} filter"
+    removed: "Removed item from {type} filter"
+    cleared: "Cleared all filters - will now {action} everything"
+
+# GUI Text
+gui:
+  # Common Messages
+  filter:
+    item-blacklisted: "<red>You cannot add occupied containers or disks to the network!</red>"
+    already-exists: "<red>This item is already in the filter!</red>"
+    full: "<red>Filter is full! Remove items first.</red>"
+    added: "<green>Added {item} to {type} filter</green>"
+    removed: "<yellow>Removed item from {type} filter</yellow>"
+    cleared: "<yellow>Cleared all filters - will now {action} everything</yellow>"
+    no-filters: "<yellow>No filters to clear</yellow>"
+  
+  device:
+    enabled: "<green>{device} enabled</green>"
+    disabled: "<yellow>{device} disabled</yellow>"
+    toggle-error: "<red>Error toggling {device}: {error}</red>"
+  
+  # Terminal GUI
+  terminal:
+    title: "<green>MSS Terminal</green>"
+    search:
+      button: "Search"
+      instruction: "Left-click to open search"
+      active: "Search: {term}"
+      showing: "Showing items matching: {term}"
+      results: "Results: {count} item types"
+      clear: "Right-click to clear search"
+      search-again: "Left-click to search again"
+      header: "<gold><bold>=== MSS Terminal Search ==="
+      prompt: "Enter your search term."
+      cancel-instruction: "Type 'cancel' to cancel the search."
+      cleared: "Search cleared!"
+    sorting:
+      alphabetical: "Sorting: Alphabetically"
+      quantity: "Sorting: Quantity"
+      to-alphabetical: "Click to sort alphabetically."
+      to-quantity: "Click to sort by quantity"
+      changed: "Sorting changed to: {mode}"
+    pagination:
+      previous: "Previous Page"
+      next: "Next Page"
+      page-info: "Page {current}/{total}"
+      prev-available: "Click to go to previous page"
+      first-page: "Already on first page"
+      next-available: "Click to go to next page"
+      last-page: "Already on last page"
+    info:
+      title: "Storage Info"
+      search-results: "Search Results: {count} types"
+      total-types: "Total Item Types: {count}"
+      search-term: "Search: '{term}'"
+      sort-mode: "Sort: {mode}"
+      showing-range: "Showing: {start}-{end} of {total}"
+      total-items: "{type} Items: {count}"
+    item:
+      quantity: "Stored: {amount}"
+      left-click: "Left Click: Take full stack to cursor"
+      right-click: "Right Click: Take half stack to cursor"
+      shift-click: "Shift Click: Take full stack to inventory"
+    storage:
+      not-allowed: "This item cannot be stored in the network!"
+      partial: "Stored {stored} items. {remaining} items couldn't be stored (network full?)"
+      full: "No space available in the network!"
+      error: "Error storing items: {error}"
+    retrieval:
+      inventory-full: "Your inventory is full!"
+      limited-space: "Only retrieving {amount} items due to inventory space"
+
+  # Drive Bay GUI  
+  drive-bay:
+    title: "<blue>Drive Bay Storage</blue>"
+    slot:
+      empty: "Empty Drive Slot"
+      insert: "Insert storage disks to expand capacity"
+      disk: "{tier} Storage Disk"
+      usage: "Usage: {used}/{max} cells"
+      remove: "Click to remove disk"
+    status:
+      connected: "Network Status: Connected"
+      disconnected: "Network Status: Disconnected"
+      standalone: "You can still manage disks"
+    info:
+      title: "Drive Bay Information"
+      network: "Network: {network}"
+      slots: "Slots: {filled}/{total}"
+    disk:
+      capacity: "Capacity: {capacity} items per cell"
+      total-capacity: "Total Capacity: {total} items"
+      tier: "Tier: {tier}"
+      crafter: "Crafted by: {crafter}"
+      id: "ID: {id}"
+    error:
+      only-disks: "Only storage disks can be placed in drive bays!"
+      no-slots: "No empty drive slots available!"
+      inventory-full: "Your inventory is full!"
+      database: "Failed to place disk - database error"
+      invalid-disk: "Invalid storage disk!"
+
+  # Exporter GUI
+  exporter:
+    title: "<blue>Exporter Configuration</blue>"
+    status:
+      enabled: "Status: Enabled"
+      disabled: "Status: Disabled"
+      toggle: "Click to toggle"
+      description-enabled: "Exporter is actively exporting"
+      description-disabled: "Exporter is inactive"
+    target:
+      connected: "Connected to: {container}"
+      none: "No valid container connected"
+    filter:
+      title: "Export Filters"
+      empty-slot: "Empty Filter Slot"
+      add-instruction: "Drag items here to add them to the filter"
+      shift-instruction: "Or shift-click items from your inventory"
+      no-filter: "No filters = export nothing"
+      item-description: "Filter Item"
+      remove-instruction: "Click to remove from filter"
+    controls:
+      clear: "Clear All Filters"
+      clear-description: "Click to remove all filter items"
+      clear-result: "Clears filters to export nothing"
+      info: "Exporter Information"
+      no-filters: "No filters to clear"
+      cleared: "Cleared all filters"
+    
+    # Furnace-specific exporter
+    furnace:
+      title: "<blue>Furnace Exporter Configuration</blue>"
+      fuel-slot: "Fuel Slot"
+      input-slot: "Input Slot"  
+      output-slot: "Output Slot"
+      description: "Only exports to input and fuel slots"
+      fuel-enabled: "Fuel Import: Enabled"
+      fuel-disabled: "Fuel Import: Disabled"
+      brewing-fuel-description: "Exports blaze powder to fuel slot"
+      fuel-enabled-msg: "Fuel import enabled"
+      fuel-disabled-msg: "Fuel import disabled"
+      ingredient-filter: "Ingredient Filter"
+      ingredient-slot: "Ingredient Slot"
+      ingredient-description: "Targets brewing stand ingredient slot"
+      ingredient-set: "Set ingredient filter to {item}"
+      ingredient-removed: "Removed ingredient filter"
+      bottle-filter: "Bottle Filter ({slot})"
+      bottle-left: "Bottle Slot (Left)"
+      bottle-middle: "Bottle Slot (Middle)"
+      bottle-right: "Bottle Slot (Right)"
+      bottle-description: "Targets brewing stand bottle slot"
+      bottle-set: "Set bottle filter {slot} to {item}"
+      bottle-removed: "Removed bottle filter {slot}"
+      filters-cleared: "Cleared all brewing stand filters"
+      drag-instruction: "Drag items to purple (ingredient) or blue (bottle) slots!"
+      info-fuel: "Yellow: Fuel toggle"
+      info-ingredient: "Purple: Ingredient slot"
+      info-bottles: "Blue: Bottle slots"
+      # Furnace-specific messages
+      fuel-instruction: "Drag items here to export to furnace fuel slot"
+      furnace-fuel-description: "These items will go to the bottom slot of the furnace"
+      input-instruction: "Drag items here to export to furnace input slot"
+      input-description: "These items will go to the top slot of the furnace"
+      no-furnace: "No valid furnace connected"
+      clear-both: "This will clear both fuel and material filters"
+      fuel-count: "Fuel Filters: {count}/{max}"
+      material-count: "Material Filters: {count}/{max}"
+      red-slots: "Red slots: Items for furnace fuel slot"
+      blue-slots: "Blue slots: Items for furnace input slot"
+      shift-instruction: "Drag items to red (fuel) or blue (material) slots, or click an empty slot first!"
+      already-in-fuel: "This item is already in the fuel filter!"
+      already-in-material: "This item is already in the material filter!"
+      added-to-filter: "Added {item} to {type} filter"
+
+  # Importer GUI
+  importer:
+    title: "<blue>Importer Configuration</blue>"
+    status:
+      enabled: "Status: Enabled"
+      disabled: "Status: Disabled"
+      toggle: "Click to toggle"
+      description-enabled: "Importer is actively importing"
+      description-disabled: "Importer is inactive"
+    target:
+      connected: "Connected to: {container}"
+      none: "No valid container connected"
+    filter:
+      title: "Import Filters"
+      empty-slot: "Empty Filter Slot"
+      add-instruction: "Drag items here to add them to the filter"
+      shift-instruction: "Or shift-click items from your inventory"
+      no-filter: "Leave empty to import everything"
+      item-description: "Filter Item"
+      remove-instruction: "Click to remove from filter"
+      full: "Filter is full! Remove items first."
+      already-exists: "This item is already in the filter!"
+    controls:
+      clear: "Clear All Filters" 
+      clear-description: "Click to remove all filter items"
+      clear-result: "Clears filters to import everything"
+      info: "Importer Information"
+      no-filters: "No filters to clear"
+      cleared-success: "Cleared all filters - will now import everything"
+    
+    # Brewing Stand specific importer
+    brewing:
+      title: "<blue>Brewing Stand Importer</blue>"
+      slot-left: "Import Slot (Left)"
+      slot-middle: "Import Slot (Middle)" 
+      slot-right: "Import Slot (Right)"
+      slot-description: "Imports from brewing stand potion slot"
+      drag-instruction: "Drag item here to set filter"
+      no-filter-slot: "No filter = import anything"
+      clear-description: "Will import all items from potion slots"
+      info-description: "Only imports from bottom 3 slots"
+      info-ignored: "Ingredient/fuel slots are ignored"
+      drag-instruction-main: "Drag items to filter slots (blue for potions)!"
+      filter-set: "Set import filter {slot} to {item}"
+      filter-removed: "Removed import filter {slot}"
+      filters-cleared: "Cleared all brewing stand filters"
+      filter-description: "Import Filter ({slot})"
+
+# Device Names (for dynamic messages)
+devices:
+  importer: "importer"
+  exporter: "exporter" 
+  terminal: "terminal"
+  drive-bay: "drive bay"
+
+# Action Names (for dynamic messages)  
+actions:
+  import: "import"
+  export: "export"
+  store: "store"
+  retrieve: "retrieve"
+
+# Container Names
+containers:
+  FURNACE: "Furnace"
+  BLAST_FURNACE: "Blast Furnace"
+  SMOKER: "Smoker"
+  BREWING_STAND: "Brewing Stand"
+  CHEST: "Chest"
+  BARREL: "Barrel"
+  SHULKER_BOX: "Shulker Box"
+
+# Storage Tiers
+tiers:
+  "1k": "1K"
+  "4k": "4K" 
+  "16k": "16K"
+  "64k": "64K"
+
+# Debug Messages (for developers/debugging)
+debug:
+  storage:
+    processing: "Processing {amount} {item}"
+    storing: "Storing {amount} {item} (hash: {hash}...)"
+    disk-capacity: "Disk {disk}: {available}/{max} cells available"
+    disk-final: "Final disk {disk}: {available}/{max} cells available"
+    disk-max-items: "Disk {disk} has capacity of {capacity} items per cell"
+    cell-created: "Created new cell in disk {disk} with {amount} items ({remaining} cells remaining)"
+    cell-added: "Added {amount} items to existing cell {cell} in disk {disk} (now {current}/{max})"
+    cell-removed: "Removed empty cell {cell} from disk {disk}"
+    transaction-complete: "Storage transaction completed successfully"
+    operation-complete: "Storage operation complete. {remaining} item stacks could not be stored"
+    retrieving: "Retrieving {amount} from cell {cell} in disk {disk} (cell had {before}, will have {after})"
+    combined: "Successfully combined {retrievals} retrievals into {total} items"
+    no-drive-bays: "No drive bays detected in current network topology for {network}"
+    stored-success: "Successfully stored all {amount} items"
+    item-blacklisted: "Item not allowed in network: {item}"
+    no-disks: "No storage disks found in network {network}"
+    
+  network:
+    segment-detected: "Detected network segment with {blocks} blocks and {cables} cables"
+    restoration-start: "Starting drive bay restoration for network {network} with {bays} drive bays"
+    restoration-complete: "Restoration complete for network {network}: {slots} slots and {disks} disks restored"
+    cable-placement: "Cable placement: Network {network} will have {current}/{max} cables"
+    drive-bay-updated: "Updated {count} drive bay slots to network {network} at {location}"
+    unregistered: "Unregistered network {network} and preserved drive bay contents"
+    
+  device:
+    toggle: "{device} {id} set to {status}"
+    reconnected: "Reconnected {device} {id} to network {network}"
+    disconnected: "Disconnected {device} {id} from invalidated network {network}"
+    disconnection-count: "Disconnected {count} {devices} from invalidated network {network}"
+    handling-disconnections: "Handling {device} disconnections for invalidated network: {network}"
+    not-connected-auto-disable: "{device} {id} is not connected to any network - auto-disabling"
+    auto-disabled: "Auto-disabled {device} {id} - not connected to any network"
+    auto-disabled-validation: "Auto-disabled {device} {id} during periodic validation - physically disconnected"
+    network-update: "{device} network assignment update: {reconnected} reconnected, {disconnected} disconnected, {disabled} auto-disabled"
+    reconnecting: "{device} {id} reconnecting from {old} to {new}"
+    
+  gui:
+    opening: "Opening {gui} GUI for player {player} at {location} with {device} ID: {id}"
+    opened: "Successfully opened {gui} GUI for player {player}"
+    closed: "Closed {gui} GUI for player {player} (was in network {network})"
+    refreshing: "Refreshing {gui} GUIs for {device} {id}"
+    refreshed: "Refreshed {gui} GUI for player {player}"
+    refreshed-success: "Successfully refreshed {gui} GUI for player {player}"
+    terminal-refreshing: "Refreshing terminal at {location} for network {network}"
+    terminal-refresh-complete: "Terminal refresh complete: {before} -> {after} item types (sorting: {sorting})"
+    drive-bay-loaded: "Loaded drives for drive bay at {location} (network: {network})"
+    drive-bay-no-drives: "No drives found for drive bay at {location} (network: {network})"
+    network-modified: "Marked network {network} as modified"
+    network-cleared: "Cleared modified flag for network {network}"
+    network-modified-refresh: "Network {network} was modified, refreshing terminal on open"
+    search-registered: "Registered player {player} for search input with {timeout}s timeout"
+    search-received: "Received search input from player {player}: '{input}'"
+    search-cancelled: "Cancelled search input for player {player}"
+    search-cancelled-opening: "Cancelled pending search input for player {player} when opening terminal"
+    terminal-refresh-start: "Starting comprehensive refresh of terminals for network: {network}"
+    terminal-closing: "Closing terminal for player {player} - network invalid"
+    terminal-refreshed: "Refreshed terminal for player {player} in network {network}"
+    terminal-refresh-summary: "Refreshed {count} terminals for network {network}"
+    terminal-validation: "Validated and closed {count} invalid terminal GUIs"
+    network-invalidation: "Handling network invalidation for: {network}"
+    network-invalidation-summary: "Closed {terminals} terminal GUIs and notified {bays} drive bay users for invalidated network {network}"
+    search-term-saved: "Saved search term '{term}' for terminal at {key}"
+    search-term-cleared: "Cleared search term for terminal at {key}"
+    sort-saved: "Saved quantity sort setting for terminal at {key}"
+    sort-cleared: "Cleared quantity sort setting for terminal at {key} (using default alphabetical)"
+    target-detected: "Detected {target} target for {device} at {location}"
+    sorting-applied: "Applied {type} sorting"
+    items-loaded: "Loaded {total} total items{search} sorted by {sorting}"
+    
+  disk:
+    found-existing: "Found existing disk record for ID: {id} by {crafter} (tier: {tier})"
+    associated: "Associated disk {id} with valid network {network}"
+    terminal-refreshed: "Refreshed terminals for valid network {network} after disk placement"
+    placed-success: "Successfully placed disk {id} in slot {slot}"
+    dropping-contents: "Dropping drive bay contents at {location} for network {network}"
+    dropping-contents-explosion: "Dropping drive bay contents at {location} (network: {network}) due to explosion"
+    dropping-contents-orphaned: "Drive bay at {location} has no network association, checking for orphaned contents"
+    found-disks: "Found {count} disks to drop from drive bay"
+    found-disks-orphaned: "Found {count} disks to drop from networkless drive bay"
+
+# Console Messages (for server console)
+console:
+  startup:
+    loading: "Loading Mass Storage Server v{version}"
+    loaded: "Mass Storage Server loaded successfully"
+    enabled: "Mass Storage Server enabled"
+    disabled: "Mass Storage Server disabled"
+  
+  database:
+    connected: "Connected to database successfully"
+    tables-created: "Database tables created/updated"
+    migration-complete: "Database migration completed"
+    
+  config:
+    loaded: "Configuration loaded"
+    debug-enabled: "Debug mode enabled"
+    debug-disabled: "Debug mode disabled"
+    
+  network:
+    managers-initialized: "Network managers initialized"
+    task-started: "Network task started with {interval} tick interval"
+    
+  devices:
+    loaded-exporters: "Loaded {count} exporters" 
+    loaded-importers: "Loaded {count} importers"
+    import-task-started: "Import task started with {interval} tick interval"
+    export-task-started: "Export task started with {interval} tick interval"
+    validation-task-started: "{device} network validation task started ({interval} second interval)"
+    
+  language:
+    loaded-count: "Loaded {count} language files"
+    loaded-file: "Loaded language: {lang} from {source}"
+    load-failed: "Failed to load language {lang} from {source}: {error}"
+    
+  shutdown:
+    disabling: "Shutting down Mass Storage Server Plugin..."
+    
+  recipes:
+    registered: "Registered {count} recipes"

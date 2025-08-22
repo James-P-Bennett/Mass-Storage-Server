@@ -47,7 +47,7 @@ public class FurnaceExporterGUI implements Listener {
         this.exporterId = exporterId;
         this.networkId = networkId;
 
-        this.inventory = Bukkit.createInventory(null, 54, miniMessage.deserialize("<dark_purple>Furnace Exporter Configuration"));
+        this.inventory = Bukkit.createInventory(null, 54, plugin.getMessageManager().getMessageComponent(null, "gui.exporter.furnace.title"));
 
         loadCurrentFilters();
         setupGUI();
@@ -67,12 +67,12 @@ public class FurnaceExporterGUI implements Listener {
         slotToFilterItem.clear();
 
         setupFilterSlots(FUEL_FILTER_SLOTS, currentFuelFilterItems, Material.RED_STAINED_GLASS_PANE, 
-                        "<red>Export to Fuel Slot", "<yellow>Drag items here to export to furnace fuel slot", 
-                        "<yellow>These items will go to the bottom slot of the furnace");
+                        "gui.exporter.furnace.fuel-slot", "gui.exporter.furnace.fuel-instruction", 
+                        "gui.exporter.furnace.furnace-fuel-description");
 
         setupFilterSlots(MATERIAL_FILTER_SLOTS, currentMaterialFilterItems, Material.BLUE_STAINED_GLASS_PANE,
-                        "<blue>Export to Material Slot", "<yellow>Drag items here to export to furnace input slot", 
-                        "<yellow>These items will go to the top slot of the furnace");
+                        "gui.exporter.furnace.input-slot", "gui.exporter.furnace.input-instruction", 
+                        "gui.exporter.furnace.input-description");
 
         setupFillerSlots();
         setupControlArea();
@@ -91,8 +91,8 @@ public class FurnaceExporterGUI implements Listener {
                 if (meta != null) {
                     List<Component> lore = (meta.hasLore() && meta.lore() != null) ? new ArrayList<>(Objects.requireNonNull(meta.lore())) : new ArrayList<>();
                     lore.add(Component.empty());
-                    lore.add(miniMessage.deserialize("<gray>Filter Item"));
-                    lore.add(miniMessage.deserialize("<yellow>Click to remove from filter"));
+                    lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.filter.item-description"));
+                    lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.filter.remove-instruction"));
                     meta.lore(lore);
                     displayItem.setItemMeta(meta);
                 }
@@ -102,12 +102,12 @@ public class FurnaceExporterGUI implements Listener {
             } else {
                 ItemStack placeholder = new ItemStack(glassType);
                 ItemMeta meta = placeholder.getItemMeta();
-                meta.displayName(miniMessage.deserialize(title));
+                meta.displayName(plugin.getMessageManager().getMessageComponent(null, title));
                 List<Component> lore = new ArrayList<>();
                 lore.add(Component.empty());
-                lore.add(miniMessage.deserialize(instruction1));
-                lore.add(miniMessage.deserialize(instruction2));
-                lore.add(miniMessage.deserialize("<yellow>Or shift-click items from your inventory"));
+                lore.add(plugin.getMessageManager().getMessageComponent(null, instruction1));
+                lore.add(plugin.getMessageManager().getMessageComponent(null, instruction2));
+                lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.filter.shift-instruction"));
                 meta.lore(lore);
                 placeholder.setItemMeta(meta);
                 inventory.setItem(slot, placeholder);
@@ -132,50 +132,50 @@ public class FurnaceExporterGUI implements Listener {
 
         ItemStack status = new ItemStack(isEnabled ? Material.LIME_DYE : Material.GRAY_DYE);
         ItemMeta statusMeta = status.getItemMeta();
-        statusMeta.displayName(miniMessage.deserialize(isEnabled ? "<green>Status: Enabled" : "<gray>Status: Disabled"));
+        statusMeta.displayName(plugin.getMessageManager().getMessageComponent(null, isEnabled ? "gui.exporter.status.enabled" : "gui.exporter.status.disabled"));
 
         List<Component> statusLore = new ArrayList<>();
         if (!isEnabled && currentFuelFilterItems.isEmpty() && currentMaterialFilterItems.isEmpty()) {
-            statusLore.add(miniMessage.deserialize("<red>Add items to filters to enable"));
+            statusLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.filter.no-filter"));
         } else {
-            statusLore.add(miniMessage.deserialize("<gray>Furnace exporter is " + (isEnabled ? "actively exporting" : "inactive")));
+            statusLore.add(plugin.getMessageManager().getMessageComponent(null, isEnabled ? "gui.exporter.status.description-enabled" : "gui.exporter.status.description-disabled"));
         }
 
         Container target = getTargetContainer();
         statusLore.add(Component.empty());
         if (target != null) {
-            statusLore.add(miniMessage.deserialize("<aqua>Connected to: " + target.getBlock().getType().name()));
+            statusLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.target.connected", "container", target.getBlock().getType().name()));
         } else {
-            statusLore.add(miniMessage.deserialize("<red>No valid furnace connected"));
+            statusLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.furnace.no-furnace"));
         }
 
         statusLore.add(Component.empty());
-        statusLore.add(miniMessage.deserialize("<yellow>Click to toggle"));
+        statusLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.status.toggle"));
         statusMeta.lore(statusLore);
         status.setItemMeta(statusMeta);
         inventory.setItem(31, status);
 
         ItemStack clearButton = new ItemStack(Material.BARRIER);
         ItemMeta clearMeta = clearButton.getItemMeta();
-        clearMeta.displayName(miniMessage.deserialize("<red>Clear All Filters"));
+        clearMeta.displayName(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.controls.clear"));
         List<Component> clearLore = new ArrayList<>();
         clearLore.add(Component.empty());
-        clearLore.add(miniMessage.deserialize("<yellow>Click to remove all filter items"));
-        clearLore.add(miniMessage.deserialize("<yellow>This will clear both fuel and material filters"));
+        clearLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.controls.clear-description"));
+        clearLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.furnace.clear-both"));
         clearMeta.lore(clearLore);
         clearButton.setItemMeta(clearMeta);
         inventory.setItem(40, clearButton);
 
         ItemStack info = new ItemStack(Material.BOOK);
         ItemMeta infoMeta = info.getItemMeta();
-        infoMeta.displayName(miniMessage.deserialize("<aqua>Furnace Exporter Information"));
+        infoMeta.displayName(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.furnace.title"));
         List<Component> infoLore = new ArrayList<>();
-        infoLore.add(miniMessage.deserialize("<gray>Network: " + networkId.substring(0, Math.min(16, networkId.length()))));
-        infoLore.add(miniMessage.deserialize("<red>Fuel Filters: " + currentFuelFilterItems.size() + "/" + FUEL_FILTER_SLOTS.length));
-        infoLore.add(miniMessage.deserialize("<blue>Material Filters: " + currentMaterialFilterItems.size() + "/" + MATERIAL_FILTER_SLOTS.length));
+        infoLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.drive-bay.info.network", "network", networkId.substring(0, Math.min(16, networkId.length()))));
+        infoLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.furnace.fuel-count", "count", currentFuelFilterItems.size(), "max", FUEL_FILTER_SLOTS.length));
+        infoLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.furnace.material-count", "count", currentMaterialFilterItems.size(), "max", MATERIAL_FILTER_SLOTS.length));
         infoLore.add(Component.empty());
-        infoLore.add(miniMessage.deserialize("<yellow>Red slots: Items for furnace fuel slot"));
-        infoLore.add(miniMessage.deserialize("<yellow>Blue slots: Items for furnace input slot"));
+        infoLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.furnace.red-slots"));
+        infoLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.furnace.blue-slots"));
         infoMeta.lore(infoLore);
         info.setItemMeta(infoMeta);
         inventory.setItem(49, info);
@@ -225,7 +225,7 @@ public class FurnaceExporterGUI implements Listener {
             ItemStack itemToAdd = event.getCurrentItem();
             if (itemToAdd != null && !itemToAdd.getType().isAir()) {
                 event.setCancelled(true);
-                player.sendMessage(Component.text("Drag items to red (fuel) or blue (material) slots, or click an empty slot first!", NamedTextColor.YELLOW));
+                player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.exporter.furnace.shift-instruction"));
             }
             return;
         }
@@ -262,14 +262,14 @@ public class FurnaceExporterGUI implements Listener {
         if (filterItem != null) {
             removeFilterItem(filterItem, slot);
             setupGUI();
-            player.sendMessage(Component.text("Removed item from filter", NamedTextColor.YELLOW));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.removed", "type", "export"));
         }
     }
 
     private void handleAddItemToFilter(Player player, ItemStack itemToAdd, int slot) {
         // Check if item is blacklisted
         if (plugin.getItemManager().isItemBlacklisted(itemToAdd)) {
-            player.sendMessage(Component.text("You cannot add occupied containers or disks to the network!", NamedTextColor.RED));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.item-blacklisted"));
             return;
         }
         
@@ -282,20 +282,20 @@ public class FurnaceExporterGUI implements Listener {
         for (ItemStack existingItem : currentFuelFilterItems) {
             String existingHash = plugin.getItemManager().generateItemHash(existingItem);
             if (newItemHash.equals(existingHash)) {
-                player.sendMessage(Component.text("This item is already in the fuel filter!", NamedTextColor.RED));
+                player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.exporter.furnace.already-in-fuel"));
                 return;
             }
         }
         for (ItemStack existingItem : currentMaterialFilterItems) {
             String existingHash = plugin.getItemManager().generateItemHash(existingItem);
             if (newItemHash.equals(existingHash)) {
-                player.sendMessage(Component.text("This item is already in the material filter!", NamedTextColor.RED));
+                player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.exporter.furnace.already-in-material"));
                 return;
             }
         }
 
         if (targetList.size() >= maxSlots) {
-            player.sendMessage(Component.text("Filter is full! Remove items first.", NamedTextColor.RED));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.full"));
             return;
         }
 
@@ -304,7 +304,7 @@ public class FurnaceExporterGUI implements Listener {
         targetList.add(filterTemplate);
         saveFilters();
         setupGUI();
-        player.sendMessage(Component.text("Added " + itemToAdd.getType() + " to " + filterType + " filter", NamedTextColor.GREEN));
+        player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.exporter.furnace.added-to-filter", "item", itemToAdd.getType(), "type", filterType));
     }
 
     private void removeFilterItem(ItemStack filterItem, int slot) {
@@ -333,7 +333,7 @@ public class FurnaceExporterGUI implements Listener {
             if (data == null) return;
 
             if (currentFuelFilterItems.isEmpty() && currentMaterialFilterItems.isEmpty() && !data.enabled) {
-                player.sendMessage(Component.text("Cannot enable exporter without filter items!", NamedTextColor.RED));
+                player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.exporter.filter.no-filter"));
                 return;
             }
 
@@ -341,16 +341,15 @@ public class FurnaceExporterGUI implements Listener {
             plugin.getExporterManager().toggleExporter(exporterId, newState);
             setupGUI();
 
-            player.sendMessage(Component.text("Furnace exporter " + (newState ? "enabled" : "disabled"),
-                    newState ? NamedTextColor.GREEN : NamedTextColor.YELLOW));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, newState ? "gui.device.enabled" : "gui.device.disabled", "device", "Furnace exporter"));
         } catch (Exception e) {
-            player.sendMessage(Component.text("Error toggling exporter: " + e.getMessage(), NamedTextColor.RED));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.device.toggle-error", "device", "exporter", "error", e.getMessage()));
         }
     }
 
     private void handleClearFilters(Player player) {
         if (currentFuelFilterItems.isEmpty() && currentMaterialFilterItems.isEmpty()) {
-            player.sendMessage(Component.text("No filters to clear", NamedTextColor.YELLOW));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.exporter.controls.no-filters"));
             return;
         }
 
@@ -358,7 +357,7 @@ public class FurnaceExporterGUI implements Listener {
         currentMaterialFilterItems.clear();
         saveFilters();
         setupGUI();
-        player.sendMessage(Component.text("Cleared all filters", NamedTextColor.YELLOW));
+        player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.exporter.controls.cleared"));
     }
 
     private void saveFilters() {

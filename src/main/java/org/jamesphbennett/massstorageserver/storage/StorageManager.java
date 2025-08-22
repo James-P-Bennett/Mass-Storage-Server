@@ -44,7 +44,7 @@ public class StorageManager {
                     plugin.debugLog("Found " + diskIds.size() + " storage disks in network " + networkId);
 
                     if (diskIds.isEmpty()) {
-                        plugin.getLogger().warning("No storage disks found in network " + networkId);
+                        plugin.debugLog("debug.storage.no-disks", "network", networkId);
                         remainders.addAll(items);
                         return;
                     }
@@ -58,15 +58,15 @@ public class StorageManager {
 
                     for (ItemStack item : items) {
                         if (itemManager.isItemBlacklisted(item)) {
-                            plugin.getLogger().warning("Item not allowed: " + item.getType());
+                            plugin.debugLog("debug.storage.item-blacklisted", "item", item.getType());
                             remainders.add(item);
                             continue;
                         }
 
-                        plugin.debugLog("Processing " + item.getAmount() + " " + item.getType());
+                        plugin.debugLog("debug.storage.processing", "amount", item.getAmount(), "item", item.getType());
                         ItemStack remainder = storeItemInNetwork(conn, diskIds, item);
                         if (remainder != null && remainder.getAmount() > 0) {
-                            plugin.getLogger().warning("Could not store " + remainder.getAmount() + " " + remainder.getType());
+                            plugin.debugLog("debug.storage.operation-complete", "remaining", remainder.getAmount() + " " + remainder.getType() + " could not be stored");
                             remainders.add(remainder);
                         }
                     }

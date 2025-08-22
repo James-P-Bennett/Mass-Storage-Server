@@ -41,7 +41,7 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
 
             case "recovery":
                 if (args.length < 2) {
-                    sender.sendMessage(Component.text("Usage: /mss recovery <disk_id>", NamedTextColor.RED));
+                    sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.usage.recovery"));
                     return true;
                 }
                 handleRecovery(sender, args[1]);
@@ -49,7 +49,7 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
 
             case "give":
                 if (args.length < 2) {
-                    sender.sendMessage(Component.text("Usage: /mss give <item_type> [player]", NamedTextColor.RED));
+                    sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.usage.give"));
                     return true;
                 }
                 handleGive(sender, args);
@@ -69,7 +69,7 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
 
             case "recipe":
                 if (args.length < 2) {
-                    sender.sendMessage(Component.text("Usage: /mss recipe <recipe_name>", NamedTextColor.RED));
+                    sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.usage.recipe"));
                     return true;
                 }
                 handleRecipeInfo(sender, args[1]);
@@ -80,7 +80,7 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
                 break;
 
             default:
-                sender.sendMessage(Component.text("Unknown command. Use /mss help for available commands.", NamedTextColor.RED));
+                sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.unknown-command"));
                 break;
         }
 
@@ -88,28 +88,30 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
     }
 
     private void sendHelpMessage(CommandSender sender) {
-        sender.sendMessage(Component.text("=== Mass Storage Server Commands ===", NamedTextColor.GOLD));
-        sender.sendMessage(Component.text("/mss help - Show this help message", NamedTextColor.YELLOW));
+        Player player = sender instanceof Player ? (Player) sender : null;
+        
+        sender.sendMessage(plugin.getMessageManager().getMessageComponent(player, "commands.help.header"));
+        sender.sendMessage(plugin.getMessageManager().getMessageComponent(player, "commands.help.main-help"));
 
         if (sender.hasPermission("massstorageserver.admin")) {
-            sender.sendMessage(Component.text("/mss recovery <disk_id> - Recover a storage disk by ID", NamedTextColor.YELLOW));
-            sender.sendMessage(Component.text("/mss give <item> [player] - Give MSS items", NamedTextColor.YELLOW));
-            sender.sendMessage(Component.text("/mss info - Show plugin information", NamedTextColor.YELLOW));
-            sender.sendMessage(Component.text("/mss cleanup - Clean up expired data", NamedTextColor.YELLOW));
-            sender.sendMessage(Component.text("/mss recipes - List all recipes", NamedTextColor.YELLOW));
-            sender.sendMessage(Component.text("/mss recipe <name> - Show detailed recipe info", NamedTextColor.YELLOW));
-            sender.sendMessage(Component.text("/mss reload [config|recipes] - Reload configurations", NamedTextColor.YELLOW));
+            sender.sendMessage(plugin.getMessageManager().getMessageComponent(player, "commands.help.recovery"));
+            sender.sendMessage(plugin.getMessageManager().getMessageComponent(player, "commands.help.give"));
+            sender.sendMessage(plugin.getMessageManager().getMessageComponent(player, "commands.help.info"));
+            sender.sendMessage(plugin.getMessageManager().getMessageComponent(player, "commands.help.cleanup"));
+            sender.sendMessage(plugin.getMessageManager().getMessageComponent(player, "commands.help.recipes"));
+            sender.sendMessage(plugin.getMessageManager().getMessageComponent(player, "commands.help.recipe"));
+            sender.sendMessage(plugin.getMessageManager().getMessageComponent(player, "commands.help.reload"));
         }
     }
 
     private void handleRecovery(CommandSender sender, String diskId) {
         if (!sender.hasPermission("massstorageserver.recovery")) {
-            sender.sendMessage(Component.text("You don't have permission to use recovery commands.", NamedTextColor.RED));
+            sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.no-permission-recovery"));
             return;
         }
 
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Only players can use recovery commands.", NamedTextColor.RED));
+            sender.sendMessage(plugin.getMessageManager().getMessageComponent(null, "commands.players-only"));
             return;
         }
 
@@ -123,7 +125,7 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
 
                 try (ResultSet rs = stmt.executeQuery()) {
                     if (!rs.next()) {
-                        sender.sendMessage(Component.text("Storage disk with ID '" + diskId + "' not found.", NamedTextColor.RED));
+                        sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.recovery.not-found", "disk_id", diskId));
                         return;
                     }
 
@@ -139,27 +141,27 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
                     // Give to player
                     if (player.getInventory().firstEmpty() == -1) {
                         player.getWorld().dropItemNaturally(player.getLocation(), recoveredDisk);
-                        sender.sendMessage(Component.text("Recovery successful! Disk dropped at your location (inventory full).", NamedTextColor.GREEN));
+                        sender.sendMessage(plugin.getMessageManager().getMessageComponent(player, "commands.recovery.success-dropped"));
                     } else {
                         player.getInventory().addItem(recoveredDisk);
-                        sender.sendMessage(Component.text("Recovery successful! Disk added to your inventory.", NamedTextColor.GREEN));
+                        sender.sendMessage(plugin.getMessageManager().getMessageComponent(player, "commands.recovery.success-inventory"));
                     }
 
-                    sender.sendMessage(Component.text("Disk ID: " + diskId, NamedTextColor.GRAY));
-                    sender.sendMessage(Component.text("Original Crafter: " + crafterName, NamedTextColor.GRAY));
-                    sender.sendMessage(Component.text("Cells Used: " + usedCells + "/" + maxCells, NamedTextColor.GRAY));
+                    sender.sendMessage(plugin.getMessageManager().getMessageComponent(player, "commands.recovery.disk-info", "disk_id", diskId));
+                    sender.sendMessage(plugin.getMessageManager().getMessageComponent(player, "commands.recovery.crafter-info", "crafter", crafterName));
+                    sender.sendMessage(plugin.getMessageManager().getMessageComponent(player, "commands.recovery.cells-info", "used", usedCells, "max", maxCells));
                 }
             }
 
         } catch (Exception e) {
-            sender.sendMessage(Component.text("Error during recovery: " + e.getMessage(), NamedTextColor.RED));
+            sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.recovery.error", "error", e.getMessage()));
             plugin.getLogger().severe("Error during disk recovery: " + e.getMessage());
         }
     }
 
     private void handleGive(CommandSender sender, String[] args) {
         if (!sender.hasPermission("massstorageserver.admin")) {
-            sender.sendMessage(Component.text("You don't have permission to use give commands.", NamedTextColor.RED));
+            sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.give.no-permission"));
             return;
         }
 
@@ -167,13 +169,13 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
         if (args.length >= 3) {
             target = plugin.getServer().getPlayer(args[2]);
             if (target == null) {
-                sender.sendMessage(Component.text("Player '" + args[2] + "' not found.", NamedTextColor.RED));
+                sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.give.player-not-found", "player", args[2]));
                 return;
             }
         } else if (sender instanceof Player) {
             target = (Player) sender;
         } else {
-            sender.sendMessage(Component.text("You must specify a player when using this command from console.", NamedTextColor.RED));
+            sender.sendMessage(plugin.getMessageManager().getMessageComponent(null, "commands.give.console-needs-player"));
             return;
         }
 
@@ -207,29 +209,29 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
         };
 
         if (item == null) {
-            sender.sendMessage(Component.text("Invalid item type. Available:", NamedTextColor.RED));
-            sender.sendMessage(Component.text("Blocks: server, bay, terminal, cable, exporter, importer", NamedTextColor.YELLOW));
-            sender.sendMessage(Component.text("Disks: disk1k, disk4k, disk16k, disk64k", NamedTextColor.YELLOW));
-            sender.sendMessage(Component.text("Components: housing, platter1k, platter4k, platter16k, platter64k", NamedTextColor.YELLOW));
+            sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.give.invalid-item"));
+            sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.give.available-blocks"));
+            sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.give.available-disks"));
+            sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.give.available-components"));
             return;
         }
 
         if (target.getInventory().firstEmpty() == -1) {
             target.getWorld().dropItemNaturally(target.getLocation(), item);
-            sender.sendMessage(Component.text("Item given to " + target.getName() + " (dropped due to full inventory).", NamedTextColor.GREEN));
+            sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.give.success-dropped", "player", target.getName()));
         } else {
             target.getInventory().addItem(item);
-            sender.sendMessage(Component.text("Item given to " + target.getName() + ".", NamedTextColor.GREEN));
+            sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.give.success-inventory", "player", target.getName()));
         }
 
         if (!sender.equals(target)) {
-            target.sendMessage(Component.text("You received a " + args[1] + " from " + sender.getName() + ".", NamedTextColor.GREEN));
+            target.sendMessage(plugin.getMessageManager().getMessageComponent(target, "commands.give.received", "item", args[1], "sender", sender.getName()));
         }
     }
 
     private void handleInfo(CommandSender sender) {
         if (!sender.hasPermission("massstorageserver.admin")) {
-            sender.sendMessage(Component.text("You don't have permission to use info commands.", NamedTextColor.RED));
+            sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.info.no-permission"));
             return;
         }
 
@@ -239,7 +241,7 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
                  ResultSet rs = stmt.executeQuery()) {
                 rs.next();
                 int networkCount = rs.getInt(1);
-                sender.sendMessage(Component.text("Active Networks: " + networkCount, NamedTextColor.YELLOW));
+                sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.info.networks", "count", networkCount));
             }
 
             // Count storage disks
@@ -247,7 +249,7 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
                  ResultSet rs = stmt.executeQuery()) {
                 rs.next();
                 int diskCount = rs.getInt(1);
-                sender.sendMessage(Component.text("Total Storage Disks: " + diskCount, NamedTextColor.YELLOW));
+                sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.info.disks", "count", diskCount));
             }
 
             // Count stored items
@@ -256,8 +258,8 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
                 rs.next();
                 int itemTypes = rs.getInt(1);
                 long totalItems = rs.getLong(2);
-                sender.sendMessage(Component.text("Item Types Stored: " + itemTypes, NamedTextColor.YELLOW));
-                sender.sendMessage(Component.text("Total Items Stored: " + totalItems, NamedTextColor.YELLOW));
+                sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.info.item-types", "types", itemTypes));
+                sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.info.total-items", "total", totalItems));
             }
 
             // Count network cables
@@ -265,7 +267,7 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
                  ResultSet rs = stmt.executeQuery()) {
                 rs.next();
                 int cableCount = rs.getInt(1);
-                sender.sendMessage(Component.text("Network Cables Placed: " + cableCount, NamedTextColor.YELLOW));
+                sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.info.cables", "count", cableCount));
             }
 
             // Count exporters
@@ -289,19 +291,17 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
             Set<String> totalRecipes = plugin.getConfigManager().getRecipeNames();
             boolean recipesEnabled = plugin.getConfigManager().areRecipesEnabled();
 
-            sender.sendMessage(Component.text("Recipes: " +
-                            (recipesEnabled ? "Enabled" : "Disabled") +
-                            " (" + recipeCount + "/" + totalRecipes.size() + " registered)",
-                    recipesEnabled ? NamedTextColor.GREEN : NamedTextColor.RED));
+            String recipeKey = recipesEnabled ? "commands.info.recipes-enabled" : "commands.info.recipes-disabled";
+            sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, recipeKey, "registered", recipeCount, "total", totalRecipes.size()));
 
         } catch (Exception e) {
-            sender.sendMessage(Component.text("Error retrieving information: " + e.getMessage(), NamedTextColor.RED));
+            sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.info.error", "error", e.getMessage()));
         }
     }
 
     private void handleCleanup(CommandSender sender) {
         if (!sender.hasPermission("massstorageserver.admin")) {
-            sender.sendMessage(Component.text("You don't have permission to use cleanup commands.", NamedTextColor.RED));
+            sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.cleanup.no-permission"));
             return;
         }
 
@@ -312,7 +312,7 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
                  PreparedStatement stmt = conn.prepareStatement(
                          "DELETE FROM storage_items WHERE disk_id NOT IN (SELECT disk_id FROM storage_disks)")) {
                 int deletedItems = stmt.executeUpdate();
-                sender.sendMessage(Component.text("Cleaned up " + deletedItems + " orphaned storage items.", NamedTextColor.GREEN));
+                sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.cleanup.orphaned-items", "count", deletedItems));
             }
 
             // Clean up empty storage disks with no items
@@ -320,24 +320,24 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
                  PreparedStatement stmt = conn.prepareStatement(
                          "UPDATE storage_disks SET used_cells = 0 WHERE disk_id NOT IN (SELECT DISTINCT disk_id FROM storage_items)")) {
                 int updatedDisks = stmt.executeUpdate();
-                sender.sendMessage(Component.text("Reset " + updatedDisks + " empty storage disk cell counts.", NamedTextColor.GREEN));
+                sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.cleanup.reset-disks", "count", updatedDisks));
             }
 
-            sender.sendMessage(Component.text("Cleanup completed successfully!", NamedTextColor.GREEN));
+            sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.cleanup.success"));
 
         } catch (Exception e) {
-            sender.sendMessage(Component.text("Error during cleanup: " + e.getMessage(), NamedTextColor.RED));
+            sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.cleanup.error", "error", e.getMessage()));
         }
     }
 
     private void handleRecipes(CommandSender sender) {
         if (!sender.hasPermission("massstorageserver.admin")) {
-            sender.sendMessage(Component.text("You don't have permission to use recipe commands.", NamedTextColor.RED));
+            sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.recipes.no-permission"));
             return;
         }
 
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("This command can only be used by players.", NamedTextColor.RED));
+            sender.sendMessage(plugin.getMessageManager().getMessageComponent(null, "commands.recipes.players-only"));
             return;
         }
 
@@ -346,12 +346,12 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
 
     private void handleRecipeInfo(CommandSender sender, String recipeName) {
         if (!sender.hasPermission("massstorageserver.admin")) {
-            sender.sendMessage(Component.text("You don't have permission to use recipe commands.", NamedTextColor.RED));
+            sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.recipes.no-permission"));
             return;
         }
 
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("This command can only be used by players.", NamedTextColor.RED));
+            sender.sendMessage(plugin.getMessageManager().getMessageComponent(null, "commands.recipes.players-only"));
             return;
         }
 
@@ -360,7 +360,7 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
 
     private void handleReload(CommandSender sender, String[] args) {
         if (!sender.hasPermission("massstorageserver.admin")) {
-            sender.sendMessage(Component.text("You don't have permission to use reload commands.", NamedTextColor.RED));
+            sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.reload.no-permission"));
             return;
         }
 
@@ -370,19 +370,19 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
             case "config":
                 try {
                     plugin.getConfigManager().loadConfig();
-                    sender.sendMessage(Component.text("Main configuration reloaded successfully!", NamedTextColor.GREEN));
+                    sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.reload.config-success"));
                 } catch (Exception e) {
-                    sender.sendMessage(Component.text("Error reloading config: " + e.getMessage(), NamedTextColor.RED));
+                    sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.reload.config-error", "error", e.getMessage()));
                 }
                 break;
 
             case "recipes":
                 try {
                     plugin.getRecipeManager().reloadRecipes();
-                    sender.sendMessage(Component.text("Recipes configuration reloaded successfully!", NamedTextColor.GREEN));
-                    sender.sendMessage(Component.text("Note: Server restart may be required for recipe changes to take full effect.", NamedTextColor.YELLOW));
+                    sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.reload.recipes-success"));
+                    sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.reload.recipes-note"));
                 } catch (Exception e) {
-                    sender.sendMessage(Component.text("Error reloading recipes: " + e.getMessage(), NamedTextColor.RED));
+                    sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.reload.recipes-error", "error", e.getMessage()));
                 }
                 break;
 
@@ -390,15 +390,15 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
                 try {
                     plugin.getConfigManager().reloadConfig();
                     plugin.getRecipeManager().reloadRecipes();
-                    sender.sendMessage(Component.text("All configurations reloaded successfully!", NamedTextColor.GREEN));
-                    sender.sendMessage(Component.text("Note: Server restart may be required for recipe changes to take full effect.", NamedTextColor.YELLOW));
+                    sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.reload.all-success"));
+                    sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.reload.recipes-note"));
                 } catch (Exception e) {
-                    sender.sendMessage(Component.text("Error reloading configurations: " + e.getMessage(), NamedTextColor.RED));
+                    sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.reload.all-error", "error", e.getMessage()));
                 }
                 break;
 
             default:
-                sender.sendMessage(Component.text("Usage: /mss reload [config|recipes|all]", NamedTextColor.RED));
+                sender.sendMessage(plugin.getMessageManager().getMessageComponent(sender instanceof Player ? (Player) sender : null, "commands.reload.usage"));
                 break;
         }
     }

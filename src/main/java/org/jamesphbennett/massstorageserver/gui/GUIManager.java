@@ -66,13 +66,13 @@ public class GUIManager {
         try {
             // Validate network is still valid
             if (!isNetworkValid(networkId)) {
-                player.sendMessage(Component.text("This exporter is not connected to a valid network.", NamedTextColor.RED));
+                player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "errors.network.invalid"));
                 return;
             }
 
             // Check if exporter is still physically connected to its network
             if (!plugin.getExporterManager().isExporterConnectedToItsNetwork(exporterId)) {
-                player.sendMessage(Component.text("This exporter is not connected to its assigned network.", NamedTextColor.RED));
+                player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "errors.network.not-connected-assigned", "device", "exporter"));
                 return;
             }
 
@@ -104,7 +104,7 @@ public class GUIManager {
 
             plugin.debugLog("Successfully opened exporter GUI for player " + player.getName());
         } catch (Exception e) {
-            player.sendMessage(Component.text("Error opening Exporter GUI: " + e.getMessage(), NamedTextColor.RED));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "errors.gui.error-opening", "gui", "Exporter", "error", e.getMessage()));
             plugin.getLogger().severe("Error opening Exporter GUI: " + e.getMessage());
             plugin.getLogger().severe("Stack trace: " + java.util.Arrays.toString(e.getStackTrace()));
         }
@@ -117,13 +117,13 @@ public class GUIManager {
         try {
             // Validate network is still valid
             if (!isNetworkValid(networkId)) {
-                player.sendMessage(Component.text("This importer is not connected to a valid network.", NamedTextColor.RED));
+                player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "errors.network.invalid"));
                 return;
             }
 
             // Check if importer is still physically connected to any network
             if (!plugin.getImporterManager().isImporterConnectedToAnyNetwork(importerId)) {
-                player.sendMessage(Component.text("This importer is not connected to any network.", NamedTextColor.RED));
+                player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "errors.network.not-connected-any", "device", "importer"));
                 return;
             }
 
@@ -142,7 +142,7 @@ public class GUIManager {
 
             plugin.debugLog("Successfully opened importer GUI for player " + player.getName());
         } catch (Exception e) {
-            player.sendMessage(Component.text("Error opening Importer GUI: " + e.getMessage(), NamedTextColor.RED));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "errors.gui.error-opening", "gui", "Importer", "error", e.getMessage()));
             plugin.getLogger().severe("Error opening Importer GUI: " + e.getMessage());
             plugin.getLogger().severe("Stack trace: " + java.util.Arrays.toString(e.getStackTrace()));
         }
@@ -209,7 +209,7 @@ public class GUIManager {
 
             plugin.debugLog("Successfully opened drive bay GUI for player " + player.getName());
         } catch (Exception e) {
-            player.sendMessage(Component.text("Error opening Drive Bay GUI: " + e.getMessage(), NamedTextColor.RED));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "errors.gui.error-opening", "gui", "Drive Bay", "error", e.getMessage()));
             plugin.getLogger().severe("Error opening Drive Bay GUI: " + e.getMessage());
             plugin.getLogger().severe("Stack trace: " + java.util.Arrays.toString(e.getStackTrace()));
         }
@@ -274,7 +274,7 @@ public class GUIManager {
 
             // Validate network is still valid
             if (!isNetworkValid(networkId)) {
-                player.sendMessage(Component.text("This terminal is no longer connected to a valid network.", NamedTextColor.RED));
+                player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "errors.network.invalid"));
                 return;
             }
 
@@ -295,7 +295,7 @@ public class GUIManager {
 
             plugin.debugLog("Opened terminal GUI for player " + player.getName() + " in network " + networkId);
         } catch (Exception e) {
-            player.sendMessage(Component.text("Error opening Terminal GUI: " + e.getMessage(), NamedTextColor.RED));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "errors.gui.error-opening", "gui", "Terminal", "error", e.getMessage()));
             plugin.getLogger().severe("Error opening Terminal GUI: " + e.getMessage());
         }
     }
@@ -322,7 +322,7 @@ public class GUIManager {
                 if (playersAwaitingSearchInput.remove(playerId) != null) {
                     searchTimeoutTasks.remove(playerId);
                     if (player.isOnline()) {
-                        player.sendMessage(Component.text("Search timed out.", NamedTextColor.RED));
+                        player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "errors.search.timeout"));
                     }
                 }
             }
@@ -360,15 +360,15 @@ public class GUIManager {
         if (message.equalsIgnoreCase("cancel")) {
             // Clear search for this terminal
             setTerminalSearchTerm(terminalLocation, null);
-            player.sendMessage(Component.text("Search cancelled.", NamedTextColor.RED));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "errors.search.cancelled"));
         } else if (message.trim().isEmpty()) {
             // Clear search for this terminal
             setTerminalSearchTerm(terminalLocation, null);
-            player.sendMessage(Component.text("Search cleared.", NamedTextColor.YELLOW));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "errors.search.cleared"));
         } else {
             // Save search term for this terminal
             setTerminalSearchTerm(terminalLocation, message.trim());
-            player.sendMessage(Component.text("Search saved: '" + message.trim() + "'.", NamedTextColor.GREEN));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "errors.search.saved", "term", message.trim()));
         }
 
         // DO NOT auto-reopen the terminal - let the player manually reopen it
@@ -548,7 +548,7 @@ public class GUIManager {
 
         // Notify drive bay users but keep their GUIs open
         for (Player player : driveBaysToNotify) {
-            player.sendMessage(Component.text("Storage network dissolved - you can still manage disks in this drive bay.", NamedTextColor.YELLOW));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "errors.network.dissolved-drive-bay"));
             // Refresh the drive bay to show updated network status
             refreshPlayerDriveBay(player);
         }

@@ -42,7 +42,7 @@ public class DriveBayGUI implements Listener {
         this.driveBayLocation = driveBayLocation;
         this.networkId = networkId;
 
-        this.inventory = Bukkit.createInventory(null, 27, miniMessage.deserialize("<aqua>Drive Bay"));
+        this.inventory = Bukkit.createInventory(null, 27, plugin.getMessageManager().getMessageComponent(null, "gui.drive-bay.title"));
 
         setupGUI();
         loadDrives();
@@ -73,19 +73,19 @@ public class DriveBayGUI implements Listener {
     private void updateTitleItem() {
         ItemStack title = new ItemStack(Material.CHISELED_TUFF_BRICKS);
         ItemMeta titleMeta = title.getItemMeta();
-        titleMeta.displayName(miniMessage.deserialize("<aqua>Drive Bay"));
+        titleMeta.displayName(plugin.getMessageManager().getMessageComponent(null, "gui.drive-bay.title"));
 
         List<Component> titleLore = new ArrayList<>();
-        titleLore.add(miniMessage.deserialize("<gray>Insert storage disks to expand capacity"));
+        titleLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.drive-bay.slot.insert"));
 
         boolean networkValid = isNetworkValid();
         if (networkValid) {
-            titleLore.add(miniMessage.deserialize("<green>Network Status: Connected"));
-            titleLore.add(miniMessage.deserialize("<gray>Slots: " + plugin.getConfigManager().getMaxDriveBaySlots()));
+            titleLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.drive-bay.status.connected"));
+            titleLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.drive-bay.info.slots", "filled", 0, "total", plugin.getConfigManager().getMaxDriveBaySlots()));
         } else {
-            titleLore.add(miniMessage.deserialize("<red>Network Status: Disconnected"));
-            titleLore.add(miniMessage.deserialize("<yellow>You can still manage disks"));
-            titleLore.add(miniMessage.deserialize("<gray>Slots: " + plugin.getConfigManager().getMaxDriveBaySlots()));
+            titleLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.drive-bay.status.disconnected"));
+            titleLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.drive-bay.status.standalone"));
+            titleLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.drive-bay.info.slots", "filled", 0, "total", plugin.getConfigManager().getMaxDriveBaySlots()));
         }
 
         titleMeta.lore(titleLore);
@@ -227,10 +227,10 @@ public class DriveBayGUI implements Listener {
         int defaultCells = 64;
 
         Component displayName = switch (tier.toLowerCase()) {
-            case "4k" -> miniMessage.deserialize("<yellow>Storage Disk [4K]");
-            case "16k" -> miniMessage.deserialize("<aqua>Storage Disk [16K]");
-            case "64k" -> miniMessage.deserialize("<light_purple>Storage Disk [64K]");
-            default -> miniMessage.deserialize("<white>Storage Disk [1K]");
+            case "4k" -> plugin.getMessageManager().getMessageComponent(null, "gui.drive-bay.slot.disk", "tier", "4K");
+            case "16k" -> plugin.getMessageManager().getMessageComponent(null, "gui.drive-bay.slot.disk", "tier", "16K");
+            case "64k" -> plugin.getMessageManager().getMessageComponent(null, "gui.drive-bay.slot.disk", "tier", "64K");
+            default -> plugin.getMessageManager().getMessageComponent(null, "gui.drive-bay.slot.disk", "tier", "1K");
         };
         meta.displayName(displayName);
 
@@ -238,14 +238,14 @@ public class DriveBayGUI implements Listener {
         int totalCapacity = defaultCells * itemsPerCell;
 
         List<Component> lore = new ArrayList<>();
-        lore.add(miniMessage.deserialize("<gray>Capacity: " + String.format("%,d", itemsPerCell) + " items per cell"));
-        lore.add(miniMessage.deserialize("<yellow>Cells Used: 0/" + defaultCells));
-        lore.add(miniMessage.deserialize("<aqua>Total Capacity: " + String.format("%,d", totalCapacity) + " items"));
+        lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.drive-bay.disk.capacity", "capacity", String.format("%,d", itemsPerCell)));
+        lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.drive-bay.slot.usage", "used", 0, "max", defaultCells));
+        lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.drive-bay.disk.total-capacity", "total", String.format("%,d", totalCapacity)));
         lore.add(Component.empty());
-        lore.add(miniMessage.deserialize("<gray>Tier: " + plugin.getItemManager().getTierDisplayName(tier)));
+        lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.drive-bay.disk.tier", "tier", plugin.getItemManager().getTierDisplayName(tier)));
         lore.add(Component.empty());
-        lore.add(miniMessage.deserialize("<dark_gray>Crafted by: " + crafterName));
-        lore.add(miniMessage.deserialize("<dark_gray>ID: " + diskId));
+        lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.drive-bay.disk.crafter", "crafter", crafterName));
+        lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.drive-bay.disk.id", "id", diskId));
         meta.lore(lore);
 
 
@@ -299,7 +299,7 @@ public class DriveBayGUI implements Listener {
                     event.setCancelled(true);
 
                     if (!plugin.getItemManager().isStorageDisk(clickedItem)) {
-                        player.sendMessage(Component.text("Only storage disks can be placed in drive bays!", NamedTextColor.RED));
+                        player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.drive-bay.error.only-disks"));
                         return;
                     }
 
@@ -320,7 +320,7 @@ public class DriveBayGUI implements Listener {
                         }
                     }
 
-                    player.sendMessage(Component.text("No empty drive slots available!", NamedTextColor.RED));
+                    player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.drive-bay.error.no-slots"));
                     return;
                 }
             } else {
@@ -342,7 +342,7 @@ public class DriveBayGUI implements Listener {
                         event.setCancelled(true);
 
                         if (player.getInventory().firstEmpty() == -1) {
-                            player.sendMessage(Component.text("Your inventory is full!", NamedTextColor.RED));
+                            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.drive-bay.error.inventory-full"));
                             return;
                         }
 
@@ -397,7 +397,7 @@ public class DriveBayGUI implements Listener {
                             updateTitleItem();
                         });
                     } else {
-                        player.sendMessage(Component.text("Failed to place disk - database error", NamedTextColor.RED));
+                        player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.drive-bay.error.database"));
                     }
                 } else {
                     if (plugin.getItemManager().isStorageDisk(clickedItem)) {
@@ -412,7 +412,7 @@ public class DriveBayGUI implements Listener {
                 }
             } else {
                 event.setCancelled(true);
-                player.sendMessage(Component.text("Only storage disks can be placed in drive bays!", NamedTextColor.RED));
+                player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.drive-bay.error.only-disks"));
             }
         } else {
             if (clickedItem != null && !clickedItem.getType().isAir()) {
@@ -436,7 +436,7 @@ public class DriveBayGUI implements Listener {
     private boolean placeDiskInSlot(Player player, int slotIndex, ItemStack disk) {
         String diskId = plugin.getItemManager().getStorageDiskId(disk);
         if (diskId == null) {
-            player.sendMessage(Component.text("Invalid storage disk!", NamedTextColor.RED));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.drive-bay.error.invalid-disk"));
             return false;
         }
 

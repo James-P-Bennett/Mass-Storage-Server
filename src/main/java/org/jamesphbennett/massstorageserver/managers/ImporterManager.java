@@ -463,48 +463,30 @@ public class ImporterManager {
         try {
             Block attachedBlock = null;
 
-            plugin.debugLog(" Checking target for importer at " + importerBlock.getLocation() + 
-                                  " of type " + importerBlock.getType());
+            plugin.debugLog("debug.device.target-detected", "target", "container", "device", "importer", "location", importerBlock.getLocation());
 
             if (importerBlock.getType() == Material.PLAYER_HEAD) {
                 // Floor mounted head - check block below
                 attachedBlock = importerBlock.getRelative(BlockFace.DOWN);
-                plugin.debugLog(" Floor mounted head, checking block below: " + 
-                                      attachedBlock.getType() + " at " + attachedBlock.getLocation());
             } else if (importerBlock.getType() == Material.PLAYER_WALL_HEAD) {
                 // Wall mounted head - check block it's attached to
                 org.bukkit.block.data.Directional directional = (org.bukkit.block.data.Directional) importerBlock.getBlockData();
                 BlockFace facing = directional.getFacing();
                 // The block the wall head is attached to is in the opposite direction
                 attachedBlock = importerBlock.getRelative(facing.getOppositeFace());
-                plugin.debugLog(" Wall mounted head facing " + facing + 
-                                      ", checking attached block: " + attachedBlock.getType() + 
-                                      " at " + attachedBlock.getLocation());
             }
 
             // Check if the attached block is a container
             if (attachedBlock != null) {
-                boolean isContainer = attachedBlock.getState() instanceof Container;
-                plugin.debugLog(" Attached block " + attachedBlock.getType() + 
-                                      " is container: " + isContainer);
-                
-                if (isContainer) {
-                    Container container = (Container) attachedBlock.getState();
-                    plugin.debugLog(" Returning container: " + container.getClass().getSimpleName());
+                if (attachedBlock.getState() instanceof Container container) {
                     return container;
-                } else {
-                    plugin.debugLog(" Attached block is not a container, returning null");
                 }
-            } else {
-                plugin.getLogger().warning("DEBUG: Could not determine attached block!");
             }
 
         } catch (Exception e) {
             plugin.getLogger().warning("Error checking attached block for importer: " + e.getMessage());
-            plugin.getLogger().warning("Stack trace: " + java.util.Arrays.toString(e.getStackTrace()));
         }
 
-        plugin.debugLog(" Returning null - no valid target container");
         return null;
     }
 

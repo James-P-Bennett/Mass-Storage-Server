@@ -50,7 +50,7 @@ public class ImporterGUI implements Listener {
         this.importerId = importerId;
         this.networkId = networkId;
 
-        this.inventory = Bukkit.createInventory(null, 45, miniMessage.deserialize("<blue>Importer Configuration"));
+        this.inventory = Bukkit.createInventory(null, 45, plugin.getMessageManager().getMessageComponent(null, "gui.importer.title"));
 
         detectTargetType();
         loadCurrentFilters();
@@ -118,8 +118,8 @@ public class ImporterGUI implements Listener {
                 if (meta != null) {
                     List<Component> lore = (meta.hasLore() && meta.lore() != null) ? new ArrayList<>(Objects.requireNonNull(meta.lore())) : new ArrayList<>();
                     lore.add(Component.empty());
-                    lore.add(miniMessage.deserialize("<gray>Filter Item"));
-                    lore.add(miniMessage.deserialize("<yellow>Click to remove from filter"));
+                    lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.importer.filter.item-description"));
+                    lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.importer.filter.remove-instruction"));
                     meta.lore(lore);
                     displayItem.setItemMeta(meta);
                 }
@@ -129,13 +129,13 @@ public class ImporterGUI implements Listener {
             } else {
                 ItemStack placeholder = new ItemStack(Material.LIGHT_GRAY_STAINED_GLASS_PANE);
                 ItemMeta meta = placeholder.getItemMeta();
-                meta.displayName(miniMessage.deserialize("<gray>Empty Filter Slot"));
+                meta.displayName(plugin.getMessageManager().getMessageComponent(null, "gui.importer.filter.empty-slot"));
                 List<Component> lore = new ArrayList<>();
                 lore.add(Component.empty());
-                lore.add(miniMessage.deserialize("<yellow>Drag items here to add them to the filter"));
-                lore.add(miniMessage.deserialize("<yellow>Or shift-click items from your inventory"));
+                lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.importer.filter.add-instruction"));
+                lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.importer.filter.shift-instruction"));
                 lore.add(Component.empty());
-                lore.add(miniMessage.deserialize("<gray>Leave empty to import everything"));
+                lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.importer.filter.no-filter"));
                 meta.lore(lore);
                 placeholder.setItemMeta(meta);
                 inventory.setItem(i, placeholder);
@@ -167,46 +167,46 @@ public class ImporterGUI implements Listener {
 
         ItemStack status = new ItemStack(isEnabled ? Material.LIME_DYE : Material.GRAY_DYE);
         ItemMeta statusMeta = status.getItemMeta();
-        statusMeta.displayName(miniMessage.deserialize(isEnabled ? "<green>Status: Enabled" : "<gray>Status: Disabled"));
+        statusMeta.displayName(plugin.getMessageManager().getMessageComponent(null, isEnabled ? "gui.importer.status.enabled" : "gui.importer.status.disabled"));
 
         List<Component> statusLore = new ArrayList<>();
-        statusLore.add(miniMessage.deserialize("<gray>Importer is " + (isEnabled ? "actively importing" : "inactive")));
+        statusLore.add(plugin.getMessageManager().getMessageComponent(null, isEnabled ? "gui.importer.status.description-enabled" : "gui.importer.status.description-disabled"));
 
         Container target = getTargetContainer();
         statusLore.add(Component.empty());
         if (target != null) {
-            statusLore.add(miniMessage.deserialize("<aqua>Connected to: " + target.getBlock().getType().name()));
+            statusLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.importer.target.connected", "container", target.getBlock().getType().name()));
         } else {
-            statusLore.add(miniMessage.deserialize("<red>No valid container connected"));
+            statusLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.importer.target.none"));
         }
 
         statusLore.add(Component.empty());
-        statusLore.add(miniMessage.deserialize("<yellow>Click to toggle"));
+        statusLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.importer.status.toggle"));
         statusMeta.lore(statusLore);
         status.setItemMeta(statusMeta);
         inventory.setItem(29, status);
 
         ItemStack clearButton = new ItemStack(Material.BARRIER);
         ItemMeta clearMeta = clearButton.getItemMeta();
-        clearMeta.displayName(miniMessage.deserialize("<red>Clear All Filters"));
+        clearMeta.displayName(plugin.getMessageManager().getMessageComponent(null, "gui.importer.controls.clear"));
         List<Component> clearLore = new ArrayList<>();
         clearLore.add(Component.empty());
-        clearLore.add(miniMessage.deserialize("<yellow>Click to remove all filter items"));
-        clearLore.add(miniMessage.deserialize("<gray>Clears filters to import everything"));
+        clearLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.importer.controls.clear-description"));
+        clearLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.importer.controls.clear-result"));
         clearMeta.lore(clearLore);
         clearButton.setItemMeta(clearMeta);
         inventory.setItem(31, clearButton);
 
         ItemStack info = new ItemStack(Material.BOOK);
         ItemMeta infoMeta = info.getItemMeta();
-        infoMeta.displayName(miniMessage.deserialize("<aqua>Importer Information"));
+        infoMeta.displayName(plugin.getMessageManager().getMessageComponent(null, "gui.importer.controls.info"));
         List<Component> infoLore = new ArrayList<>();
-        infoLore.add(miniMessage.deserialize("<gray>Network: " + networkId.substring(0, Math.min(16, networkId.length()))));
-        infoLore.add(miniMessage.deserialize("<gray>Filters: " + currentFilterItems.size() + "/18"));
+        infoLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.drive-bay.info.network", "network", networkId.substring(0, Math.min(16, networkId.length()))));
+        infoLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.drive-bay.info.slots", "filled", currentFilterItems.size(), "total", 18));
         infoLore.add(Component.empty());
-        infoLore.add(miniMessage.deserialize("<yellow>Shift+Click items from inventory to add filters"));
-        infoLore.add(miniMessage.deserialize("<yellow>Drag & drop items into filter area"));
-        infoLore.add(miniMessage.deserialize("<gray>No filters = import everything"));
+        infoLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.importer.filter.shift-instruction"));
+        infoLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.importer.filter.add-instruction"));
+        infoLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.importer.filter.no-filter"));
         infoMeta.lore(infoLore);
         info.setItemMeta(infoMeta);
         inventory.setItem(35, info);
@@ -255,19 +255,20 @@ public class ImporterGUI implements Listener {
                 List<Component> lore = (meta.hasLore() && meta.lore() != null) ? 
                     new ArrayList<>(Objects.requireNonNull(meta.lore())) : new ArrayList<>();
                 lore.add(Component.empty());
-                lore.add(Component.text("Import Filter (" + bottleNames[i] + ")", NamedTextColor.BLUE));
-                lore.add(Component.text("Click to remove", NamedTextColor.YELLOW));
+                lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.importer.brewing.filter-description", "slot", bottleNames[i]));
+                lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.importer.filter.remove-instruction"));
                 meta.lore(lore);
                 bottleSlot.setItemMeta(meta);
             } else {
                 bottleSlot = new ItemStack(Material.BLUE_STAINED_GLASS_PANE);
                 ItemMeta meta = bottleSlot.getItemMeta();
-                meta.displayName(Component.text("Import Slot (" + bottleNames[i] + ")", NamedTextColor.BLUE));
+                String slotKey = "gui.importer.brewing.slot-" + bottleNames[i].toLowerCase();
+                meta.displayName(plugin.getMessageManager().getMessageComponent(null, slotKey));
                 List<Component> lore = new ArrayList<>();
                 lore.add(Component.empty());
-                lore.add(Component.text("Imports from brewing stand potion slot", NamedTextColor.GRAY));
-                lore.add(Component.text("Drag item here to set filter", NamedTextColor.YELLOW));
-                lore.add(Component.text("No filter = import anything", NamedTextColor.GRAY));
+                lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.importer.brewing.slot-description"));
+                lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.importer.brewing.drag-instruction"));
+                lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.importer.brewing.no-filter-slot"));
                 meta.lore(lore);
                 bottleSlot.setItemMeta(meta);
             }
@@ -281,16 +282,15 @@ public class ImporterGUI implements Listener {
 
         ItemStack status = new ItemStack(isEnabled ? Material.LIME_DYE : Material.GRAY_DYE);
         ItemMeta statusMeta = status.getItemMeta();
-        statusMeta.displayName(Component.text(isEnabled ? "Status: Enabled" : "Status: Disabled", 
-            isEnabled ? NamedTextColor.GREEN : NamedTextColor.GRAY));
+        statusMeta.displayName(plugin.getMessageManager().getMessageComponent(null, isEnabled ? "gui.importer.status.enabled" : "gui.importer.status.disabled"));
 
         List<Component> statusLore = new ArrayList<>();
-        statusLore.add(Component.text("Importer is " + (isEnabled ? "actively importing" : "inactive"), NamedTextColor.GRAY));
+        statusLore.add(plugin.getMessageManager().getMessageComponent(null, isEnabled ? "gui.importer.status.description-enabled" : "gui.importer.status.description-disabled"));
         statusLore.add(Component.empty());
-        statusLore.add(Component.text("Connected to: Brewing Stand", NamedTextColor.AQUA));
-        statusLore.add(Component.text("Imports from bottom potion slots only", NamedTextColor.GRAY));
+        statusLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.importer.target.connected", "container", "Brewing Stand"));
+        statusLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.importer.brewing.info-description"));
         statusLore.add(Component.empty());
-        statusLore.add(Component.text("Click to toggle", NamedTextColor.YELLOW));
+        statusLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.importer.status.toggle"));
         statusMeta.lore(statusLore);
         status.setItemMeta(statusMeta);
         inventory.setItem(38, status);
@@ -299,11 +299,11 @@ public class ImporterGUI implements Listener {
     private void setupClearButton() {
         ItemStack clearButton = new ItemStack(Material.BARRIER);
         ItemMeta clearMeta = clearButton.getItemMeta();
-        clearMeta.displayName(Component.text("Clear All Filters", NamedTextColor.RED));
+        clearMeta.displayName(plugin.getMessageManager().getMessageComponent(null, "gui.importer.controls.clear"));
         List<Component> clearLore = new ArrayList<>();
         clearLore.add(Component.empty());
-        clearLore.add(Component.text("Click to remove all filter items", NamedTextColor.YELLOW));
-        clearLore.add(Component.text("Will import all items from potion slots", NamedTextColor.GRAY));
+        clearLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.importer.controls.clear-description"));
+        clearLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.importer.brewing.clear-description"));
         clearMeta.lore(clearLore);
         clearButton.setItemMeta(clearMeta);
         inventory.setItem(40, clearButton);
@@ -312,13 +312,12 @@ public class ImporterGUI implements Listener {
     private void setupInfoPanel() {
         ItemStack info = new ItemStack(Material.BOOK);
         ItemMeta infoMeta = info.getItemMeta();
-        infoMeta.displayName(Component.text("Brewing Stand Importer", NamedTextColor.AQUA));
+        infoMeta.displayName(plugin.getMessageManager().getMessageComponent(null, "gui.importer.brewing.title"));
         List<Component> infoLore = new ArrayList<>();
-        infoLore.add(Component.text("Network: " + networkId.substring(0, Math.min(16, networkId.length())), NamedTextColor.GRAY));
+        infoLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.drive-bay.info.network", "network", networkId.substring(0, Math.min(16, networkId.length()))));
         infoLore.add(Component.empty());
-        infoLore.add(Component.text("Blue: Import filters for potion slots", NamedTextColor.BLUE));
-        infoLore.add(Component.text("Only imports from bottom 3 slots", NamedTextColor.GRAY));
-        infoLore.add(Component.text("Ingredient/fuel slots are ignored", NamedTextColor.GRAY));
+        infoLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.importer.brewing.info-description"));
+        infoLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.importer.brewing.info-ignored"));
         infoMeta.lore(infoLore);
         info.setItemMeta(infoMeta);
         inventory.setItem(42, info);
@@ -397,7 +396,7 @@ public class ImporterGUI implements Listener {
             ItemStack itemToAdd = event.getCurrentItem();
             if (itemToAdd != null && !itemToAdd.getType().isAir()) {
                 event.setCancelled(true);
-                player.sendMessage(Component.text("Drag items to filter slots (blue for potions)!", NamedTextColor.YELLOW));
+                player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.importer.brewing.drag-instruction-main"));
             }
             return;
         }
@@ -418,16 +417,16 @@ public class ImporterGUI implements Listener {
                             bottleFilters[i].setAmount(1);
                             saveBrewingStandSettings();
                             setupBrewingStandGUI();
-                            player.sendMessage(Component.text("Set import filter " + (i + 1) + " to " + cursorItem.getType(), NamedTextColor.GREEN));
+                            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.importer.brewing.filter-set", "slot", (i + 1), "item", cursorItem.getType()));
                         } else {
-                            player.sendMessage(Component.text("Cannot filter blacklisted items!", NamedTextColor.RED));
+                            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.item-blacklisted"));
                         }
                     } else if (bottleFilters[i] != null) {
                         // Remove bottle filter
                         bottleFilters[i] = null;
                         saveBrewingStandSettings();
                         setupBrewingStandGUI();
-                        player.sendMessage(Component.text("Removed import filter " + (i + 1), NamedTextColor.YELLOW));
+                        player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.importer.brewing.filter-removed", "slot", (i + 1)));
                     }
                     return;
                 }
@@ -447,10 +446,9 @@ public class ImporterGUI implements Listener {
                     boolean newState = !data.enabled;
                     plugin.getImporterManager().toggleImporter(importerId, newState);
                     setupBrewingStandGUI();
-                    player.sendMessage(Component.text("Importer " + (newState ? "enabled" : "disabled"),
-                            newState ? NamedTextColor.GREEN : NamedTextColor.RED));
+                    player.sendMessage(plugin.getMessageManager().getMessageComponent(player, newState ? "gui.device.enabled" : "gui.device.disabled", "device", "Importer"));
                 } catch (Exception e) {
-                    player.sendMessage(Component.text("Error toggling importer: " + e.getMessage(), NamedTextColor.RED));
+                    player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.device.toggle-error", "device", "importer", "error", e.getMessage()));
                     plugin.getLogger().severe("Error toggling importer: " + e.getMessage());
                 }
             }
@@ -459,7 +457,7 @@ public class ImporterGUI implements Listener {
             bottleFilters = new ItemStack[3];
             saveBrewingStandSettings();
             setupBrewingStandGUI();
-            player.sendMessage(Component.text("Cleared all brewing stand filters", NamedTextColor.YELLOW));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.importer.brewing.filters-cleared"));
         }
         // Info panel (slot 42) doesn't need click handling
     }
@@ -470,7 +468,7 @@ public class ImporterGUI implements Listener {
     private void handleBrewingStandDrag(Player player, ItemStack draggedItem, Set<Integer> slots) {
         // Check if item is blacklisted
         if (plugin.getItemManager().isItemBlacklisted(draggedItem)) {
-            player.sendMessage(Component.text("You cannot add occupied containers or disks to the network!", NamedTextColor.RED));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.item-blacklisted"));
             return;
         }
         
@@ -483,13 +481,13 @@ public class ImporterGUI implements Listener {
                 bottleFilters[bottleIndex].setAmount(1);
                 saveBrewingStandSettings();
                 setupBrewingStandGUI();
-                player.sendMessage(Component.text("Set import filter " + (bottleIndex + 1) + " to " + draggedItem.getType(), NamedTextColor.GREEN));
+                player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.importer.brewing.filter-set", "slot", (bottleIndex + 1), "item", draggedItem.getType()));
                 return;
             }
         }
         
         // If no valid slot found, show message
-        player.sendMessage(Component.text("Drag items to blue (potion) slots!", NamedTextColor.YELLOW));
+        player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.importer.brewing.drag-instruction-main"));
     }
 
     /**
@@ -551,7 +549,7 @@ public class ImporterGUI implements Listener {
         if (cursorItem.getType() != Material.AIR) {
             // Check if item is blacklisted
             if (plugin.getItemManager().isItemBlacklisted(cursorItem)) {
-                player.sendMessage(Component.text("You cannot add occupied containers or disks to the network!", NamedTextColor.RED));
+                player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.item-blacklisted"));
                 return;
             }
             
@@ -559,13 +557,13 @@ public class ImporterGUI implements Listener {
             for (ItemStack existingItem : currentFilterItems) {
                 String existingHash = plugin.getItemManager().generateItemHash(existingItem);
                 if (newItemHash.equals(existingHash)) {
-                    player.sendMessage(Component.text("This item is already in the filter!", NamedTextColor.RED));
+                    player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.already-exists"));
                     return;
                 }
             }
 
             if (currentFilterItems.size() >= 18) {
-                player.sendMessage(Component.text("Filter is full! Remove items first.", NamedTextColor.RED));
+                player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.full"));
             } else {
                 ItemStack filterTemplate = cursorItem.clone();
                 filterTemplate.setAmount(1);
@@ -573,7 +571,7 @@ public class ImporterGUI implements Listener {
                 currentFilterItems.add(filterTemplate);
                 saveFilters();
                 setupGUI();
-                player.sendMessage(Component.text("Added " + cursorItem.getType() + " to import filter", NamedTextColor.GREEN));
+                player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.added", "item", cursorItem.getType(), "type", "import"));
             }
             return;
         }
@@ -583,7 +581,7 @@ public class ImporterGUI implements Listener {
             currentFilterItems.remove(filterItem);
             saveFilters();
             setupGUI();
-            player.sendMessage(Component.text("Removed item from import filter", NamedTextColor.YELLOW));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.removed", "type", "import"));
         }
 
     }
@@ -604,7 +602,7 @@ public class ImporterGUI implements Listener {
     private void handleAddItemToFilter(Player player, ItemStack itemToAdd) {
         // Check if item is blacklisted
         if (plugin.getItemManager().isItemBlacklisted(itemToAdd)) {
-            player.sendMessage(Component.text("You cannot add occupied containers or disks to the network!", NamedTextColor.RED));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.item-blacklisted"));
             return;
         }
         
@@ -612,13 +610,13 @@ public class ImporterGUI implements Listener {
         for (ItemStack existingItem : currentFilterItems) {
             String existingHash = plugin.getItemManager().generateItemHash(existingItem);
             if (newItemHash.equals(existingHash)) {
-                player.sendMessage(Component.text("This item is already in the filter!", NamedTextColor.RED));
+                player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.already-exists"));
                 return;
             }
         }
 
         if (currentFilterItems.size() >= 18) {
-            player.sendMessage(Component.text("Filter is full! Remove items first.", NamedTextColor.RED));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.full"));
             return;
         }
 
@@ -628,7 +626,7 @@ public class ImporterGUI implements Listener {
         currentFilterItems.add(filterTemplate);
         saveFilters();
         setupGUI();
-        player.sendMessage(Component.text("Added " + itemToAdd.getType() + " to import filter", NamedTextColor.GREEN));
+        player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.added", "item", itemToAdd.getType(), "type", "import"));
     }
 
     private void handleToggleClick(Player player) {
@@ -640,23 +638,22 @@ public class ImporterGUI implements Listener {
             plugin.getImporterManager().toggleImporter(importerId, newState);
             setupGUI();
 
-            player.sendMessage(Component.text("Importer " + (newState ? "enabled" : "disabled"),
-                    newState ? NamedTextColor.GREEN : NamedTextColor.YELLOW));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, newState ? "gui.device.enabled" : "gui.device.disabled", "device", "Importer"));
         } catch (Exception e) {
-            player.sendMessage(Component.text("Error toggling importer: " + e.getMessage(), NamedTextColor.RED));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.device.toggle-error", "device", "importer", "error", e.getMessage()));
         }
     }
 
     private void handleClearFilters(Player player) {
         if (currentFilterItems.isEmpty()) {
-            player.sendMessage(Component.text("No filters to clear", NamedTextColor.YELLOW));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.no-filters"));
             return;
         }
 
         currentFilterItems.clear();
         saveFilters();
         setupGUI();
-        player.sendMessage(Component.text("Cleared all filters - will now import everything", NamedTextColor.YELLOW));
+        player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.cleared", "action", "import"));
     }
 
     private void saveFilters() {
@@ -700,7 +697,7 @@ public class ImporterGUI implements Listener {
                     if (dragIntoFilterArea) {
                         // Check if item is blacklisted
                         if (plugin.getItemManager().isItemBlacklisted(draggedItem)) {
-                            player.sendMessage(Component.text("You cannot add occupied containers or disks to the network!", NamedTextColor.RED));
+                            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.item-blacklisted"));
                             return;
                         }
                     
@@ -708,13 +705,13 @@ public class ImporterGUI implements Listener {
                     for (ItemStack existingItem : currentFilterItems) {
                         String existingHash = plugin.getItemManager().generateItemHash(existingItem);
                         if (newItemHash.equals(existingHash)) {
-                            player.sendMessage(Component.text("This item is already in the filter!", NamedTextColor.RED));
+                            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.already-exists"));
                             return;
                         }
                     }
 
                     if (currentFilterItems.size() >= 18) {
-                        player.sendMessage(Component.text("Filter is full! Remove items first.", NamedTextColor.RED));
+                        player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.full"));
                     } else {
                         ItemStack filterTemplate = draggedItem.clone();
                         filterTemplate.setAmount(1);
@@ -722,7 +719,7 @@ public class ImporterGUI implements Listener {
                         currentFilterItems.add(filterTemplate);
                         saveFilters();
                         setupGUI();
-                        player.sendMessage(Component.text("Added " + draggedItem.getType() + " to import filter", NamedTextColor.GREEN));
+                        player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.added", "item", draggedItem.getType(), "type", "import"));
 
                         event.getView().setCursor(draggedItem);
                     }

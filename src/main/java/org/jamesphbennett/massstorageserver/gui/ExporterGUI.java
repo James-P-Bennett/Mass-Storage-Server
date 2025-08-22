@@ -50,7 +50,7 @@ public class ExporterGUI implements Listener {
         this.exporterId = exporterId;
         this.networkId = networkId;
 
-        this.inventory = Bukkit.createInventory(null, 45, miniMessage.deserialize("<dark_purple>Exporter Configuration"));
+        this.inventory = Bukkit.createInventory(null, 45, plugin.getMessageManager().getMessageComponent(null, "gui.exporter.title"));
 
         detectTargetType();
         loadCurrentFilters();
@@ -113,8 +113,8 @@ public class ExporterGUI implements Listener {
                 if (meta != null) {
                     List<Component> lore = (meta.hasLore() && meta.lore() != null) ? new ArrayList<>(Objects.requireNonNull(meta.lore())) : new ArrayList<>();
                     lore.add(Component.empty());
-                    lore.add(miniMessage.deserialize("<gray>Filter Item"));
-                    lore.add(miniMessage.deserialize("<yellow>Click to remove from filter"));
+                    lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.filter.item-description"));
+                    lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.filter.remove-instruction"));
                     meta.lore(lore);
                     displayItem.setItemMeta(meta);
                 }
@@ -124,11 +124,11 @@ public class ExporterGUI implements Listener {
             } else {
                 ItemStack placeholder = new ItemStack(Material.LIGHT_GRAY_STAINED_GLASS_PANE);
                 ItemMeta meta = placeholder.getItemMeta();
-                meta.displayName(miniMessage.deserialize("<gray>Empty Filter Slot"));
+                meta.displayName(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.filter.empty-slot"));
                 List<Component> lore = new ArrayList<>();
                 lore.add(Component.empty());
-                lore.add(miniMessage.deserialize("<yellow>Drag items here to add them to the filter"));
-                lore.add(miniMessage.deserialize("<yellow>Or shift-click items from your inventory"));
+                lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.filter.add-instruction"));
+                lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.filter.shift-instruction"));
                 meta.lore(lore);
                 placeholder.setItemMeta(meta);
                 inventory.setItem(i, placeholder);
@@ -160,48 +160,48 @@ public class ExporterGUI implements Listener {
 
         ItemStack status = new ItemStack(isEnabled ? Material.LIME_DYE : Material.GRAY_DYE);
         ItemMeta statusMeta = status.getItemMeta();
-        statusMeta.displayName(miniMessage.deserialize(isEnabled ? "<green>Status: Enabled" : "<gray>Status: Disabled"));
+        statusMeta.displayName(plugin.getMessageManager().getMessageComponent(null, isEnabled ? "gui.exporter.status.enabled" : "gui.exporter.status.disabled"));
 
         List<Component> statusLore = new ArrayList<>();
         if (!isEnabled && currentFilterItems.isEmpty()) {
-            statusLore.add(miniMessage.deserialize("<red>Add items to filter to enable"));
+            statusLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.filter.no-filter"));
         } else {
-            statusLore.add(miniMessage.deserialize("<gray>Exporter is " + (isEnabled ? "actively exporting" : "inactive")));
+            statusLore.add(plugin.getMessageManager().getMessageComponent(null, isEnabled ? "gui.exporter.status.description-enabled" : "gui.exporter.status.description-disabled"));
         }
 
         Container target = getTargetContainer();
         statusLore.add(Component.empty());
         if (target != null) {
-            statusLore.add(miniMessage.deserialize("<aqua>Connected to: " + target.getBlock().getType().name()));
+            statusLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.target.connected", "container", target.getBlock().getType().name()));
         } else {
-            statusLore.add(miniMessage.deserialize("<red>No valid container connected"));
+            statusLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.target.none"));
         }
 
         statusLore.add(Component.empty());
-        statusLore.add(miniMessage.deserialize("<yellow>Click to toggle"));
+        statusLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.status.toggle"));
         statusMeta.lore(statusLore);
         status.setItemMeta(statusMeta);
         inventory.setItem(29, status);
 
         ItemStack clearButton = new ItemStack(Material.BARRIER);
         ItemMeta clearMeta = clearButton.getItemMeta();
-        clearMeta.displayName(miniMessage.deserialize("<red>Clear All Filters"));
+        clearMeta.displayName(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.controls.clear"));
         List<Component> clearLore = new ArrayList<>();
         clearLore.add(Component.empty());
-        clearLore.add(miniMessage.deserialize("<yellow>Click to remove all filter items"));
+        clearLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.controls.clear-description"));
         clearMeta.lore(clearLore);
         clearButton.setItemMeta(clearMeta);
         inventory.setItem(31, clearButton);
 
         ItemStack info = new ItemStack(Material.BOOK);
         ItemMeta infoMeta = info.getItemMeta();
-        infoMeta.displayName(miniMessage.deserialize("<aqua>Exporter Information"));
+        infoMeta.displayName(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.controls.info"));
         List<Component> infoLore = new ArrayList<>();
-        infoLore.add(miniMessage.deserialize("<gray>Network: " + networkId.substring(0, Math.min(16, networkId.length()))));
-        infoLore.add(miniMessage.deserialize("<gray>Filters: " + currentFilterItems.size() + "/18"));
+        infoLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.drive-bay.info.network", "network", networkId.substring(0, Math.min(16, networkId.length()))));
+        infoLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.drive-bay.info.slots", "filled", currentFilterItems.size(), "total", 18));
         infoLore.add(Component.empty());
-        infoLore.add(miniMessage.deserialize("<yellow>Shift+Click items from inventory to add filters"));
-        infoLore.add(miniMessage.deserialize("<yellow>Drag & drop items into filter area"));
+        infoLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.filter.shift-instruction"));
+        infoLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.filter.add-instruction"));
         infoMeta.lore(infoLore);
         info.setItemMeta(infoMeta);
         inventory.setItem(35, info);
@@ -258,12 +258,11 @@ public class ExporterGUI implements Listener {
         }
         
         ItemMeta meta = fuelToggle.getItemMeta();
-        meta.displayName(Component.text(blazePowderEnabled ? "Fuel Import: Enabled" : "Fuel Import: Disabled", 
-            blazePowderEnabled ? NamedTextColor.GREEN : NamedTextColor.RED));
+        meta.displayName(plugin.getMessageManager().getMessageComponent(null, blazePowderEnabled ? "gui.exporter.furnace.fuel-enabled" : "gui.exporter.furnace.fuel-disabled"));
         List<Component> lore = new ArrayList<>();
         lore.add(Component.empty());
-        lore.add(Component.text("Exports blaze powder to fuel slot", NamedTextColor.GRAY));
-        lore.add(Component.text("Click to toggle", NamedTextColor.YELLOW));
+        lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.furnace.brewing-fuel-description"));
+        lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.status.toggle"));
         meta.lore(lore);
         fuelToggle.setItemMeta(meta);
         inventory.setItem(2, fuelToggle);
@@ -278,18 +277,18 @@ public class ExporterGUI implements Listener {
             List<Component> lore = (meta.hasLore() && meta.lore() != null) ? 
                 new ArrayList<>(Objects.requireNonNull(meta.lore())) : new ArrayList<>();
             lore.add(Component.empty());
-            lore.add(Component.text("Ingredient Filter", NamedTextColor.LIGHT_PURPLE));
-            lore.add(Component.text("Click to remove", NamedTextColor.YELLOW));
+            lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.furnace.ingredient-filter"));
+            lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.filter.remove-instruction"));
             meta.lore(lore);
             ingredientSlot.setItemMeta(meta);
         } else {
             ingredientSlot = new ItemStack(Material.MAGENTA_STAINED_GLASS_PANE);
             ItemMeta meta = ingredientSlot.getItemMeta();
-            meta.displayName(Component.text("Ingredient Slot", NamedTextColor.LIGHT_PURPLE));
+            meta.displayName(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.furnace.ingredient-slot"));
             List<Component> lore = new ArrayList<>();
             lore.add(Component.empty());
-            lore.add(Component.text("Targets brewing stand ingredient slot", NamedTextColor.GRAY));
-            lore.add(Component.text("Drag item here to set filter", NamedTextColor.YELLOW));
+            lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.furnace.ingredient-description"));
+            lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.filter.add-instruction"));
             meta.lore(lore);
             ingredientSlot.setItemMeta(meta);
         }
@@ -309,18 +308,19 @@ public class ExporterGUI implements Listener {
                 List<Component> lore = (meta.hasLore() && meta.lore() != null) ? 
                     new ArrayList<>(Objects.requireNonNull(meta.lore())) : new ArrayList<>();
                 lore.add(Component.empty());
-                lore.add(Component.text("Bottle Filter (" + bottleNames[i] + ")", NamedTextColor.BLUE));
-                lore.add(Component.text("Click to remove", NamedTextColor.YELLOW));
+                lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.furnace.bottle-filter", "slot", bottleNames[i]));
+                lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.filter.remove-instruction"));
                 meta.lore(lore);
                 bottleSlot.setItemMeta(meta);
             } else {
                 bottleSlot = new ItemStack(Material.BLUE_STAINED_GLASS_PANE);
                 ItemMeta meta = bottleSlot.getItemMeta();
-                meta.displayName(Component.text("Bottle Slot (" + bottleNames[i] + ")", NamedTextColor.BLUE));
+                String slotKey = "gui.exporter.furnace.bottle-" + bottleNames[i].toLowerCase();
+                meta.displayName(plugin.getMessageManager().getMessageComponent(null, slotKey));
                 List<Component> lore = new ArrayList<>();
                 lore.add(Component.empty());
-                lore.add(Component.text("Targets brewing stand bottle slot", NamedTextColor.GRAY));
-                lore.add(Component.text("Drag item here to set filter", NamedTextColor.YELLOW));
+                lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.furnace.bottle-description"));
+                lore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.filter.add-instruction"));
                 meta.lore(lore);
                 bottleSlot.setItemMeta(meta);
             }
@@ -334,15 +334,14 @@ public class ExporterGUI implements Listener {
 
         ItemStack status = new ItemStack(isEnabled ? Material.LIME_DYE : Material.GRAY_DYE);
         ItemMeta statusMeta = status.getItemMeta();
-        statusMeta.displayName(Component.text(isEnabled ? "Status: Enabled" : "Status: Disabled", 
-            isEnabled ? NamedTextColor.GREEN : NamedTextColor.GRAY));
+        statusMeta.displayName(plugin.getMessageManager().getMessageComponent(null, isEnabled ? "gui.exporter.status.enabled" : "gui.exporter.status.disabled"));
 
         List<Component> statusLore = new ArrayList<>();
-        statusLore.add(Component.text("Exporter is " + (isEnabled ? "actively exporting" : "inactive"), NamedTextColor.GRAY));
+        statusLore.add(plugin.getMessageManager().getMessageComponent(null, isEnabled ? "gui.exporter.status.description-enabled" : "gui.exporter.status.description-disabled"));
         statusLore.add(Component.empty());
-        statusLore.add(Component.text("Connected to: Brewing Stand", NamedTextColor.AQUA));
+        statusLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.target.connected", "container", "Brewing Stand"));
         statusLore.add(Component.empty());
-        statusLore.add(Component.text("Click to toggle", NamedTextColor.YELLOW));
+        statusLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.status.toggle"));
         statusMeta.lore(statusLore);
         status.setItemMeta(statusMeta);
         inventory.setItem(38, status);
@@ -351,10 +350,10 @@ public class ExporterGUI implements Listener {
     private void setupClearButton() {
         ItemStack clearButton = new ItemStack(Material.BARRIER);
         ItemMeta clearMeta = clearButton.getItemMeta();
-        clearMeta.displayName(Component.text("Clear All Filters", NamedTextColor.RED));
+        clearMeta.displayName(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.controls.clear"));
         List<Component> clearLore = new ArrayList<>();
         clearLore.add(Component.empty());
-        clearLore.add(Component.text("Click to remove all filter items", NamedTextColor.YELLOW));
+        clearLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.controls.clear-description"));
         clearMeta.lore(clearLore);
         clearButton.setItemMeta(clearMeta);
         inventory.setItem(40, clearButton);
@@ -363,13 +362,13 @@ public class ExporterGUI implements Listener {
     private void setupInfoPanel() {
         ItemStack info = new ItemStack(Material.BOOK);
         ItemMeta infoMeta = info.getItemMeta();
-        infoMeta.displayName(Component.text("Brewing Stand Exporter", NamedTextColor.AQUA));
+        infoMeta.displayName(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.furnace.title"));
         List<Component> infoLore = new ArrayList<>();
-        infoLore.add(Component.text("Network: " + networkId.substring(0, Math.min(16, networkId.length())), NamedTextColor.GRAY));
+        infoLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.drive-bay.info.network", "network", networkId.substring(0, Math.min(16, networkId.length()))));
         infoLore.add(Component.empty());
-        infoLore.add(Component.text("Yellow: Fuel toggle", NamedTextColor.YELLOW));
-        infoLore.add(Component.text("Purple: Ingredient slot", NamedTextColor.LIGHT_PURPLE));
-        infoLore.add(Component.text("Blue: Bottle slots", NamedTextColor.BLUE));
+        infoLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.furnace.info-fuel"));
+        infoLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.furnace.info-ingredient"));
+        infoLore.add(plugin.getMessageManager().getMessageComponent(null, "gui.exporter.furnace.info-bottles"));
         infoMeta.lore(infoLore);
         info.setItemMeta(infoMeta);
         inventory.setItem(42, info);
@@ -448,7 +447,7 @@ public class ExporterGUI implements Listener {
             ItemStack itemToAdd = event.getCurrentItem();
             if (itemToAdd != null && !itemToAdd.getType().isAir()) {
                 event.setCancelled(true);
-                player.sendMessage(Component.text("Drag items to filter slots (purple for ingredient, blue for bottles)!", NamedTextColor.YELLOW));
+                player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.exporter.furnace.drag-instruction"));
             }
             return;
         }
@@ -463,8 +462,7 @@ public class ExporterGUI implements Listener {
                 blazePowderEnabled = !blazePowderEnabled;
                 saveBrewingStandSettings();
                 setupBrewingStandGUI();
-                player.sendMessage(Component.text("Fuel import " + (blazePowderEnabled ? "enabled" : "disabled"), 
-                    blazePowderEnabled ? NamedTextColor.GREEN : NamedTextColor.RED));
+                player.sendMessage(plugin.getMessageManager().getMessageComponent(player, blazePowderEnabled ? "gui.exporter.furnace.fuel-enabled-msg" : "gui.exporter.furnace.fuel-disabled-msg"));
                 return;
             }
 
@@ -477,16 +475,16 @@ public class ExporterGUI implements Listener {
                         ingredientFilter.setAmount(1);
                         saveBrewingStandSettings();
                         setupBrewingStandGUI();
-                        player.sendMessage(Component.text("Set ingredient filter to " + cursorItem.getType(), NamedTextColor.GREEN));
+                        player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.exporter.furnace.ingredient-set", "item", cursorItem.getType()));
                     } else {
-                        player.sendMessage(Component.text("Cannot filter blacklisted items!", NamedTextColor.RED));
+                        player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.item-blacklisted"));
                     }
                 } else if (ingredientFilter != null) {
                     // Remove ingredient filter
                     ingredientFilter = null;
                     saveBrewingStandSettings();
                     setupBrewingStandGUI();
-                    player.sendMessage(Component.text("Removed ingredient filter", NamedTextColor.YELLOW));
+                    player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.exporter.furnace.ingredient-removed"));
                 }
                 return;
             }
@@ -502,16 +500,16 @@ public class ExporterGUI implements Listener {
                             bottleFilters[i].setAmount(1);
                             saveBrewingStandSettings();
                             setupBrewingStandGUI();
-                            player.sendMessage(Component.text("Set bottle filter " + (i + 1) + " to " + cursorItem.getType(), NamedTextColor.GREEN));
+                            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.exporter.furnace.bottle-set", "slot", (i + 1), "item", cursorItem.getType()));
                         } else {
-                            player.sendMessage(Component.text("Cannot filter blacklisted items!", NamedTextColor.RED));
+                            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.item-blacklisted"));
                         }
                     } else if (bottleFilters[i] != null) {
                         // Remove bottle filter
                         bottleFilters[i] = null;
                         saveBrewingStandSettings();
                         setupBrewingStandGUI();
-                        player.sendMessage(Component.text("Removed bottle filter " + (i + 1), NamedTextColor.YELLOW));
+                        player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.exporter.furnace.bottle-removed", "slot", (i + 1)));
                     }
                     return;
                 }
@@ -531,10 +529,9 @@ public class ExporterGUI implements Listener {
                     boolean newState = !data.enabled;
                     plugin.getExporterManager().toggleExporter(exporterId, newState);
                     setupBrewingStandGUI();
-                    player.sendMessage(Component.text("Exporter " + (newState ? "enabled" : "disabled"),
-                            newState ? NamedTextColor.GREEN : NamedTextColor.RED));
+                    player.sendMessage(plugin.getMessageManager().getMessageComponent(player, newState ? "gui.device.enabled" : "gui.device.disabled", "device", "Exporter"));
                 } catch (Exception e) {
-                    player.sendMessage(Component.text("Error toggling exporter: " + e.getMessage(), NamedTextColor.RED));
+                    player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.device.toggle-error", "device", "exporter", "error", e.getMessage()));
                     plugin.getLogger().severe("Error toggling exporter: " + e.getMessage());
                 }
             }
@@ -545,7 +542,7 @@ public class ExporterGUI implements Listener {
             bottleFilters = new ItemStack[3];
             saveBrewingStandSettings();
             setupBrewingStandGUI();
-            player.sendMessage(Component.text("Cleared all brewing stand filters", NamedTextColor.YELLOW));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.exporter.furnace.filters-cleared"));
         }
         // Info panel (slot 42) doesn't need click handling
     }
@@ -556,7 +553,7 @@ public class ExporterGUI implements Listener {
     private void handleBrewingStandDrag(Player player, ItemStack draggedItem, Set<Integer> slots) {
         // Check if item is blacklisted
         if (plugin.getItemManager().isItemBlacklisted(draggedItem)) {
-            player.sendMessage(Component.text("You cannot add occupied containers or disks to the network!", NamedTextColor.RED));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.item-blacklisted"));
             return;
         }
         
@@ -568,7 +565,7 @@ public class ExporterGUI implements Listener {
                 ingredientFilter.setAmount(1);
                 saveBrewingStandSettings();
                 setupBrewingStandGUI();
-                player.sendMessage(Component.text("Set ingredient filter to " + draggedItem.getType(), NamedTextColor.GREEN));
+                player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.exporter.furnace.ingredient-set", "item", draggedItem.getType()));
                 return;
             } else if (slot == 21 || slot == 22 || slot == 23) {
                 // Bottle slots
@@ -577,13 +574,13 @@ public class ExporterGUI implements Listener {
                 bottleFilters[bottleIndex].setAmount(1);
                 saveBrewingStandSettings();
                 setupBrewingStandGUI();
-                player.sendMessage(Component.text("Set bottle filter " + (bottleIndex + 1) + " to " + draggedItem.getType(), NamedTextColor.GREEN));
+                player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.exporter.furnace.bottle-set", "slot", (bottleIndex + 1), "item", draggedItem.getType()));
                 return;
             }
         }
         
         // If no valid slot found, show message
-        player.sendMessage(Component.text("Drag items to purple (ingredient) or blue (bottle) slots!", NamedTextColor.YELLOW));
+        player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.exporter.furnace.drag-instruction"));
     }
 
     /**
@@ -675,7 +672,7 @@ public class ExporterGUI implements Listener {
         if (cursorItem.getType() != Material.AIR) {
             // Check if item is blacklisted
             if (plugin.getItemManager().isItemBlacklisted(cursorItem)) {
-                player.sendMessage(Component.text("You cannot add occupied containers or disks to the network!", NamedTextColor.RED));
+                player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.item-blacklisted"));
                 return;
             }
             
@@ -683,13 +680,13 @@ public class ExporterGUI implements Listener {
             for (ItemStack existingItem : currentFilterItems) {
                 String existingHash = plugin.getItemManager().generateItemHash(existingItem);
                 if (newItemHash.equals(existingHash)) {
-                    player.sendMessage(Component.text("This item is already in the filter!", NamedTextColor.RED));
+                    player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.already-exists"));
                     return;
                 }
             }
 
             if (currentFilterItems.size() >= 18) {
-                player.sendMessage(Component.text("Filter is full! Remove items first.", NamedTextColor.RED));
+                player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.full"));
             } else {
                 ItemStack filterTemplate = cursorItem.clone();
                 filterTemplate.setAmount(1);
@@ -707,7 +704,7 @@ public class ExporterGUI implements Listener {
             currentFilterItems.remove(filterItem);
             saveFilters();
             setupGUI();
-            player.sendMessage(Component.text("Removed item from filter", NamedTextColor.YELLOW));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.removed", "type", "export"));
         }
 
     }
@@ -728,7 +725,7 @@ public class ExporterGUI implements Listener {
     private void handleAddItemToFilter(Player player, ItemStack itemToAdd) {
         // Check if item is blacklisted
         if (plugin.getItemManager().isItemBlacklisted(itemToAdd)) {
-            player.sendMessage(Component.text("You cannot add occupied containers or disks to the network!", NamedTextColor.RED));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.item-blacklisted"));
             return;
         }
         
@@ -736,13 +733,13 @@ public class ExporterGUI implements Listener {
         for (ItemStack existingItem : currentFilterItems) {
             String existingHash = plugin.getItemManager().generateItemHash(existingItem);
             if (newItemHash.equals(existingHash)) {
-                player.sendMessage(Component.text("This item is already in the filter!", NamedTextColor.RED));
+                player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.already-exists"));
                 return;
             }
         }
 
         if (currentFilterItems.size() >= 18) {
-            player.sendMessage(Component.text("Filter is full! Remove items first.", NamedTextColor.RED));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.full"));
             return;
         }
 
@@ -752,7 +749,7 @@ public class ExporterGUI implements Listener {
         currentFilterItems.add(filterTemplate);
         saveFilters();
         setupGUI();
-        player.sendMessage(Component.text("Added " + itemToAdd.getType() + " to filter", NamedTextColor.GREEN));
+        player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.added", "item", itemToAdd.getType(), "type", "export"));
     }
 
     private void handleToggleClick(Player player) {
@@ -761,7 +758,7 @@ public class ExporterGUI implements Listener {
             if (data == null) return;
 
             if (currentFilterItems.isEmpty() && !data.enabled) {
-                player.sendMessage(Component.text("Cannot enable exporter without filter items!", NamedTextColor.RED));
+                player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.exporter.filter.no-filter"));
                 return;
             }
 
@@ -769,23 +766,22 @@ public class ExporterGUI implements Listener {
             plugin.getExporterManager().toggleExporter(exporterId, newState);
             setupGUI();
 
-            player.sendMessage(Component.text("Exporter " + (newState ? "enabled" : "disabled"),
-                    newState ? NamedTextColor.GREEN : NamedTextColor.YELLOW));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, newState ? "gui.device.enabled" : "gui.device.disabled", "device", "Exporter"));
         } catch (Exception e) {
-            player.sendMessage(Component.text("Error toggling exporter: " + e.getMessage(), NamedTextColor.RED));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.device.toggle-error", "device", "exporter", "error", e.getMessage()));
         }
     }
 
     private void handleClearFilters(Player player) {
         if (currentFilterItems.isEmpty()) {
-            player.sendMessage(Component.text("No filters to clear", NamedTextColor.YELLOW));
+            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.exporter.controls.no-filters"));
             return;
         }
 
         currentFilterItems.clear();
         saveFilters();
         setupGUI();
-        player.sendMessage(Component.text("Cleared all filters", NamedTextColor.YELLOW));
+        player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.exporter.controls.cleared"));
     }
 
     private void saveFilters() {
@@ -829,7 +825,7 @@ public class ExporterGUI implements Listener {
                     if (dragIntoFilterArea) {
                         // Check if item is blacklisted
                         if (plugin.getItemManager().isItemBlacklisted(draggedItem)) {
-                            player.sendMessage(Component.text("You cannot add occupied containers or disks to the network!", NamedTextColor.RED));
+                            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.item-blacklisted"));
                             return;
                         }
                     
@@ -837,13 +833,13 @@ public class ExporterGUI implements Listener {
                     for (ItemStack existingItem : currentFilterItems) {
                         String existingHash = plugin.getItemManager().generateItemHash(existingItem);
                         if (newItemHash.equals(existingHash)) {
-                            player.sendMessage(Component.text("This item is already in the filter!", NamedTextColor.RED));
+                            player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.already-exists"));
                             return;
                         }
                     }
 
                     if (currentFilterItems.size() >= 18) {
-                        player.sendMessage(Component.text("Filter is full! Remove items first.", NamedTextColor.RED));
+                        player.sendMessage(plugin.getMessageManager().getMessageComponent(player, "gui.filter.full"));
                     } else {
                         ItemStack filterTemplate = draggedItem.clone();
                         filterTemplate.setAmount(1);

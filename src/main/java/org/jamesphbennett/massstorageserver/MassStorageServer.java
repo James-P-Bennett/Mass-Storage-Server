@@ -30,6 +30,7 @@ public final class MassStorageServer extends JavaPlugin {
     private ExplosionManager explosionManager;
     private ExporterManager exporterManager;
     private ImporterManager importerManager;
+    private MessageManager messageManager;
 
     public MassStorageServer() {
     }
@@ -37,10 +38,11 @@ public final class MassStorageServer extends JavaPlugin {
     @Override
     public void onEnable() {
 
-        getLogger().info("Starting Mass Storage Server Plugin...");
+        getLogger().info(messageManager != null ? messageManager.getConsoleMessage("console.startup.loading", "version", getDescription().getVersion()) : "Loading Mass Storage Server v" + getDescription().getVersion());
 
         try {
             configManager = new ConfigManager(this);
+            messageManager = new MessageManager(this);
             databaseManager = new DatabaseManager(this);
             networkManager = new NetworkManager(this);
             disksManager = new DisksManager(this);
@@ -72,8 +74,8 @@ public final class MassStorageServer extends JavaPlugin {
             // Register recipes AFTER everything else is initialized
             recipeManager.registerRecipes();
 
-            getLogger().info("Mass Storage Server Plugin enabled successfully!");
-            getLogger().info("Registered " + recipeManager.getRegisteredRecipeCount() + " recipes");
+            getLogger().info(messageManager.getConsoleMessage("console.startup.enabled"));
+            getLogger().info(messageManager.getConsoleMessage("console.recipes.registered", "count", recipeManager.getRegisteredRecipeCount()));
 
         } catch (Exception e) {
             getLogger().log(Level.SEVERE, "Failed to enable Mass Storage Server Plugin!", e);
@@ -83,7 +85,7 @@ public final class MassStorageServer extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        getLogger().info("Shutting down Mass Storage Server Plugin...");
+        getLogger().info(messageManager != null ? messageManager.getConsoleMessage("console.shutdown.disabling") : "Shutting down Mass Storage Server Plugin...");
 
         if (guiManager != null) {
             guiManager.closeAllGUIs();
@@ -93,7 +95,7 @@ public final class MassStorageServer extends JavaPlugin {
             databaseManager.shutdown();
         }
 
-        getLogger().info("Mass Storage Server Plugin disabled successfully!");
+        getLogger().info(messageManager != null ? messageManager.getConsoleMessage("console.startup.disabled") : "Mass Storage Server Plugin disabled successfully!");
     }
 
     public ConfigManager getConfigManager() {
@@ -145,11 +147,25 @@ public final class MassStorageServer extends JavaPlugin {
         return importerManager;
     }
 
+    public MessageManager getMessageManager() {
+        return messageManager;
+    }
+
     /**
      * Log debug message only if debug mode is enabled
      */
     public void debugLog(String message) {
         if (configManager != null && configManager.isDebugMode()) {
+            getLogger().info("[DEBUG] " + message);
+        }
+    }
+
+    /**
+     * Get debug message with placeholders (for message system)
+     */
+    public void debugLog(String messageKey, Object... placeholders) {
+        if (configManager != null && configManager.isDebugMode() && messageManager != null) {
+            String message = messageManager.getDebugMessage(messageKey, placeholders);
             getLogger().info("[DEBUG] " + message);
         }
     }

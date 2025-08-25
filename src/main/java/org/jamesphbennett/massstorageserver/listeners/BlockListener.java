@@ -5,6 +5,9 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
+import org.bukkit.block.data.Directional;
+import org.bukkit.block.data.type.Crafter;
+import org.bukkit.util.Vector;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -13,12 +16,16 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.block.BlockExplodeEvent;
+import org.bukkit.event.block.BlockRedstoneEvent;
+import org.bukkit.event.block.BlockPhysicsEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.ItemStack;
 import org.jamesphbennett.massstorageserver.MassStorageServer;
 import org.jamesphbennett.massstorageserver.managers.ItemManager;
 import org.jamesphbennett.massstorageserver.managers.ExporterManager;
 import org.jamesphbennett.massstorageserver.managers.ImporterManager;
+import org.jamesphbennett.massstorageserver.managers.NetworkSecurityManager;
+import static org.jamesphbennett.massstorageserver.managers.NetworkSecurityManager.PermissionType;
 import org.jamesphbennett.massstorageserver.network.NetworkManager;
 import org.jamesphbennett.massstorageserver.network.NetworkInfo;
 import org.jamesphbennett.massstorageserver.network.CableManager;
@@ -67,7 +74,7 @@ public class BlockListener implements Listener {
             return;
         }
 
-        // Check if it's one of our CUSTOM network blocks, cables, exporters, or importers
+        // Check if it's one of our CUSTOM network blocks, cables, exporters, importers, or security terminals
         if (!itemManager.isNetworkBlock(item) && !itemManager.isNetworkCable(item) && !itemManager.isExporter(item) && !itemManager.isImporter(item)) {
             return;
         }
@@ -76,6 +83,25 @@ public class BlockListener implements Listener {
         if (plugin.getConfigManager().isRequireUsePermission() && !player.hasPermission("massstorageserver.use")) {
             event.setCancelled(true);
             player.sendMessage(Component.text("You don't have permission to place Mass Storage blocks.", NamedTextColor.RED));
+            return;
+        }
+
+        // Check for security terminal permissions for block modification
+        // We need to check adjacent blocks to see if there's a security terminal network
+        String adjacentNetworkId = null;
+        for (Location adjacent : getAdjacentLocations(location)) {
+            if (isCustomNetworkBlock(adjacent.getBlock()) || cableManager.isCustomNetworkCable(adjacent.getBlock())) {
+                adjacentNetworkId = networkManager.getNetworkId(adjacent);
+                if (adjacentNetworkId != null) {
+                    break;
+                }
+            }
+        }
+
+        // If we found an adjacent network, check block modification permissions
+        if (adjacentNetworkId != null && !plugin.getSecurityManager().hasPermission(player, adjacentNetworkId, PermissionType.BLOCK_MODIFICATION)) {
+            event.setCancelled(true);
+            player.sendMessage(Component.text("You don't have permission to modify blocks in this network.", NamedTextColor.RED));
             return;
         }
 
@@ -173,8 +199,28 @@ public class BlockListener implements Listener {
             return; // Don't continue to network detection for importers
         }
 
-        // Handle network cable placement
-        if (itemManager.isNetworkCable(item)) {
+        // Handle security terminal placement
+        if (itemManager.isSecurityTerminal(item)) {
+            // FIRST: Check for security terminal conflicts BEFORE placing
+            String securityConflict = cableManager.checkSecurityTerminalConflict(location, "SECURITY_TERMINAL");
+            if (securityConflict != null) {
+                event.setCancelled(true);
+                player.sendMessage(Component.text(securityConflict, NamedTextColor.RED));
+                return;
+            }
+            
+            // THEN: Mark this location as containing our custom block in the database (SYNCHRONOUSLY)
+            try {
+                markLocationAsCustomBlock(location, "SECURITY_TERMINAL");
+                player.sendMessage(Component.text("Security Terminal placed successfully!", NamedTextColor.GREEN));
+            } catch (Exception e) {
+                plugin.getLogger().severe("Error marking security terminal location: " + e.getMessage());
+                event.setCancelled(true);
+                player.sendMessage(Component.text("Error placing security terminal: " + e.getMessage(), NamedTextColor.RED));
+                return;
+            }
+            // Continue to network detection for security terminals
+        } else if (itemManager.isNetworkCable(item)) {
             if (!cableManager.handleCablePlacement(player, location)) {
                 event.setCancelled(true);
                 return;
@@ -200,6 +246,8 @@ public class BlockListener implements Listener {
                 return;
             }
 
+            // Security terminal conflicts are checked in the security terminal-specific branch above
+
             // Check if placing this MSS block would cause an exporter to be attached to it
             if (isMSSBlockType(blockType)) {
                 String exporterConflict = checkExporterAttachmentConflict(location);
@@ -222,10 +270,64 @@ public class BlockListener implements Listener {
             }
         }
 
+        // Security terminal conflict checking is handled in the main block placement logic above
+        // No need for duplicate checking here
+
+        // Schedule network detection and block direction setting for next tick (after block is fully placed)
+        plugin.getServer().getScheduler().runTask(plugin, () -> {
+            // Set block direction after the block is fully placed
+            setBlockDirectionDelayed(block, player, item);
+        });
+
         // Schedule network detection for next tick (after block is placed)
         plugin.getServer().getScheduler().runTask(plugin, () -> {
             try {
                 NetworkInfo network = networkManager.detectNetwork(location);
+
+                // Create security terminal if this was a security terminal placement
+                // Do this after checking the limit but before checking network validity so it works even for standalone terminals
+                if (itemManager.isSecurityTerminal(item)) {
+                    try {
+                        String networkId = null;
+                        if (network != null && network.isValid()) {
+                            networkId = networkManager.getNetworkId(location);
+                        } else {
+                            // Try to find network ID from adjacent blocks since network detection failed
+                            for (Location adjacent : getAdjacentLocations(location)) {
+                                if (isCustomNetworkBlock(adjacent.getBlock()) || cableManager.isCustomNetworkCable(adjacent.getBlock())) {
+                                    String adjNetworkId = networkManager.getNetworkId(adjacent);
+                                    if (adjNetworkId != null) {
+                                        networkId = adjNetworkId;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        plugin.getSecurityManager().createSecurityTerminal(location, player, networkId);
+                        plugin.debugLog("Created security terminal at " + location + " for player " + player.getName() + " with networkId " + networkId);
+                        
+                        // If we have a network, update the association immediately
+                        if (networkId != null) {
+                            plugin.getSecurityManager().updateTerminalNetwork(location, networkId);
+                            plugin.debugLog("Immediately updated security terminal network association to " + networkId);
+                        } else {
+                            // Schedule a delayed network association check in case network forms later
+                            plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+                                try {
+                                    String delayedNetworkId = networkManager.getNetworkId(location);
+                                    if (delayedNetworkId != null) {
+                                        plugin.getSecurityManager().updateTerminalNetwork(location, delayedNetworkId);
+                                    }
+                                } catch (Exception ex) {
+                                    plugin.getLogger().severe("Error in delayed security terminal network update: " + ex.getMessage());
+                                }
+                            }, 20L); // 1 second delay
+                        }
+                    } catch (Exception e) {
+                        plugin.getLogger().severe("Error creating security terminal: " + e.getMessage());
+                        e.printStackTrace();
+                    }
+                }
 
                 if (network != null && network.isValid()) {
                     // Check network size limit (blocks only, not cables)
@@ -243,6 +345,17 @@ public class BlockListener implements Listener {
 
                     // Register the network with comprehensive drive bay restoration
                     networkManager.registerNetwork(network, player.getUniqueId());
+
+                    // Update security terminal network association if this was a security terminal
+                    if (itemManager.isSecurityTerminal(item)) {
+                        try {
+                            String networkId = networkManager.getNetworkId(location);
+                            plugin.getSecurityManager().updateTerminalNetwork(location, networkId);
+                            plugin.debugLog("Updated security terminal network association to " + networkId);
+                        } catch (Exception e) {
+                            plugin.getLogger().severe("Error updating security terminal network: " + e.getMessage());
+                        }
+                    }
 
                     // Check if any drive bay contents were restored
                     boolean hasRestoredContent = plugin.getDisksManager().checkForRestoredContent(network.getDriveBays());
@@ -305,6 +418,13 @@ public class BlockListener implements Listener {
         try {
             String networkId = networkManager.getNetworkId(location);
 
+            // Check security terminal permissions for block modification
+            if (!plugin.getSecurityManager().hasPermission(player, networkId, PermissionType.BLOCK_MODIFICATION)) {
+                event.setCancelled(true);
+                player.sendMessage(Component.text("You don't have permission to remove blocks from this network.", NamedTextColor.RED));
+                return;
+            }
+
             // Handle exporter removal
             if (isCustomExporter(block)) {
                 try {
@@ -359,6 +479,30 @@ public class BlockListener implements Listener {
                     plugin.getLogger().severe("Error removing importer: " + e.getMessage());
                 }
                 return; // Importers don't affect network topology, so return early
+            }
+
+            // Handle security terminal removal
+            if (isCustomSecurityTerminal(block)) {
+                try {
+                    // Remove from security manager
+                    plugin.getSecurityManager().removeSecurityTerminal(location);
+                    plugin.getLogger().info("Removed security terminal at " + location);
+
+                    // Drop the custom item
+                    event.setDropItems(false);
+                    ItemStack customItem = plugin.getItemManager().createSecurityTerminal();
+                    if (customItem != null) {
+                        block.getWorld().dropItemNaturally(location, customItem);
+                    }
+
+                    // Remove custom block marker
+                    removeCustomBlockMarker(location);
+
+                } catch (Exception e) {
+                    player.sendMessage(Component.text("Error removing security terminal: " + e.getMessage(), NamedTextColor.RED));
+                    plugin.getLogger().severe("Error removing security terminal: " + e.getMessage());
+                }
+                // Security terminals are network blocks, so continue to network processing
             }
 
             if (isCustomDriveBay(block)) {
@@ -615,6 +759,39 @@ public class BlockListener implements Listener {
             return;
         }
 
+        // Handle Security Terminal interactions (only custom ones)
+        if (isCustomSecurityTerminal(block)) {
+            event.setCancelled(true);
+
+            if (plugin.getConfigManager().isRequireUsePermission() && !player.hasPermission("massstorageserver.use")) {
+                player.sendMessage(Component.text("You don't have permission to use security terminals.", NamedTextColor.RED));
+                return;
+            }
+
+            try {
+                // Check if player is the owner
+                if (!plugin.getSecurityManager().isOwner(player, block.getLocation())) {
+                    player.sendMessage(Component.text("Only the owner can manage this security terminal.", NamedTextColor.RED));
+                    return;
+                }
+
+                // Get security terminal data
+                var terminalData = plugin.getSecurityManager().getSecurityTerminal(block.getLocation());
+                if (terminalData == null) {
+                    player.sendMessage(Component.text("Security terminal data not found. Try breaking and replacing the block.", NamedTextColor.RED));
+                    return;
+                }
+
+                // Open security terminal GUI
+                plugin.getGUIManager().openSecurityTerminalGUI(player, block.getLocation(), terminalData.terminalId, terminalData.ownerUuid);
+
+            } catch (Exception e) {
+                player.sendMessage(Component.text("Error accessing security terminal: " + e.getMessage(), NamedTextColor.RED));
+                plugin.getLogger().severe("Error accessing security terminal: " + e.getMessage());
+            }
+            return;
+        }
+
         // Handle Drive Bay interactions (only custom ones)
         if (isCustomDriveBay(block)) {
             event.setCancelled(true);
@@ -625,7 +802,12 @@ public class BlockListener implements Listener {
             }
 
             try {
+                // Check security terminal permissions
                 String networkId = networkManager.getNetworkId(block.getLocation());
+                if (!plugin.getSecurityManager().hasPermission(player, networkId, PermissionType.DRIVE_BAY_ACCESS)) {
+                    player.sendMessage(Component.text("You don't have permission to access this drive bay.", NamedTextColor.RED));
+                    return;
+                }
 
                 // Allow access even without network, show status message
                 if (networkId == null) {
@@ -646,7 +828,7 @@ public class BlockListener implements Listener {
 
     // Helper methods to check if blocks are OUR custom blocks or cables
     private boolean isCustomNetworkBlockOrCableOrExporterOrImporter(Block block) {
-        return isCustomNetworkBlock(block) || cableManager.isCustomNetworkCable(block) || isCustomExporter(block) || isCustomImporter(block);
+        return isCustomNetworkBlock(block) || cableManager.isCustomNetworkCable(block) || isCustomExporter(block) || isCustomImporter(block) || isCustomSecurityTerminal(block);
     }
 
     // Helper method for network signal carriers (excludes importers since they don't carry network signals)
@@ -655,7 +837,7 @@ public class BlockListener implements Listener {
     }
 
     private boolean isCustomNetworkBlock(Block block) {
-        return isCustomStorageServer(block) || isCustomDriveBay(block) || isCustomMSSTerminal(block);
+        return isCustomStorageServer(block) || isCustomDriveBay(block) || isCustomMSSTerminal(block) || isCustomSecurityTerminal(block);
     }
 
     private boolean isCustomStorageServer(Block block) {
@@ -683,19 +865,24 @@ public class BlockListener implements Listener {
         return isMarkedAsCustomBlock(block.getLocation(), "IMPORTER");
     }
 
+    private boolean isCustomSecurityTerminal(Block block) {
+        if (block.getType() != Material.OBSERVER) return false;
+        return isMarkedAsCustomBlock(block.getLocation(), "SECURITY_TERMINAL");
+    }
+
     /**
-     * Check if a block is a custom MSS block (Storage Server, Drive Bay, or MSS Terminal)
+     * Check if a block is a custom MSS block (Storage Server, Drive Bay, MSS Terminal, or Security Terminal)
      * Used for exporter placement validation
      */
     private boolean isCustomMSSBlock(Block block) {
-        return isCustomStorageServer(block) || isCustomDriveBay(block) || isCustomMSSTerminal(block);
+        return isCustomStorageServer(block) || isCustomDriveBay(block) || isCustomMSSTerminal(block) || isCustomSecurityTerminal(block);
     }
 
     /**
      * Check if a block type is an MSS block type
      */
     private boolean isMSSBlockType(String blockType) {
-        return "STORAGE_SERVER".equals(blockType) || "DRIVE_BAY".equals(blockType) || "MSS_TERMINAL".equals(blockType);
+        return "STORAGE_SERVER".equals(blockType) || "DRIVE_BAY".equals(blockType) || "MSS_TERMINAL".equals(blockType) || "SECURITY_TERMINAL".equals(blockType);
     }
 
     /**
@@ -797,6 +984,7 @@ public class BlockListener implements Listener {
         if (itemManager.isStorageServer(item)) return "STORAGE_SERVER";
         if (itemManager.isDriveBay(item)) return "DRIVE_BAY";
         if (itemManager.isMSSTerminal(item)) return "MSS_TERMINAL";
+        if (itemManager.isSecurityTerminal(item)) return "SECURITY_TERMINAL";
         if (itemManager.isNetworkCable(item)) return "NETWORK_CABLE";
         if (itemManager.isExporter(item)) return "EXPORTER";
         return "UNKNOWN";
@@ -865,6 +1053,8 @@ public class BlockListener implements Listener {
             return itemManager.createExporter();
         } else if (isCustomImporter(block)) {
             return itemManager.createImporter();
+        } else if (isCustomSecurityTerminal(block)) {
+            return itemManager.createSecurityTerminal();
         }
         return null;
     }
@@ -1043,6 +1233,114 @@ public class BlockListener implements Listener {
             try (ResultSet rs = stmt.executeQuery()) {
                 return rs.next() ? rs.getInt(1) : 0;
             }
+        }
+    }
+
+    /**
+     * Prevent MSS blocks from interacting with redstone
+     */
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onBlockRedstone(BlockRedstoneEvent event) {
+        Block block = event.getBlock();
+        
+        // Check if this is a security terminal observer block
+        if (block.getType() == Material.OBSERVER && isCustomSecurityTerminal(block)) {
+            // Cancel the redstone event to prevent signal output
+            event.setNewCurrent(0);
+        }
+        
+        // Check if this is an MSS terminal crafter block
+        if (block.getType() == Material.CRAFTER && isCustomMSSTerminal(block)) {
+            // Cancel redstone events to prevent crafter activation
+            event.setNewCurrent(0);
+        }
+    }
+
+    /**
+     * Prevent MSS blocks from responding to physics updates
+     */
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onBlockPhysics(BlockPhysicsEvent event) {
+        Block block = event.getBlock();
+        
+        // Check if this is a security terminal observer block
+        if (block.getType() == Material.OBSERVER && isCustomSecurityTerminal(block)) {
+            // Cancel physics updates to prevent observer detection behavior
+            event.setCancelled(true);
+        }
+        
+        // Check if this is an MSS terminal crafter block
+        if (block.getType() == Material.CRAFTER && isCustomMSSTerminal(block)) {
+            // Cancel physics updates to prevent crafter redstone behavior
+            event.setCancelled(true);
+        }
+    }
+
+    /**
+     * Set the facing direction for directional blocks based on player placement direction (delayed)
+     */
+    private void setBlockDirectionDelayed(Block block, Player player, ItemStack item) {
+        // Only set direction for MSS Terminal and Security Terminal
+        if (!itemManager.isMSSTerminal(item) && !itemManager.isSecurityTerminal(item)) {
+            return;
+        }
+
+        plugin.getLogger().info("[Direction Debug] Setting direction for " + block.getType() + " at " + block.getLocation());
+
+        // Check if the block data implements Directional (both Crafter and Observer do)
+        if (!(block.getBlockData() instanceof Directional directional)) {
+            plugin.getLogger().info("[Direction Debug] Block is not directional: " + block.getBlockData().getClass().getName());
+            return;
+        }
+
+        // Calculate player direction
+        Vector playerDirection = player.getLocation().getDirection();
+        
+        // Get horizontal direction (ignore Y component for facing)
+        double x = playerDirection.getX();
+        double z = playerDirection.getZ();
+        
+        // Determine the closest cardinal direction (opposite of player direction to face toward player)
+        org.bukkit.block.BlockFace facing;
+        if (Math.abs(x) > Math.abs(z)) {
+            facing = x > 0 ? org.bukkit.block.BlockFace.WEST : org.bukkit.block.BlockFace.EAST;
+        } else {
+            facing = z > 0 ? org.bukkit.block.BlockFace.NORTH : org.bukkit.block.BlockFace.SOUTH;
+        }
+        
+        plugin.getLogger().info("[Direction Debug] Player direction: x=" + x + ", z=" + z + " -> facing=" + facing);
+        plugin.getLogger().info("[Direction Debug] Available faces: " + directional.getFaces());
+        plugin.getLogger().info("[Direction Debug] Current facing: " + directional.getFacing());
+        
+        // Set the facing direction if it's a valid option for this block
+        if (directional.getFaces().contains(facing)) {
+            directional.setFacing(facing);
+            block.setBlockData(directional);
+            plugin.getLogger().info("[Direction Debug] Set facing to: " + facing);
+        } else {
+            plugin.getLogger().info("[Direction Debug] Facing " + facing + " not available for this block");
+        }
+    }
+
+    /**
+     * Check if a network already has a security terminal using database lookup
+     */
+    private boolean hasExistingSecurityTerminalInNetwork(String networkId) {
+        try (Connection conn = plugin.getDatabaseManager().getConnection();
+             PreparedStatement stmt = conn.prepareStatement(
+                     "SELECT COUNT(*) FROM security_terminals WHERE network_id = ?")) {
+            
+            stmt.setString(1, networkId);
+            
+            try (ResultSet rs = stmt.executeQuery()) {
+                int count = rs.next() ? rs.getInt(1) : 0;
+                plugin.getLogger().info("[Security Terminal Debug] Database query result: " + count + " security terminals in network " + networkId);
+                return count > 0;
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Error checking existing security terminals in network: " + e.getMessage());
+            // If database check fails, allow placement to avoid blocking legitimate placements
+            return false;
         }
     }
 }

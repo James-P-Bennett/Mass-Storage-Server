@@ -300,6 +300,47 @@ public class GUIManager {
         }
     }
 
+    public void openSecurityTerminalGUI(Player player, Location terminalLocation, String terminalId, String ownerUuid) {
+        try {
+            SecurityTerminalGUI gui = new SecurityTerminalGUI(plugin, terminalLocation, terminalId, ownerUuid, player);
+            gui.open(player);
+
+            playerCurrentGUI.put(player.getUniqueId(), "SECURITY_TERMINAL");
+            playerGUIInstance.put(player.getUniqueId(), gui);
+
+            plugin.debugLog("Opened security terminal GUI for player " + player.getName());
+        } catch (Exception e) {
+            player.sendMessage(Component.text("Error opening security terminal: " + e.getMessage(), NamedTextColor.RED));
+            plugin.getLogger().severe("Error opening Security Terminal GUI: " + e.getMessage());
+        }
+    }
+
+    // Player input handling for security terminal
+    private final Map<UUID, SecurityTerminalGUI> playersAwaitingPlayerInput = new ConcurrentHashMap<>();
+
+    public void registerPlayerInput(Player player, SecurityTerminalGUI securityGUI) {
+        playersAwaitingPlayerInput.put(player.getUniqueId(), securityGUI);
+        plugin.debugLog("Registered player " + player.getName() + " for player input");
+    }
+
+    public boolean isAwaitingPlayerInput(Player player) {
+        return playersAwaitingPlayerInput.containsKey(player.getUniqueId());
+    }
+
+    public void handlePlayerInput(Player player, String input) {
+        SecurityTerminalGUI gui = playersAwaitingPlayerInput.remove(player.getUniqueId());
+        if (gui != null) {
+            gui.addTrustedPlayer(input);
+            // Reopen the GUI
+            gui.open(player);
+        }
+    }
+
+    public void cancelPlayerInput(Player player) {
+        playersAwaitingPlayerInput.remove(player.getUniqueId());
+        player.sendMessage(Component.text("Player input cancelled.", NamedTextColor.YELLOW));
+    }
+
     /**
      * Register a player for search input (when they click the search button)
      */

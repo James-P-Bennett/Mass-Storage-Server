@@ -100,6 +100,7 @@ errors:
     connection-lost: "Network connection lost - please check your storage system"
     dissolved: "Storage network dissolved - blocks have been disconnected"
     dissolved-drive-bay: "Storage network dissolved - you can still manage disks in this drive bay"
+    security-terminal-limit: "MSS networks can only have one security terminal."
   
   storage:
     full: "Storage network is full!"

@@ -99,7 +99,6 @@ public class DatabaseManager {
                 conn.setAutoCommit(false);
 
                 try {
-                    // Add tier column with default value
                     try (var stmt = conn.createStatement()) {
                         stmt.execute("ALTER TABLE storage_disks ADD COLUMN tier TEXT DEFAULT '1k'");
                     }
@@ -409,6 +408,38 @@ public class DatabaseManager {
                     FOREIGN KEY (importer_id) REFERENCES importers(importer_id) ON DELETE CASCADE,
                     UNIQUE(importer_id, item_hash, filter_type)
                 )
+                """,
+
+                // Security terminals table
+                """
+                CREATE TABLE IF NOT EXISTS security_terminals (
+                    terminal_id TEXT PRIMARY KEY,
+                    world_name TEXT NOT NULL,
+                    x INTEGER NOT NULL,
+                    y INTEGER NOT NULL,
+                    z INTEGER NOT NULL,
+                    owner_uuid TEXT NOT NULL,
+                    owner_name TEXT NOT NULL,
+                    network_id TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (network_id) REFERENCES networks(network_id) ON DELETE SET NULL,
+                    UNIQUE(world_name, x, y, z)
+                )
+                """,
+
+                // Security terminal trusted players table
+                """
+                CREATE TABLE IF NOT EXISTS security_terminal_players (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    terminal_id TEXT NOT NULL,
+                    player_uuid TEXT NOT NULL,
+                    player_name TEXT NOT NULL,
+                    drive_bay_access BOOLEAN NOT NULL DEFAULT false,
+                    block_modification_access BOOLEAN NOT NULL DEFAULT false,
+                    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (terminal_id) REFERENCES security_terminals(terminal_id) ON DELETE CASCADE,
+                    UNIQUE(terminal_id, player_uuid)
+                )
                 """
         };
 
@@ -434,7 +465,12 @@ public class DatabaseManager {
                 "CREATE INDEX IF NOT EXISTS idx_importers_network ON importers(network_id)",
                 "CREATE INDEX IF NOT EXISTS idx_importers_enabled ON importers(enabled)",
                 "CREATE INDEX IF NOT EXISTS idx_importer_filters_importer ON importer_filters(importer_id)",
-                "CREATE INDEX IF NOT EXISTS idx_importer_filters_hash ON importer_filters(item_hash)"
+                "CREATE INDEX IF NOT EXISTS idx_importer_filters_hash ON importer_filters(item_hash)",
+                "CREATE INDEX IF NOT EXISTS idx_security_terminals_location ON security_terminals(world_name, x, y, z)",
+                "CREATE INDEX IF NOT EXISTS idx_security_terminals_owner ON security_terminals(owner_uuid)",
+                "CREATE INDEX IF NOT EXISTS idx_security_terminals_network ON security_terminals(network_id)",
+                "CREATE INDEX IF NOT EXISTS idx_security_terminal_players_terminal ON security_terminal_players(terminal_id)",
+                "CREATE INDEX IF NOT EXISTS idx_security_terminal_players_uuid ON security_terminal_players(player_uuid)"
         };
 
         try (Connection conn = getConnection()) {

@@ -36,6 +36,7 @@ public class ItemManager {
     private final NamespacedKey STORAGE_DISK_KEY;
     private final NamespacedKey EXPORTER_KEY;
     private final NamespacedKey IMPORTER_KEY;
+    private final NamespacedKey SECURITY_TERMINAL_KEY;
     private final NamespacedKey DISK_ID_KEY;
     private final NamespacedKey DISK_CRAFTER_UUID_KEY;
     private final NamespacedKey DISK_CRAFTER_NAME_KEY;
@@ -60,6 +61,7 @@ public class ItemManager {
         STORAGE_DISK_KEY = new NamespacedKey(plugin, "storage_disk");
         EXPORTER_KEY = new NamespacedKey(plugin, "exporter");
         IMPORTER_KEY = new NamespacedKey(plugin, "importer");
+        SECURITY_TERMINAL_KEY = new NamespacedKey(plugin, "security_terminal");
         DISK_ID_KEY = new NamespacedKey(plugin, "disk_id");
         DISK_CRAFTER_UUID_KEY = new NamespacedKey(plugin, "disk_crafter_uuid");
         DISK_CRAFTER_NAME_KEY = new NamespacedKey(plugin, "disk_crafter_name");
@@ -199,6 +201,28 @@ public class ItemManager {
         }
 
         meta.getPersistentDataContainer().set(IMPORTER_KEY, PersistentDataType.BOOLEAN, true);
+
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    public ItemStack createSecurityTerminal() {
+        ItemStack item = new ItemStack(Material.OBSERVER);
+        ItemMeta meta = item.getItemMeta();
+
+        Component displayName = miniMessage.deserialize("<red><bold>Security Terminal</bold></red>");
+        meta.displayName(displayName);
+
+        List<Component> lore = new ArrayList<>();
+        lore.add(miniMessage.deserialize("<gray>Manages network access permissions"));
+        lore.add(miniMessage.deserialize("<gray>Owner automatically gets all permissions"));
+        lore.add(miniMessage.deserialize("<gray>Right-click to manage trusted players"));
+        lore.add(Component.empty());
+        lore.add(miniMessage.deserialize("<yellow>Optional - networks work without this"));
+        lore.add(miniMessage.deserialize("<red>Only the owner can manage this terminal"));
+        meta.lore(lore);
+
+        meta.getPersistentDataContainer().set(SECURITY_TERMINAL_KEY, PersistentDataType.BOOLEAN, true);
 
         item.setItemMeta(meta);
         return item;
@@ -577,8 +601,13 @@ public class ItemManager {
         return item.getItemMeta().getPersistentDataContainer().has(IMPORTER_KEY, PersistentDataType.BOOLEAN);
     }
 
+    public boolean isSecurityTerminal(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) return false;
+        return item.getItemMeta().getPersistentDataContainer().has(SECURITY_TERMINAL_KEY, PersistentDataType.BOOLEAN);
+    }
+
     public boolean isNetworkBlock(ItemStack item) {
-        return isStorageServer(item) || isDriveBay(item) || isMSSTerminal(item) || isNetworkCable(item) || isExporter(item) || isImporter(item);
+        return isStorageServer(item) || isDriveBay(item) || isMSSTerminal(item) || isNetworkCable(item) || isExporter(item) || isImporter(item) || isSecurityTerminal(item);
     }
 
     /**

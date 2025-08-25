@@ -187,6 +187,7 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
             case "cable", "network_cable" -> plugin.getItemManager().createNetworkCable();
             case "exporter" -> plugin.getItemManager().createExporter();
             case "importer" -> plugin.getItemManager().createImporter();
+            case "security", "security_terminal" -> plugin.getItemManager().createSecurityTerminal();
 
             // Storage disks
             case "disk", "storage_disk", "disk1k" -> plugin.getItemManager().createStorageDisk(
@@ -423,7 +424,7 @@ public class MSSCommand implements CommandExecutor, TabCompleter {
                 case "give":
                     List<String> items = Arrays.asList(
                             // Network blocks
-                            "server", "bay", "terminal", "cable", "exporter",
+                            "server", "bay", "terminal", "cable", "exporter", "importer", "security",
                             // Storage disks
                             "disk1k", "disk4k", "disk16k", "disk64k",
                             // Components

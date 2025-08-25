@@ -60,6 +60,7 @@ public class NetworkManager {
         visited.add(location);
 
         Location storageServer = null;
+        Location securityTerminal = null;
         Set<Location> driveBays = new HashSet<>();
         Set<Location> terminals = new HashSet<>();
 
@@ -92,6 +93,14 @@ public class NetworkManager {
                     driveBays.add(current);
                 } else if (isMSSTerminal(block)) {
                     terminals.add(current);
+                } else if (isSecurityTerminal(block)) {
+                    if (securityTerminal != null) {
+                        // Multiple security terminals - invalid network
+                        return null;
+                    }
+                    securityTerminal = current;
+                    // Security terminals are part of the network but don't count toward network validity requirements
+                    // They are completely optional and separate from MSS terminals
                 }
             }
 
@@ -399,7 +408,7 @@ public class NetworkManager {
     }
 
     private boolean isNetworkBlock(Block block) {
-        return isStorageServer(block) || isDriveBay(block) || isMSSTerminal(block);
+        return isStorageServer(block) || isDriveBay(block) || isMSSTerminal(block) || isSecurityTerminal(block);
     }
 
     private boolean isStorageServer(Block block) {
@@ -412,6 +421,10 @@ public class NetworkManager {
 
     private boolean isMSSTerminal(Block block) {
         return block.getType() == Material.CRAFTER && isMarkedAsCustomBlock(block.getLocation(), "MSS_TERMINAL");
+    }
+
+    private boolean isSecurityTerminal(Block block) {
+        return block.getType() == Material.OBSERVER && isMarkedAsCustomBlock(block.getLocation(), "SECURITY_TERMINAL");
     }
 
     private boolean isMarkedAsCustomBlock(Location location, String blockType) {
@@ -438,6 +451,7 @@ public class NetworkManager {
         if (isStorageServer(block)) return "STORAGE_SERVER";
         if (isDriveBay(block)) return "DRIVE_BAY";
         if (isMSSTerminal(block)) return "MSS_TERMINAL";
+        if (isSecurityTerminal(block)) return "SECURITY_TERMINAL";
         if (plugin.getCableManager().isCustomNetworkCable(block)) return "NETWORK_CABLE";
         if (isExporter(block)) return "EXPORTER";
         if (isImporter(block)) return "IMPORTER";

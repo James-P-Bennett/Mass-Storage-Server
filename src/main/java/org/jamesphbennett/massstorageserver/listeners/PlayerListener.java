@@ -50,6 +50,21 @@ public class PlayerListener implements Listener {
                     player.sendMessage(Component.text("Search input expired. Please try again.", NamedTextColor.RED));
                 }
             });
+            return;
+        }
+
+        // Check if player is awaiting player input for security terminal
+        if (plugin.getGUIManager().isAwaitingPlayerInput(player)) {
+            plugin.getLogger().info("Player " + player.getName() + " sent player input: '" + message + "'");
+
+            // Cancel the chat event so it doesn't appear in public chat
+            event.setCancelled(true);
+
+            // Handle the player input on the main thread
+            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                plugin.getGUIManager().handlePlayerInput(player, message);
+            });
+            return;
         }
     }
 
@@ -62,6 +77,9 @@ public class PlayerListener implements Listener {
 
         // Cancel any pending search input
         plugin.getGUIManager().cancelSearchInput(player);
+        
+        // Cancel any pending player input
+        plugin.getGUIManager().cancelPlayerInput(player);
 
         // Close any open GUIs
         plugin.getGUIManager().closeGUI(player);

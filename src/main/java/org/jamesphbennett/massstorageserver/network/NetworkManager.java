@@ -1,7 +1,9 @@
 package org.jamesphbennett.massstorageserver.network;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.block.Block;
 import org.jamesphbennett.massstorageserver.MassStorageServer;
 
@@ -63,6 +65,7 @@ public class NetworkManager {
         Location securityTerminal = null;
         Set<Location> driveBays = new HashSet<>();
         Set<Location> terminals = new HashSet<>();
+        Set<Location> securityTerminals = new HashSet<>();
 
         // BFS to find connected network blocks
         while (!toCheck.isEmpty()) {
@@ -99,6 +102,7 @@ public class NetworkManager {
                         return null;
                     }
                     securityTerminal = current;
+                    securityTerminals.add(current);
                     // Security terminals are part of the network but don't count toward network validity requirements
                     // They are completely optional and separate from MSS terminals
                 }
@@ -135,7 +139,7 @@ public class NetworkManager {
         allBlocks.addAll(networkBlocks);
         allBlocks.addAll(networkCables);
 
-        return new NetworkInfo(generateNetworkId(storageServer), storageServer, driveBays, terminals, allBlocks, networkCables);
+        return new NetworkInfo(generateNetworkId(storageServer), storageServer, driveBays, terminals, allBlocks, networkCables, securityTerminals);
     }
 
     /**
@@ -204,9 +208,7 @@ public class NetworkManager {
         return isMarkedAsCustomBlock(block.getLocation(), "IMPORTER");
     }
 
-    /**
-     * Register a network in the database (ENHANCED with network cable support)
-     */
+    // Network registration
     public void registerNetwork(NetworkInfo network, UUID ownerUUID) throws SQLException {
         plugin.getDatabaseManager().executeTransaction(conn -> {
             // Insert or update network
@@ -240,14 +242,56 @@ public class NetworkManager {
                 stmt.executeBatch();
             }
 
+            // Register security terminals in their dedicated table
+            if (!network.getSecurityTerminals().isEmpty()) {
+                for (Location securityTerminal : network.getSecurityTerminals()) {
+                    String ownerName = "Unknown";
+                    if (ownerUUID != null) {
+                        OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(ownerUUID);
+                        if (offlinePlayer.getName() != null) {
+                            ownerName = offlinePlayer.getName();
+                        }
+                    }
+                    
+                    // Try to update existing record first
+                    try (PreparedStatement updateStmt = conn.prepareStatement(
+                            "UPDATE security_terminals SET network_id = ?, owner_uuid = ?, owner_name = ? WHERE world_name = ? AND x = ? AND y = ? AND z = ?")) {
+                        updateStmt.setString(1, network.getNetworkId());
+                        updateStmt.setString(2, ownerUUID != null ? ownerUUID.toString() : "00000000-0000-0000-0000-000000000000");
+                        updateStmt.setString(3, ownerName);
+                        updateStmt.setString(4, securityTerminal.getWorld().getName());
+                        updateStmt.setInt(5, securityTerminal.getBlockX());
+                        updateStmt.setInt(6, securityTerminal.getBlockY());
+                        updateStmt.setInt(7, securityTerminal.getBlockZ());
+                        
+                        int rowsUpdated = updateStmt.executeUpdate();
+                        
+                        // If no rows were updated, insert new record
+                        if (rowsUpdated == 0) {
+                            String terminalId = UUID.randomUUID().toString();
+                            try (PreparedStatement insertStmt = conn.prepareStatement(
+                                    "INSERT INTO security_terminals (terminal_id, world_name, x, y, z, owner_uuid, owner_name, network_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")) {
+                                insertStmt.setString(1, terminalId);
+                                insertStmt.setString(2, securityTerminal.getWorld().getName());
+                                insertStmt.setInt(3, securityTerminal.getBlockX());
+                                insertStmt.setInt(4, securityTerminal.getBlockY());
+                                insertStmt.setInt(5, securityTerminal.getBlockZ());
+                                insertStmt.setString(6, ownerUUID != null ? ownerUUID.toString() : "00000000-0000-0000-0000-000000000000");
+                                insertStmt.setString(7, ownerName);
+                                insertStmt.setString(8, network.getNetworkId());
+                                insertStmt.executeUpdate();
+                            }
+                        }
+                    }
+                }
+            }
+
             // COMPREHENSIVE DRIVE BAY RESTORATION (with reduced logging)
             restoreAllDriveBayContents(conn, network.getNetworkId(), network.getDriveBays());
         });
     }
 
-    /**
-     * Remove a network from the database (ENHANCED with drive bay preservation)
-     */
+    // Network removal
     public void unregisterNetwork(String networkId) throws SQLException {
         plugin.getDatabaseManager().executeTransaction(conn -> {
             // Delete network blocks

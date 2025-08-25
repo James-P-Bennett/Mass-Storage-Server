@@ -2,6 +2,7 @@ package org.jamesphbennett.massstorageserver.listeners;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -26,6 +27,7 @@ import org.jamesphbennett.massstorageserver.managers.ExporterManager;
 import org.jamesphbennett.massstorageserver.managers.ImporterManager;
 import org.jamesphbennett.massstorageserver.managers.NetworkSecurityManager;
 import static org.jamesphbennett.massstorageserver.managers.NetworkSecurityManager.PermissionType;
+import org.jamesphbennett.massstorageserver.network.NetworkConnectivityManager;
 import org.jamesphbennett.massstorageserver.network.NetworkManager;
 import org.jamesphbennett.massstorageserver.network.NetworkInfo;
 import org.jamesphbennett.massstorageserver.network.CableManager;
@@ -60,10 +62,10 @@ public class BlockListener implements Listener {
         Block block = event.getBlockPlaced();
         Location location = block.getLocation();
 
-        // Prevent storage disks from being placed as blocks
         if (itemManager.isStorageDisk(item)) {
             event.setCancelled(true);
-            player.sendMessage(Component.text("Storage disks cannot be placed as blocks!", NamedTextColor.RED));
+            Component message = plugin.getMessageManager().getMessageComponent(player, "errors.placement.storage-disks-blocks");
+            player.sendMessage(message);
             return;
         }
 
@@ -201,18 +203,21 @@ public class BlockListener implements Listener {
 
         // Handle security terminal placement
         if (itemManager.isSecurityTerminal(item)) {
-            // FIRST: Check for security terminal conflicts BEFORE placing
-            String securityConflict = cableManager.checkSecurityTerminalConflict(location, "SECURITY_TERMINAL");
-            if (securityConflict != null) {
+            // FIRST: Check for security terminal conflicts BEFORE placing using NetworkConnectivityManager
+            NetworkConnectivityManager connectivityManager = new NetworkConnectivityManager(plugin);
+            NetworkConnectivityManager.ConflictResult conflictResult = connectivityManager.checkPlacementConflicts(location, NetworkConnectivityManager.BlockType.SECURITY_TERMINAL);
+            if (conflictResult.hasConflict()) {
                 event.setCancelled(true);
-                player.sendMessage(Component.text(securityConflict, NamedTextColor.RED));
+                Component message = MiniMessage.miniMessage().deserialize(conflictResult.getMessage());
+                player.sendMessage(message);
                 return;
             }
             
             // THEN: Mark this location as containing our custom block in the database (SYNCHRONOUSLY)
             try {
                 markLocationAsCustomBlock(location, "SECURITY_TERMINAL");
-                player.sendMessage(Component.text("Security Terminal placed successfully!", NamedTextColor.GREEN));
+                Component message = plugin.getMessageManager().getMessageComponent(player, "success.placement.security-terminal");
+                player.sendMessage(message);
             } catch (Exception e) {
                 plugin.getLogger().severe("Error marking security terminal location: " + e.getMessage());
                 event.setCancelled(true);
@@ -242,7 +247,8 @@ public class BlockListener implements Listener {
             String serverConflict = cableManager.checkStorageServerConflict(location, blockType);
             if (serverConflict != null) {
                 event.setCancelled(true);
-                player.sendMessage(Component.text(serverConflict, NamedTextColor.RED));
+                Component message = MiniMessage.miniMessage().deserialize(serverConflict);
+                player.sendMessage(message);
                 return;
             }
 
@@ -250,7 +256,8 @@ public class BlockListener implements Listener {
             String securityConflictForMSS = cableManager.checkSecurityTerminalConflict(location, blockType);
             if (securityConflictForMSS != null) {
                 event.setCancelled(true);
-                player.sendMessage(Component.text(securityConflictForMSS, NamedTextColor.RED));
+                Component message = MiniMessage.miniMessage().deserialize(securityConflictForMSS);
+                player.sendMessage(message);
                 return;
             }
 
@@ -289,6 +296,7 @@ public class BlockListener implements Listener {
         plugin.getServer().getScheduler().runTask(plugin, () -> {
             try {
                 NetworkInfo network = networkManager.detectNetwork(location);
+
 
                 // Create security terminal if this was a security terminal placement
                 // Do this after checking the limit but before checking network validity so it works even for standalone terminals
@@ -1348,5 +1356,18 @@ public class BlockListener implements Listener {
             // If database check fails, allow placement to avoid blocking legitimate placements
             return false;
         }
+    }
+
+    /**
+     * Check if there are any adjacent MSS blocks or cables
+     */
+    private boolean hasAdjacentMSSBlocks(Location location) {
+        for (Location adjacent : getAdjacentLocations(location)) {
+            Block block = adjacent.getBlock();
+            if (isCustomNetworkBlock(block) || cableManager.isCustomNetworkCable(block)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

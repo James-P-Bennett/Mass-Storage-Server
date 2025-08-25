@@ -2,6 +2,7 @@ package org.jamesphbennett.massstorageserver.network;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -40,7 +41,8 @@ public class CableManager {
             NetworkConnectivityManager.ConflictResult conflictResult = 
                 connectivityManager.checkPlacementConflicts(location, NetworkConnectivityManager.BlockType.NETWORK_CABLE);
             if (conflictResult.hasConflict()) {
-                player.sendMessage(Component.text(conflictResult.getMessage(), NamedTextColor.RED));
+                Component message = MiniMessage.miniMessage().deserialize(conflictResult.getMessage());
+                player.sendMessage(message);
                 return false;
             }
 

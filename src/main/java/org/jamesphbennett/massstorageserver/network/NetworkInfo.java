@@ -12,15 +12,17 @@ public class NetworkInfo {
     private final Set<Location> terminals;
     private final Set<Location> allBlocks;
     private final Set<Location> networkCables;
+    private final Set<Location> securityTerminals;
 
     public NetworkInfo(String networkId, Location storageServer, Set<Location> driveBays,
-                       Set<Location> terminals, Set<Location> allBlocks, Set<Location> networkCables) {
+                       Set<Location> terminals, Set<Location> allBlocks, Set<Location> networkCables, Set<Location> securityTerminals) {
         this.networkId = networkId;
         this.storageServer = storageServer;
         this.driveBays = driveBays;
         this.terminals = terminals;
         this.allBlocks = allBlocks;
         this.networkCables = networkCables;
+        this.securityTerminals = securityTerminals;
     }
 
     public String getNetworkId() {
@@ -41,6 +43,10 @@ public class NetworkInfo {
 
     public Set<Location> getNetworkCables() {
         return networkCables;
+    }
+
+    public Set<Location> getSecurityTerminals() {
+        return securityTerminals;
     }
 
     public boolean isValid() {

@@ -127,8 +127,8 @@ public class NetworkConnectivityManager {
         }
     }
 
+    // Storage server placement conflicts
     private ConflictResult checkStorageServerConflicts(NetworkConnectivity connectivity) {
-        // Check if any connected network already has a storage server
         for (String networkId : connectivity.getConnectedNetworkIds()) {
             if (networkHasStorageServer(networkId)) {
                 String message = plugin.getMessageManager().getMessage((org.bukkit.entity.Player) null, "errors.placement.storage-server-conflict");
@@ -136,7 +136,6 @@ public class NetworkConnectivityManager {
             }
         }
         
-        // Check if any standalone storage servers would be connected
         Set<Location> storageServers = connectivity.getConnectedBlocks(BlockType.STORAGE_SERVER);
         if (!storageServers.isEmpty()) {
             String message = plugin.getMessageManager().getMessage((org.bukkit.entity.Player) null, "errors.placement.storage-server-conflict");
@@ -146,8 +145,8 @@ public class NetworkConnectivityManager {
         return ConflictResult.noConflict();
     }
 
+    // Security terminal placement conflicts
     private ConflictResult checkSecurityTerminalConflicts(NetworkConnectivity connectivity) {
-        // Check if any connected network already has a security terminal
         for (String networkId : connectivity.getConnectedNetworkIds()) {
             if (networkHasSecurityTerminal(networkId)) {
                 String message = plugin.getMessageManager().getMessage((org.bukkit.entity.Player) null, "errors.placement.security-terminal-conflict");
@@ -155,7 +154,6 @@ public class NetworkConnectivityManager {
             }
         }
         
-        // Check if any standalone security terminals would be connected
         Set<Location> securityTerminals = connectivity.getConnectedBlocks(BlockType.SECURITY_TERMINAL);
         if (!securityTerminals.isEmpty()) {
             String message = plugin.getMessageManager().getMessage((org.bukkit.entity.Player) null, "errors.placement.security-terminal-conflict");
@@ -165,8 +163,8 @@ public class NetworkConnectivityManager {
         return ConflictResult.noConflict();
     }
 
+    // Network connection conflicts 
     private ConflictResult checkConnectionConflicts(NetworkConnectivity connectivity, BlockType placingBlockType) {
-        // Only check connection conflicts for blocks that can extend networks
         if (!canExtendNetwork(placingBlockType)) {
             return ConflictResult.noConflict();
         }
@@ -176,7 +174,6 @@ public class NetworkConnectivityManager {
         int standaloneStorageServers = 0;
         int standaloneSecurityTerminals = 0;
         
-        // Check networks for unique blocks
         for (String networkId : connectivity.getConnectedNetworkIds()) {
             if (networkHasStorageServer(networkId)) {
                 networksWithStorageServers.add(networkId);
@@ -185,10 +182,6 @@ public class NetworkConnectivityManager {
                 networksWithSecurityTerminals.add(networkId);
             }
         }
-        
-        // Count only truly standalone blocks (those with no network ID)
-        standaloneStorageServers = 0;
-        standaloneSecurityTerminals = 0;
         
         for (Location storageServer : connectivity.getConnectedBlocks(BlockType.STORAGE_SERVER)) {
             String networkId = getNetworkIdForLocation(storageServer);
@@ -204,22 +197,17 @@ public class NetworkConnectivityManager {
             }
         }
         
-        // Check storage server conflicts 
-        // We only block if there are multiple separate sources of storage servers:
-        // - Multiple networks each with storage servers, OR
-        // - Multiple standalone storage servers, OR  
-        // - Mix of network(s) with storage servers AND standalone storage server(s)
+        // Storage server conflicts
         int storageServerSources = networksWithStorageServers.size() + standaloneStorageServers;
         boolean hasMultipleStorageServerSources = storageServerSources > 1;
         
+        // Security terminal conflicts  
+        int securityTerminalSources = networksWithSecurityTerminals.size() + standaloneSecurityTerminals;
+        boolean hasMultipleSecurityTerminalSources = securityTerminalSources > 1;
         if (hasMultipleStorageServerSources) {
             String message = plugin.getMessageManager().getMessage((org.bukkit.entity.Player) null, "errors.placement.multiple-storage-servers");
             return ConflictResult.conflict(ConflictType.MULTIPLE_STORAGE_SERVERS, message);
         }
-        
-        // Check security terminal conflicts with same logic
-        int securityTerminalSources = networksWithSecurityTerminals.size() + standaloneSecurityTerminals;
-        boolean hasMultipleSecurityTerminalSources = securityTerminalSources > 1;
         
         if (hasMultipleSecurityTerminalSources) {
             String message = plugin.getMessageManager().getMessage((org.bukkit.entity.Player) null, "errors.placement.multiple-security-terminals");

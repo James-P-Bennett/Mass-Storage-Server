@@ -1,5 +1,4 @@
 # Mass Storage Server - English Language File
-# Version: BETA-1.4.4
 # This file contains all translatable text for the Mass Storage Server plugin
 # 
 # MiniMessage formatting is supported for colors and styling:
@@ -93,29 +92,27 @@ commands:
 # Error Messages
 errors:
   network:
-    invalid: "This network is no longer valid"
-    not-connected: "Not connected to any network"
-    not-connected-assigned: "This {device} is not connected to its assigned network"
-    not-connected-any: "This {device} is not connected to any network"
-    connection-lost: "Network connection lost - please check your storage system"
-    dissolved: "Storage network dissolved - blocks have been disconnected"
-    dissolved-drive-bay: "Storage network dissolved - you can still manage disks in this drive bay"
-    security-terminal-limit: "MSS networks can only have one security terminal."
+    invalid: "<red>This network is no longer valid</red>"
+    not-connected: "<red>Not connected to any network</red>"
+    not-connected-assigned: "<red>This {device} is not connected to its assigned network</red>"
+    not-connected-any: "<red>This {device} is not connected to any network</red>"
+    connection-lost: "<red>Network connection lost - please check your storage system</red>"
+    dissolved: "<red>Storage network dissolved - blocks have been disconnected</red>"
+    dissolved-drive-bay: "<red>Storage network dissolved - you can still manage disks in this drive bay</red>"
+    security-terminal-limit: "<red>MSS networks can only have one security terminal.</red>"
+    exporter-not-connected: "<red>This exporter is not connected to a valid network.</red>"
+    importer-not-connected: "<red>This importer is not connected to a valid network.</red>"
+    terminal-not-connected: "<red>This terminal is not connected to a valid network.</red>"
+    exporter-data-not-found: "<red>Exporter data not found. Try breaking and replacing the block.</red>"
+    importer-data-not-found: "<red>Importer data not found. Try breaking and replacing the block.</red>"
+    security-terminal-data-not-found: "<red>Security terminal data not found. Try breaking and replacing the block.</red>"
     
-  placement:
-    multiple-storage-servers: "<red>Cannot connect networks: Multiple networks have Storage Servers!</red>"
-    multiple-security-terminals: "<red>Cannot connect networks: Multiple networks have Security Terminals!</red>"
-    storage-server-conflict: "<red>Cannot place Storage Server: Adjacent network already has a Storage Server!</red>"
-    security-terminal-conflict: "<red>Cannot place Security Terminal: Adjacent network already has a Security Terminal!</red>"
-    network-limit-exceeded: "<red>Network limit exceeded!</red>"
-    cable-limit-exceeded: "<red>Network cable limit exceeded! Maximum {max} cables per network.</red>"
-  
   storage:
-    full: "Storage network is full!"
-    disk-full: "Storage disk is full"
-    item-blacklisted: "Item not allowed: {item}"
-    item-blacklisted-filter: "You cannot add occupied containers or disks to the network!"
-    no-disks: "No storage disks found in network {network}"
+    full: "<red>Storage network is full!</red>"
+    disk-full: "<red>Storage disk is full</red>"
+    item-blacklisted: "<red>Item not allowed: {item}</red>"
+    item-blacklisted-filter: "<red>You cannot add occupied containers or disks to the network!</red>"
+    no-disks: "<red>No storage disks found in network {network}</red>"
   
   gui:
     error-opening: "<red>Error opening {gui} GUI: {error}</red>"
@@ -126,16 +123,75 @@ errors:
     cleared: "<yellow>Search cleared.</yellow>"
     saved: "<green>Search saved: '{term}'.</green>"
   
-  network:
-    dissolved-drive-bay: "<yellow>Storage network dissolved - you can still manage disks in this drive bay.</yellow>"
-  
+  placement:
+    multiple-storage-servers: "<red>Cannot connect networks: Multiple networks have Storage Servers!</red>"
+    multiple-security-terminals: "<red>Cannot connect networks: Multiple networks have Security Terminals!</red>"
+    storage-server-conflict: "<red>Cannot place Storage Server: Adjacent network already has a Storage Server!</red>"
+    security-terminal-conflict: "<red>Cannot place Security Terminal: Adjacent network already has a Security Terminal!</red>"
+    network-limit-exceeded: "<red>Network limit exceeded!</red>"
+    cable-limit-exceeded: "<red>Network cable limit exceeded! Maximum {max} cables per network.</red>"
+    invalid-network-formation: "<red>Cannot form network: Network configuration violates constraints!</red>"
+    storage-disks-blocks: "<red>Storage disks cannot be placed as blocks!</red>"
+    mss-components-blocks: "<red>Mass Storage components cannot be placed as blocks!</red>"
+    no-use-permission: "<red>You don't have permission to place Mass Storage blocks.</red>"
+    no-block-modification-permission: "<red>You don't have permission to modify blocks in this network.</red>"
+    exporter-cannot-attach: "<red>You cannot attach an exporter directly to the network!</red>"
+    importer-cannot-attach: "<red>You cannot attach an importer directly to the network!</red>"
+    network-size-limit: "<red>Network size limit exceeded! Maximum {max} blocks per network.</red>"
+    block-error: "<red>Error placing block: {error}</red>"
+    
+  interaction:
+    no-use-permission-exporters: "<red>You don't have permission to use Exporters.</red>"
+    no-use-permission-importers: "<red>You don't have permission to use importers.</red>"
+    no-use-permission-terminals: "<red>You don't have permission to use terminals.</red>"
+    no-use-permission-storage-server: "<red>You don't have permission to view storage server info.</red>"
+    no-use-permission-security-terminals: "<red>You don't have permission to use security terminals.</red>"
+    no-use-permission-drive-bays: "<red>You don't have permission to use drive bays.</red>"
+    no-block-modification-permission: "<red>You don't have permission to remove blocks from this network.</red>"
+    security-terminal-owner-only: "<red>Only the owner can manage this security terminal.</red>"
+    no-drive-bay-permission: "<red>You don't have permission to access this drive bay.</red>"
+    
+    
+  removal:
+    error-exporter: "<red>Error removing exporter: {error}</red>"
+    error-importer: "<red>Error removing importer: {error}</red>"
+    error-security-terminal: "<red>Error removing security terminal: {error}</red>"
+    error-network-update: "<red>Error updating network: {error}</red>"
+    error-block-break: "<red>Error processing block break: {error}</red>"
+    
+  access:
+    error-exporter: "<red>Error accessing exporter: {error}</red>"
+    error-importer: "<red>Error accessing importer: {error}</red>"
+    error-terminal: "<red>Error accessing terminal: {error}</red>"
+    error-storage-server: "<red>Error accessing storage server: {error}</red>"
+    error-security-terminal: "<red>Error accessing security terminal: {error}</red>"
+    error-drive-bay: "<red>Error accessing drive bay: {error}</red>"
+    error-storage-server-info: "<red>Error retrieving storage server information: {error}</red>"
+
   general:
-    missing-message: "Missing message: {key}"
-    invalid-item: "Invalid item"
-    no-permission: "You don't have permission to do that"
+    missing-message: "<red>Missing message: {key}</red>"
+    invalid-item: "<red>Invalid item</red>"
+    no-permission: "<red>You don't have permission to do that</red>"
 
 # Success Messages
 success:
+  placement:
+    security-terminal: "<green>Security Terminal placed successfully!</green>"
+    exporter-unconnected: "<yellow>Exporter placed! Connect it to a network to activate.</yellow>"
+    exporter-connected: "<green>Exporter created successfully! Right-click to configure.</green>"
+    importer-unconnected: "<yellow>Importer placed! Connect it to a network to activate.</yellow>"
+    importer-connected: "<green>Importer created successfully! Right-click to configure.</green>"
+    storage-server-requirements: "<yellow>Storage Server requires Drive Bays and Terminals to form a network.</yellow>"
+    block-needs-connection: "<yellow>This block needs to be connected to a Storage Server to function.</yellow>"
+    network-connected: "<green>Connected to network with {drive_bays} drive bay(s) and {terminals} terminal(s).</green>"
+    drive-bay-restored: "<aqua>Drive bay contents have been restored!</aqua>"
+    check-terminals: "<yellow>Check your terminals to see restored items.</yellow>"
+    network-updated: "<green>Network updated after block removal.</green>"
+    network-dissolved: "<yellow>Storage network dissolved. Drive bay contents preserved.</yellow>"
+    drive-bay-no-network: "<yellow>Opening drive bay (no network connection).</yellow>"
+    drive-bay-invalid-network: "<yellow>Opening drive bay (network is no longer valid).</yellow>"
+    search-cancelled: "<yellow>Search cancelled.</yellow>"
+
   storage:
     item-stored: "Successfully stored {amount} {item}"
     item-retrieved: "Retrieved {amount} {item}"
@@ -155,6 +211,25 @@ success:
     added: "Added {item} to {type} filter"
     removed: "Removed item from {type} filter"
     cleared: "Cleared all filters - will now {action} everything"
+
+  storage-server-info:
+    header: "<aqua>═══ Storage Server Information ═══</aqua>"
+    network-id: "<white>Network ID: {network_id}</white>"
+    network-id-none: "<gray>Network ID: Not Assigned</gray>"
+    status-operational: "<green>Operational</green>"
+    status-no-network: "<red>Not Connected</red>"
+    connected-components: "<yellow>Connected Components:</yellow>"
+    drive-bays: "<green>  Drive Bays: {count}</green>"
+    terminals: "<green>  Terminals: {count}</green>"
+    exporters: "<green>  Exporters: {count}</green>"
+    importers: "<green>  Importers: {count}</green>"
+    cables: "<yellow>  Cables: {count}</yellow>"
+    network-limits: "<yellow>Network Limits:</yellow>"
+    blocks-limit: "  Blocks: {current}/{max}"
+    cables-limit: "  Cables: {current}/{max}"
+    bus-limit: "  Bus Limit: {current}/{max}"
+    storage-info: "Storage: {used}/{total} cells ({percent}%)"
+    storage-no-disks: "<gray>Storage: No disks installed</gray>"
 
 # GUI Text
 gui:

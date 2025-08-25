@@ -34,9 +34,9 @@ build/
 ### VS Code ###
 .vscode/
 
+### Claude Code ###
+/.claude
+
 ### Mac OS ###
 .DS_Store
-.claude/settings.local.json
-.claude/settings.local.json
-/.claude
-/.claude
+

@@ -101,6 +101,14 @@ errors:
     dissolved: "Storage network dissolved - blocks have been disconnected"
     dissolved-drive-bay: "Storage network dissolved - you can still manage disks in this drive bay"
     security-terminal-limit: "MSS networks can only have one security terminal."
+    
+  placement:
+    multiple-storage-servers: "<red>Cannot connect networks: Multiple networks have Storage Servers!</red>"
+    multiple-security-terminals: "<red>Cannot connect networks: Multiple networks have Security Terminals!</red>"
+    storage-server-conflict: "<red>Cannot place Storage Server: Adjacent network already has a Storage Server!</red>"
+    security-terminal-conflict: "<red>Cannot place Security Terminal: Adjacent network already has a Security Terminal!</red>"
+    network-limit-exceeded: "<red>Network limit exceeded!</red>"
+    cable-limit-exceeded: "<red>Network cable limit exceeded! Maximum {max} cables per network.</red>"
   
   storage:
     full: "Storage network is full!"

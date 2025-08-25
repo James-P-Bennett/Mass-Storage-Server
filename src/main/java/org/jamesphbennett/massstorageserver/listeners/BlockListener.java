@@ -246,7 +246,13 @@ public class BlockListener implements Listener {
                 return;
             }
 
-            // Security terminal conflicts are checked in the security terminal-specific branch above
+            // Check for security terminal conflicts for all MSS blocks
+            String securityConflictForMSS = cableManager.checkSecurityTerminalConflict(location, blockType);
+            if (securityConflictForMSS != null) {
+                event.setCancelled(true);
+                player.sendMessage(Component.text(securityConflictForMSS, NamedTextColor.RED));
+                return;
+            }
 
             // Check if placing this MSS block would cause an exporter to be attached to it
             if (isMSSBlockType(blockType)) {
